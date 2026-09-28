@@ -45,6 +45,13 @@ describe("runFastLoop", () => {
     server.scriptedAnswers.op = fixture.answers.op!;
     server.scriptedAnswers.target_index = fixture.answers.target_index!;
     server.scriptedAnswers.is_destructive = fixture.answers.is_destructive!;
+    // The end-of-task check: by default the page doesn't show the goal done.
+    server.scriptedAnswers.goal_met = {
+      type: "choice",
+      choice: "no",
+      confidence: 0.95,
+      probabilities: { no: 0.95, yes: 0.05 },
+    };
     ({ url: baseUrl } = await server.listen());
   });
 
@@ -70,6 +77,57 @@ describe("runFastLoop", () => {
 
     expect(result.status).toBe("escalated");
     expect(result.summary).toMatch(/wasn.t sure what to do/i);
+  });
+
+  it("reports success when it stops short but Jev sees the goal already done", async () => {
+    server.scriptedAnswers.goal_met = {
+      type: "choice",
+      choice: "yes",
+      confidence: 0.96,
+      probabilities: { yes: 0.96, no: 0.04 },
+    };
+    const provider = new FakeComputerProvider();
+    await provider.ensureStarted();
+    const screen = await provider.screen("bot_1");
+    const decisionService = createDecisionService({ apiKey: "sk-test", baseUrl });
+
+    const result = await runFastLoop({
+      screen,
+      decisionService,
+      goal: "Open the inbox",
+      botId: "bot_1",
+      chainId: "chain_1",
+      providerId: "fake",
+      maxSteps: 3,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.summary).toMatch(/checked by Jev/);
+  });
+
+  it("keeps the failure when Jev isn't confident the goal is done", async () => {
+    server.scriptedAnswers.goal_met = {
+      type: "choice",
+      choice: "yes",
+      confidence: 0.6,
+      probabilities: { yes: 0.6, no: 0.4 },
+    };
+    const provider = new FakeComputerProvider();
+    await provider.ensureStarted();
+    const screen = await provider.screen("bot_1");
+    const decisionService = createDecisionService({ apiKey: "sk-test", baseUrl });
+
+    const result = await runFastLoop({
+      screen,
+      decisionService,
+      goal: "Open the inbox",
+      botId: "bot_1",
+      chainId: "chain_1",
+      providerId: "fake",
+      maxSteps: 3,
+    });
+
+    expect(result.status).toBe("escalated");
   });
 
   it("never acts on an element index that was not observed", async () => {

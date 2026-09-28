@@ -78,7 +78,81 @@ const DEFAULT_MAX_STEPS = 50;
 const DEFAULT_STALL_THRESHOLD = 3;
 const RECENT_STEPS_IN_STATE = 6;
 
+/**
+ * Runs the loop; when it stops short (stalled, out of steps, stuck on a
+ * target) while a page is in view, Jev checks that page against the goal once,
+ * so a task that already got there isn't reported as a failure.
+ */
 export async function runFastLoop(options: FastLoopOptions): Promise<FastLoopResult> {
+  const result = await runSteps(options);
+  if (result.status !== "escalated" && result.status !== "failed") return result;
+  if (!result.lastObservation || options.shouldStop?.()) return result;
+  const met = await goalAlreadyMet(options, result.lastObservation);
+  if (!met) return result;
+  options.onStep?.({
+    step: result.steps + 1,
+    observation: result.lastObservation,
+    action: { op: "done" },
+    decisionId: met.decisionId,
+    outcome: "done",
+    reason: "Jev checked the page: the goal is already done.",
+  });
+  return {
+    status: "completed",
+    steps: result.steps + 1,
+    lastObservation: result.lastObservation,
+    summary: "goal satisfied (checked by Jev)",
+  };
+}
+
+const GOAL_CHECK_CONFIDENCE = 0.85;
+
+async function goalAlreadyMet(
+  options: FastLoopOptions,
+  observation: Observation,
+): Promise<{ decisionId: string } | undefined> {
+  const state = buildDecisionState({
+    goal: options.goal,
+    url: observation.url,
+    title: observation.title,
+    observed_elements: observation.elements.map((el) => ({
+      index: el.index,
+      role: el.role,
+      name: el.label,
+      value: el.value,
+    })),
+  });
+  try {
+    const decision = await withDeadline(
+      options.decisionService.decide({
+        purpose: "computer",
+        state,
+        questions: {
+          goal_met: {
+            type: "choice",
+            instructions:
+              "Looking only at `url`, `title` and `observed_elements`, is `goal` already accomplished on this page?",
+            criteria: {
+              yes: "The page shows the goal is done (e.g. the requested page is open or the result is visible)",
+              no: "The goal is not done yet, or the page doesn't show it",
+            },
+          },
+        },
+      }),
+      options.timeouts?.decide ?? 20_000,
+      "goal check timed out",
+    );
+    const answer = decision.answers.goal_met;
+    if (decision.provider !== "jev") return undefined;
+    if (answer?.type !== "choice" || answer.choice !== "yes") return undefined;
+    if ((answer.confidence ?? 0) < GOAL_CHECK_CONFIDENCE) return undefined;
+    return { decisionId: decision.decisionId };
+  } catch {
+    return undefined;
+  }
+}
+
+async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
   const {
     screen,
     decisionService,
