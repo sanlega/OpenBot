@@ -3,6 +3,54 @@
 _Last updated: 2026-09-29 by Claude_
 
 ## In progress
+- **Round 2 of live testing (2026-09-29), fixed two more real bugs found this way**:
+  - **Spawn gate near-miss**: asked the Chief of Staff to run two open-ended,
+    recurring-sounding tasks without telling it to spawn bots. Jev answered
+    `route: new_bot` at **0.97** confidence and `recurring_ownership: 0.98`, but
+    `packages/cos/src/spawn-gate.ts`'s old all-thresholds-must-pass rule denied the
+    spawn anyway because `existing_can_do` landed at 0.32 — 0.02 over its 0.30
+    ceiling. **Fixed**: a very confident `new_bot` answer (≥0.9) now tolerates
+    `existing_can_do` up to 0.5 instead of an absolute 0.3 veto; the one-off/
+    duplicates/recurring checks are unchanged either way. Regression-tested with the
+    exact 0.97/0.32 numbers from this session's decisions table.
+  - **Routine per-run budget was interrupting real progress**: the same test's weekly
+    code-audit routine got cut off mid-task by its own cost/token cap right after
+    writing a genuinely good, accurate update to the audit file — the interruption
+    looked like failure even though it wasn't. **Fixed**: `Bot.limits` gained an
+    opt-in `unrestrictedRoutineBudget` switch (off by default; toggle lives in the
+    bot's Profile in the UI) that skips this cap for that bot's routine runs. Needed
+    a new store migration (`0002_lethal_madelyne_pryor.sql`).
+  - Also independently confirmed during this same session that the actual generated
+    work (a changelog entry, a 3-package dead-code audit) was genuinely good quality —
+    the "interrupted"/"couldn't finish" labels were budget guards working as designed,
+    not the model failing at the task. See LESSONS.md for the debugging path (real Jev
+    decision rows in `~/.openbot/openbot.db`'s `decisions` table were the key evidence).
+  - **Found a real vitest footgun while investigating this**: `pnpm --filter <pkg>
+    test` can silently run stale compiled `dist/*.test.js` files instead of (or
+    alongside) current `src/*.test.ts` ones — a test-fixture edit didn't take effect
+    until the package's `dist/*.test.*` files were deleted. The root `pnpm test`
+    (whole monorepo) is unaffected — its config explicitly excludes `**/dist/**` — so
+    it's the authoritative check; see LESSONS.md.
+  - **Open, not yet investigated**: (1) a "continua" retry after the engine-continuity
+    fix (D-022) still needs a live-Jev retest to confirm it actually keeps the bot on
+    the same engine now. (2) A Computer task (creating a Twitter/X account) hit a real
+    hard blocker (X requires SMS/email verification + a login-vs-signup modal
+    ambiguity) and correctly stopped to ask rather than guess — but the owner felt the
+    Computer/Jev fast-loop gives up too quickly on ambiguous dialogs in general; worth
+    checking the retry/patience budget in `packages/computer`'s fast loop. (3) Owner
+    wants to research Firecracker microVMs (https://firecracker-microvm.github.io/) as
+    a possible stronger per-bot isolation alternative to the current shared Docker
+    desktop container (D-007 says bots aren't isolated from each other today).
+  - **Explicitly deferred design conversation (owner's words)**: per-bot permission
+    *modes* (today it's one of three fixed presets: `read_only`/`workspace_write`/
+    `full`) are too rigid — too many approval prompts for mundane stuff. Two concrete
+    ideas the owner raised: (a) if a bot that delegated a task to another bot already
+    has a given permission, the delegate should be able to use that same permission
+    without asking again; (b) shared/inherited memory between bots in general (not
+    just permissions) — e.g. so a `send_message` handoff carries real context, not
+    just the handoff text. Neither is designed yet; start here next session if the
+    owner wants to continue this thread — it's a real architecture decision, not a
+    quick patch (plan-feature territory).
 - **v0.1.0 first release, live-tested end to end (2026-09-28/29)**: the owner ran a
   real stress-test prompt on the Chief of Staff (research + Computer use + file write +
   routine creation) against the installed Windows app, which surfaced and got two real
