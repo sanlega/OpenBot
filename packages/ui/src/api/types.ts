@@ -34,6 +34,8 @@ export interface ThreadView extends Thread {
   title: string;
   lastMessagePreview?: string;
   lastMessageAt?: string;
+  /** Who wrote the preview ("user" shows as "You: …"). */
+  lastMessageAuthor?: "user" | "bot" | "routine" | "system";
   unreadCount?: number;
 }
 

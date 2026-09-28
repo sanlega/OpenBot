@@ -72,7 +72,7 @@ export function BotList({
             {status === "working"
               ? "Working…"
               : thread.lastMessagePreview
-                ? plainText(thread.lastMessagePreview)
+                ? `${thread.lastMessageAuthor === "user" ? "You: " : ""}${plainText(thread.lastMessagePreview)}`
                 : (bot.label ?? bot.description)}
           </span>
         </span>

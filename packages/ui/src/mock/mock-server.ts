@@ -332,6 +332,7 @@ export class MockClientApiServer {
         const last = [...this.messages].reverse().find((m) => m.threadId === t.id);
         view.lastMessagePreview =
           last?.text === "__digest__" ? "Daily digest" : last?.text.slice(0, 80);
+        view.lastMessageAuthor = last?.author.type;
         return view;
       });
       return sendJson(res, 200, { threads });
