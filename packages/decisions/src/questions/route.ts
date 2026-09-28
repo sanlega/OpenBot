@@ -16,7 +16,12 @@ export function buildRouteQuestions(ctx: RouteContext): Record<string, JevQuesti
     route: {
       type: "choice",
       instructions:
-        "Given the bot profile and task in `state`, which engine and model should run this turn?",
+        "Given the bot profile and task in `state`, which engine and model should run this turn? " +
+        "If `state.currentEngine` is set, that engine's session already holds this conversation's " +
+        "memory — switching engines starts a blank session with no memory of it, even for a short " +
+        "follow-up like \"continue\". The lower `state.currentEngineIdleMinutes` is, the stronger that " +
+        "cost: strongly prefer staying on `state.currentEngine` unless `state.task` is clearly a new, " +
+        "unrelated request that doesn't build on the current conversation.",
       criteria,
     },
     complexity: {

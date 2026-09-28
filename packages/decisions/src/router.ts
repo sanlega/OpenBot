@@ -10,7 +10,7 @@ import { buildRouteQuestions } from "./questions/route.js";
 import { markUntrusted, buildDecisionState } from "./state-builders.js";
 import type { DecisionServiceImpl } from "./decision-service.js";
 
-export function buildRouteState(bot: Bot, task: string): Record<string, unknown> {
+export function buildRouteState(bot: Bot, task: string, ctx: RouteContext): Record<string, unknown> {
   return buildDecisionState({
     bot: {
       id: bot.id,
@@ -20,6 +20,8 @@ export function buildRouteState(bot: Bot, task: string): Record<string, unknown>
       computer: bot.computer,
     },
     task: markUntrusted(task),
+    currentEngine: ctx.currentEngine,
+    currentEngineIdleMinutes: ctx.currentEngineIdleMinutes,
   });
 }
 
@@ -42,7 +44,7 @@ export async function routeBot(
   const questions = buildRouteQuestions(ctx);
   const req: DecideRequest = {
     purpose: "route",
-    state: buildRouteState(bot, task),
+    state: buildRouteState(bot, task, ctx),
     questions,
   };
   const result = await service.decide(req);

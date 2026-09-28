@@ -68,6 +68,24 @@ export type EngineChooser = (
   requested?: EngineId,
 ) => Promise<EngineChoice | { error: string }>;
 
+/** Whichever `available` engine this Bot last had an active session on (by `engine_sessions.lastUsedAt`) — the continuity signal `routeBot` weighs against switching engines mid-conversation. */
+function mostRecentlyUsedEngine(
+  ctx: CoreContext,
+  botId: string,
+  available: EngineId[],
+): { engine: EngineId; idleMinutes: number } | undefined {
+  let best: { engine: EngineId; lastUsedAt: string } | undefined;
+  for (const engine of available) {
+    const session = ctx.repos.engineSessions.getForBotAndEngine(botId, engine);
+    if (session && (!best || session.lastUsedAt > best.lastUsedAt)) {
+      best = { engine, lastUsedAt: session.lastUsedAt };
+    }
+  }
+  if (!best) return undefined;
+  const idleMs = ctx.clock.now().getTime() - new Date(best.lastUsedAt).getTime();
+  return { engine: best.engine, idleMinutes: Math.max(0, Math.round(idleMs / 60_000)) };
+}
+
 /** Engine and model for a Bot: an explicit override, the Bot's pin, or Jev's route. */
 export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): EngineChooser {
   const modelCache = new Map<EngineId, string[]>();
@@ -121,9 +139,12 @@ export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): En
     }
     const modelsCatalog: Record<string, string[]> = {};
     for (const engine of available) modelsCatalog[engine] = await modelsFor(engine);
+    const current = mostRecentlyUsedEngine(ctx, bot.id, available);
     const route = await ctx.decisionService.route(bot, text, {
       availableEngines: available,
       modelsCatalog,
+      currentEngine: current?.engine,
+      currentEngineIdleMinutes: current?.idleMinutes,
     });
     const engine = deps.drivers[route.engine] ? route.engine : available[0]!;
     const model =
