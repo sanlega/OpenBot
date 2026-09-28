@@ -617,7 +617,7 @@ export function AuditView() {
                         {relativeTime(r.ts)}
                       </time>
                       <span className="audit-bot">
-                        {bot ? <BotAvatar bot={bot} size={22} /> : null}
+                        {bot ? <BotAvatar bot={bot} size={22} motion="none" /> : null}
                         <span className="audit-bot-name">{names.name(r.botId)}</span>
                       </span>
                       <span className="audit-action">

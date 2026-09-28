@@ -56,7 +56,7 @@ export function CommandPalette({
           group: "Bots" as const,
           label: bot.name,
           hint: bot.isChiefOfStaff ? "Chief of Staff" : bot.label,
-          icon: <BotAvatar bot={bot} size={20} />,
+          icon: <BotAvatar bot={bot} size={20} motion="none" />,
           keywords: bot.description,
           run: () => onOpenThread?.(thread.id),
         },

@@ -278,7 +278,7 @@ function RoutineDetail({
           <div className="routine-meta">
             <span className={`pill ${status.tone}`}>{status.label}</span>
             <span className="routine-meta-item">
-              {bot ? <BotAvatar bot={bot} size={18} /> : null}
+              {bot ? <BotAvatar bot={bot} size={18} motion="none" /> : null}
               {botName}
             </span>
             <span className="routine-meta-item">
@@ -477,7 +477,8 @@ function RoutineDetail({
         ) : null}
         <p className="field-help">
           Limits: up to ${routine.limits.perRun.usd.toFixed(2)} and {routine.limits.perRun.turns}{" "}
-          turns per run · at most {routine.limits.maxRunsPerDay} runs and $
+          turns per run · at most {routine.limits.maxRunsPerDay}{" "}
+          {routine.limits.maxRunsPerDay === 1 ? "run" : "runs"} and $
           {routine.limits.dailyUsd.toFixed(2)} a day.
         </p>
       </section>

@@ -80,7 +80,9 @@ export function MessageItem({ message, bot, bots, grouped, onQuickReply }: Messa
       data-grouped={grouped}
       data-testid={`msg-${message.id}`}
     >
-      <div className="msg-gutter">{grouped ? null : <BotAvatar bot={bot} size={28} />}</div>
+      <div className="msg-gutter">
+        {grouped ? null : <BotAvatar bot={bot} size={28} motion="none" />}
+      </div>
       <div className="msg-content">
         {grouped ? null : (
           <div className="msg-header">

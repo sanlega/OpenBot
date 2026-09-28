@@ -117,7 +117,7 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
           onClick={() => setPanel("profile")}
           title="Open profile"
         >
-          <BotAvatar bot={bot} size={32} status={status} />
+          <BotAvatar bot={bot} size={32} status={status} motion="always" />
           <span className="thread-identity-text">
             <span className="thread-title">{thread.title || bot.name}</span>
             <span className="thread-subtitle" data-status={status}>
@@ -264,7 +264,7 @@ function ThreadIntro({ bot, onPick }: { bot: Bot; onPick: (text: string) => void
     : ["What can you do?", "Here's your first task:"];
   return (
     <div className="thread-intro">
-      <BotAvatar bot={bot} size={56} />
+      <BotAvatar bot={bot} size={56} motion="always" />
       <h2>{bot.isChiefOfStaff ? "Hi, I'm your Chief of Staff" : `Hi, I'm ${bot.name}`}</h2>
       <p>
         {bot.isChiefOfStaff

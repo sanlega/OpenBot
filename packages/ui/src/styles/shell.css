@@ -227,6 +227,36 @@ body {
   user-select: none;
 }
 
+/* A blobatar is the avatar itself: no disc behind it. */
+.avatar-blob {
+  border-radius: 0;
+  overflow: visible;
+}
+
+.avatar-blob > img,
+.avatar-blob > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-emoji {
+  background: var(--surface-2);
+}
+
+/* The Chief of Staff's crown, worn on top. */
+.avatar-crown {
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%) rotate(-8deg);
+  display: grid;
+  place-items: center;
+  color: var(--warning);
+  filter: drop-shadow(0 1px 0 rgb(0 0 0 / 0.35));
+  pointer-events: none;
+}
+
 .avatar-status {
   position: absolute;
   right: -1px;
