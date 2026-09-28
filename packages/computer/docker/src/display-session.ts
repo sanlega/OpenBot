@@ -195,6 +195,9 @@ export class DisplaySessionManager {
           [
             `--display=:${session.display}`,
             "--no-sandbox",
+            // Hides the "unsupported command-line flag" bar in the live view.
+            "--test-type",
+            "--no-first-run",
             "--disable-gpu",
             "--disable-dev-shm-usage",
             "--start-maximized",
@@ -326,6 +329,9 @@ export class DisplaySessionManager {
         [
           `--display=${displayStr}`,
           "--no-sandbox",
+          // Hides the "unsupported command-line flag" bar in the live view.
+          "--test-type",
+          "--no-first-run",
           "--disable-gpu",
           "--disable-dev-shm-usage",
           "--start-maximized",
