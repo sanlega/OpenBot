@@ -199,6 +199,7 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
 
   let steps = 0;
   const observationHashes: string[] = [];
+  const closedNotices = new Set<string>();
 
   while (steps < maxSteps) {
     if (shouldStop?.()) {
@@ -223,6 +224,42 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       };
       onStep?.(event);
       return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+    }
+
+    // Cookie notices block the page and aren't part of any goal: close them
+    // without asking Jev (once per notice), still through the broker.
+    const consent = consentButton(observation);
+    const consentKey = consent ? `${observation.url ?? ""}|${consent.label}` : "";
+    if (consent && !closedNotices.has(consentKey)) {
+      closedNotices.add(consentKey);
+      const action: Action = { op: "click", target: consent.index };
+      const check = await broker.checkAction({
+        botId,
+        chainId,
+        action,
+        observation,
+        providerId,
+        isDestructive: false,
+        sensitiveLabel: false,
+      });
+      if (check === "allow") {
+        onPhase?.("acting");
+        const result = await withDeadline(screen.act(action), limit.act, "timeout").catch(() => ({
+          ok: false,
+        }));
+        if (result.ok) {
+          remember(`closed the cookie notice ("${consent.label}")`);
+          onStep?.({
+            step: steps,
+            observation,
+            action,
+            targetLabel: consent.label,
+            outcome: "executed",
+            reason: "Closed a cookie notice",
+          });
+          continue;
+        }
+      }
     }
 
     const extra = instructions?.() ?? [];
@@ -494,6 +531,22 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     lastObservation,
     summary: `Stopped after ${steps} steps without finishing.`,
   };
+}
+
+/** Buttons that dismiss a cookie/consent notice; rejecting is preferred. */
+const REJECT_LABELS =
+  /^(reject all( cookies)?|decline all|refuse all|rechazar todo|rechazar todas|rechazar|tout refuser|alle ablehnen|rifiuta tutto)$|^(reject|rechazar) (the use of|el uso de) (cookies|las cookies)/i;
+const ACCEPT_LABELS =
+  /^(accept all( cookies)?|allow all( cookies)?|i agree|agree|aceptar todo|aceptar todas|aceptar|tout accepter|alle akzeptieren|accetta tutto)$|^(accept|aceptar) (the use of|el uso de) (cookies|las cookies)/i;
+
+function consentButton(observation: Observation): ObservedElement | undefined {
+  const text = observation.elements.map((el) => el.label).join(" ");
+  if (!/cookie|consent|privacidad|privacy|datenschutz/i.test(text)) return undefined;
+  const clickable = observation.elements.filter((el) => /^(button|a|link|input)$/i.test(el.role));
+  return (
+    clickable.find((el) => REJECT_LABELS.test(el.label.trim())) ??
+    clickable.find((el) => ACCEPT_LABELS.test(el.label.trim()))
+  );
 }
 
 function withDeadline<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
