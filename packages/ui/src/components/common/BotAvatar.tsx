@@ -65,7 +65,7 @@ export function BotAvatar({ bot, size = 32, status, motion = "hover" }: BotAvata
           size={size}
           animate={animate}
           expression={expression}
-          background="circle"
+          background={false}
           {...(bot.isChiefOfStaff ? COS_LOOK : BOT_LOOK)}
         />
       ) : (
@@ -73,7 +73,7 @@ export function BotAvatar({ bot, size = 32, status, motion = "hover" }: BotAvata
           name={bot.id}
           size={size}
           expression={expression}
-          background="circle"
+          background={false}
           {...(bot.isChiefOfStaff ? COS_LOOK : BOT_LOOK)}
         />
       )}

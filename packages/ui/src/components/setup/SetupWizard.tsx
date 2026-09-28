@@ -317,7 +317,7 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
               <div className="setup-inline-row">
                 <span className="setup-muted">
                   {allEngines
-                    ? "Both engines are ready. bots can use either one."
+                    ? "Both engines are ready. Bots can use either one."
                     : anyEngine
                       ? "You can add the other engine later in Settings."
                       : "Connect at least one engine to continue."}

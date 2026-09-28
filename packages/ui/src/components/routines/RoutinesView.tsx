@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Bot, Routine, RoutineLimits, RoutineTrigger } from "@openbot/contracts";
 import {
+  AlertTriangle,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
@@ -70,6 +71,7 @@ function errorText(err: unknown, fallback: string): string {
 export function RoutinesView() {
   const { transport, bots } = useOpenBot();
   const [routines, setRoutines] = useState<Routine[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [pane, setPane] = useState<"list" | "detail">("list");
@@ -79,13 +81,16 @@ export function RoutinesView() {
     try {
       const res = await transport.get<{ routines: Routine[] }>("/api/routines");
       setRoutines(res.routines);
+      setLoadFailed(false);
       setSelectedId((current) =>
         current && res.routines.some((r) => r.id === current)
           ? current
           : (res.routines[0]?.id ?? null),
       );
     } catch {
-      setRoutines((r) => r ?? []);
+      // A failed first load is an error, not "no routines"; a failed refresh
+      // keeps what's already on screen.
+      setLoadFailed(true);
     }
   }, [transport]);
 
@@ -110,7 +115,11 @@ export function RoutinesView() {
           </button>
         }
       />
-      {routines === null ? (
+      {routines === null && loadFailed ? (
+        <div className="screen-body">
+          <LoadError what="your routines" onRetry={() => void load()} />
+        </div>
+      ) : routines === null ? (
         <div className="screen-body" />
       ) : routines.length === 0 && !creating ? (
         <div className="screen-body">
@@ -211,6 +220,7 @@ function RoutineDetail({
 }) {
   const { transport } = useOpenBot();
   const [runs, setRuns] = useState<RunView[] | null>(null);
+  const [runsFailed, setRunsFailed] = useState(false);
   const [prompt, setPrompt] = useState(routine.prompt);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -227,8 +237,9 @@ function RoutineDetail({
           (b.startedAt ?? b.endedAt ?? "").localeCompare(a.startedAt ?? a.endedAt ?? ""),
         ),
       );
+      setRunsFailed(false);
     } catch {
-      setRuns((r) => r ?? []);
+      setRunsFailed(true);
     }
   }, [transport, routine.id]);
 
@@ -486,7 +497,9 @@ function RoutineDetail({
 
       <section className="routine-runs">
         <h3 className="section-title">Run history</h3>
-        {runs === null ? null : runs.length === 0 ? (
+        {runs === null && runsFailed ? (
+          <LoadError what="the run history" onRetry={() => void loadRuns()} />
+        ) : runs === null ? null : runs.length === 0 ? (
           <div className="empty-block">
             <p className="empty-title">No runs yet</p>
             <p className="empty-text">Start with a dry run to see what it would do.</p>
@@ -894,5 +907,19 @@ function NewRoutineForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/** A load that failed, said as such (never as an empty list), with a retry. */
+function LoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div className="empty-block empty-block-page" role="alert">
+      <AlertTriangle size={26} aria-hidden />
+      <p className="empty-title">Couldn't load {what}</p>
+      <p className="empty-text">OpenBot didn't answer. Check that it's running, then try again.</p>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>
+        Try again
+      </button>
+    </div>
   );
 }

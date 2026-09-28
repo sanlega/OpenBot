@@ -239,9 +239,10 @@ body {
   user-select: none;
 }
 
-/* A blobatar is the avatar itself: no disc behind it. */
+/* A blobatar on a disc that follows the theme (a white disc glared in dark mode). */
 .avatar-blob {
-  border-radius: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
   overflow: visible;
 }
 
