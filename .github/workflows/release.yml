@@ -115,6 +115,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
+          pattern: "openbot-*"
           merge-multiple: true
 
       - name: Create checksums

@@ -1,8 +1,49 @@
 # Project state
 
-_Last updated: 2026-09-28 by Claude_
+_Last updated: 2026-09-29 by Claude_
 
 ## In progress
+- **v0.1.0 first release, live-tested end to end (2026-09-28/29)**: the owner ran a
+  real stress-test prompt on the Chief of Staff (research + Computer use + file write +
+  routine creation) against the installed Windows app, which surfaced and got two real
+  fixes:
+  - **Silent completed turns** — Codex/gpt-5.5 can end a turn on a tool call (e.g.
+    writing a file) with no closing assistant message; `packages/runtime/src/mailbox.ts`
+    used to skip creating any message at all when reply text was empty, so a turn that
+    did real work looked like it returned nothing. Now synthesizes a fallback line
+    ("Finished N tool calls but didn't return a summary — check Activity for what it
+    did.") so a completed turn is never invisible. Regression-tested.
+  - **Engine-switch context loss** — Jev's auto routing switched engines
+    (Codex → Claude) on a follow-up "continua", and the new engine had zero memory of
+    the prior multi-step task (sessions are per bot+engine). Fixed per D-022: `RouteContext`
+    now carries `currentEngine`/`currentEngineIdleMinutes` (the Bot's most recently
+    active engine + how idle it's been), and the route question's Jev instructions
+    weigh this explicitly against switching. This changes what Jev is *told*, not a
+    hard rule — its real effectiveness needs a live-Jev retest of the same "continua"
+    scenario, not yet done this session.
+  - Confirmed working end to end during this same testing: the Docker/GHCR desktop
+    image downloads and starts correctly (`{"ok":true,"maxScreens":4}`), real Computer
+    web research happened, a well-sourced report got written (to the wrong place — see
+    open item below).
+  - **Still open, found but not yet fixed**: the bot wrote its report inside its own
+    workspace instead of `~/Desktop/...` "outside the workspace" as asked, and never
+    reached the routine-creation part of that multi-part request — the turn appears to
+    have ended early rather than continuing through the rest of the task. Root cause
+    not yet investigated (could be `~` not expanding before the tool-classifier sees
+    the path, a Codex step/turn-limit, or the model just stopping) — pick this up next
+    if the owner hits it again.
+  - v0.1.0's release pipeline itself needed three real fixes, found only by actually
+    running it (see LESSONS.md): the Docker build's hand-picked `--filter` list missed
+    devDependency-only packages (fixed with pnpm's recursive filter), electron-builder's
+    `.deb` target needed `homepage`/`maintainer` and a non-scoped `artifactName`, and
+    `publish`'s `download-artifact` step grabbed every workflow artifact including an
+    unrelated `docker/build-push-action` provenance zip that transiently failed and
+    blocked the release even though all 4 real installers had already built fine
+    (fixed with a `pattern: "openbot-*"` filter). As of the last fix all 5 `package`
+    jobs + the GHCR publish succeeded in one run; only `publish`'s artifact-download
+    step had failed on the unrelated zip — the pattern-filter fix is pushed and tagged
+    but its own run hadn't finished as of this note. Confirm `gh release list -R
+    sanlega/OpenBot` shows `v0.1.0` before assuming this is fully done.
 - **RESOLVED (2026-09-28) — old ref exposure**: the previous `sanlega/OpenBot`
   repo's history-cleanup left `refs/pull/1..18/head` pointing at pre-rewrite commits
   (personal email, local machine paths, a private metaharness URL, a private Claude
