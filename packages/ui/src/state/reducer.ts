@@ -36,6 +36,8 @@ export interface UiState {
   messagesByThread: Map<string, Message[]>;
   streamingDeltas: Map<string, string>;
   approvals: Map<string, Approval>;
+  /** When each approval was answered, to leave a note in the chat at that point. */
+  approvalResolvedAt: Map<string, string>;
   routes: Map<string, RoutePreview>;
   activeChainId?: string;
   turns: Map<string, TurnActivity>;
@@ -61,6 +63,7 @@ export function createInitialState(
     messagesByThread: new Map(),
     streamingDeltas: new Map(),
     approvals: new Map(),
+    approvalResolvedAt: new Map(),
     routes: new Map(),
     turns: new Map(),
     turnByMessage: new Map(),
@@ -125,7 +128,13 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, replayDone: true };
     case "hydrate": {
       const next = createInitialState(action.bots, action.threads, action.messages);
-      next.approvals = new Map(action.approvals.map((a) => [a.id, a]));
+      // The API lists pending approvals only; keep answered ones (from events)
+      // so their notes stay in the chat.
+      next.approvals = new Map([
+        ...[...state.approvals].filter(([, a]) => a.status !== "pending"),
+        ...action.approvals.map((a) => [a.id, a] as const),
+      ]);
+      next.approvalResolvedAt = state.approvalResolvedAt;
       next.routes = new Map(Object.entries(action.routes));
       next.inputs = new Map((action.inputs ?? []).map((i) => [i.id, i]));
       // Turn activity comes only from events; a re-hydrate must not drop it.
@@ -149,6 +158,7 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
         messagesByThread: new Map(state.messagesByThread),
         streamingDeltas: new Map(state.streamingDeltas),
         approvals: new Map(state.approvals),
+        approvalResolvedAt: new Map(state.approvalResolvedAt),
         routes: new Map(state.routes),
       };
       applyEvent(next, event);
@@ -277,6 +287,7 @@ function applyEvent(state: UiState, event: OBEvent): void {
           status: "resolved",
           resolution: p.resolution as Approval["resolution"],
         });
+        state.approvalResolvedAt.set(id, event.ts);
       }
       break;
     }

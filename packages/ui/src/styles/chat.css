@@ -992,3 +992,20 @@
   gap: 6px;
   margin: 2px 0 4px;
 }
+
+/* What you decided on an approval, once its card is gone. */
+.approval-note code {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.approval-note[data-resolution="allow"] > svg {
+  color: var(--success);
+}
+
+.approval-note[data-resolution="deny"] > svg {
+  color: var(--danger);
+}

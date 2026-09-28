@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import type { ThreadPanel } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { ApprovalCard } from "../cards/ApprovalCard.js";
+import { ApprovalNote } from "../cards/ApprovalNote.js";
 import { BotAvatar, type BotStatus } from "../common/BotAvatar.js";
 import { dayLabel, sameDay } from "../common/time.js";
 import { ComputerPanel } from "../computer/ComputerPanel.js";
@@ -43,6 +44,18 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
   const messages = thread ? messagesForThread(thread.id) : [];
   const route = thread ? routeForBot(thread.botId) : undefined;
   const threadApprovals = pendingApprovals.filter((a) => a.botId === thread?.botId);
+  // Answered approvals leave a note after the last message sent before the answer.
+  const answered = [...state.approvals.values()]
+    .filter((a) => a.botId === thread?.botId && a.status !== "pending")
+    .map((a) => ({ approval: a, at: state.approvalResolvedAt.get(a.id) ?? a.createdAt }))
+    .sort((x, y) => x.at.localeCompare(y.at));
+  const notesAfter = new Map<string, typeof answered>();
+  const trailingNotes: typeof answered = [];
+  for (const note of answered) {
+    const anchor = [...messages].reverse().find((m) => m.createdAt <= note.at);
+    if (!anchor || anchor.id === messages[messages.length - 1]?.id) trailingNotes.push(note);
+    else notesAfter.set(anchor.id, [...(notesAfter.get(anchor.id) ?? []), note]);
+  }
   const botTurns = [...state.turns.values()]
     .filter((t) => t.botId === thread?.botId)
     .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
@@ -213,9 +226,25 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
                         onQuickReply={(text) => void sendMessage(text)}
                       />
                     )}
+                    {(notesAfter.get(m.id) ?? []).map((n) => (
+                      <ApprovalNote
+                        key={n.approval.id}
+                        approval={n.approval}
+                        resolvedAt={n.at}
+                        bots={bots}
+                      />
+                    ))}
                   </Fragment>
                 );
               })}
+              {trailingNotes.map((n) => (
+                <ApprovalNote
+                  key={n.approval.id}
+                  approval={n.approval}
+                  resolvedAt={n.at}
+                  bots={bots}
+                />
+              ))}
               {runningTurn ? (
                 <TurnSteps turn={runningTurn} waitingForUser={threadApprovals.length > 0} />
               ) : null}

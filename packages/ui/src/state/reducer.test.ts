@@ -237,6 +237,45 @@ describe("computer task status", () => {
   });
 });
 
+describe("answered approvals", () => {
+  it("keep when they were answered, even after a re-hydrate", () => {
+    let state = createInitialState(SEED_BOTS);
+    const base = { botId: "bot_code_01", threadId: "thr_code", chainId: "chn_x" };
+    for (const event of [
+      {
+        ...base,
+        id: "a1",
+        seq: 1,
+        ts: "2026-09-27T10:00:00.000Z",
+        type: "approval.requested",
+        payload: { approvalId: "apr_x", kind: "tool", summary: "Bash requested by bot_code_01" },
+      },
+      {
+        ...base,
+        id: "a2",
+        seq: 2,
+        ts: "2026-09-27T10:02:00.000Z",
+        type: "approval.resolved",
+        payload: { approvalId: "apr_x", resolution: "deny" },
+      },
+    ] as OBEvent[]) {
+      state = uiReducer(state, { type: "event", event });
+    }
+    expect(state.approvalResolvedAt.get("apr_x")).toBe("2026-09-27T10:02:00.000Z");
+
+    state = uiReducer(state, {
+      type: "hydrate",
+      bots: SEED_BOTS,
+      threads: [],
+      messages: [],
+      approvals: [],
+      routes: {},
+    } as never);
+    expect(state.approvals.get("apr_x")?.resolution).toBe("deny");
+    expect(state.approvalResolvedAt.get("apr_x")).toBe("2026-09-27T10:02:00.000Z");
+  });
+});
+
 describe("interrupted turns", () => {
   it("keep the reason they were interrupted", () => {
     let state = createInitialState(SEED_BOTS);
