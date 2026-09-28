@@ -19,6 +19,9 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
   const [effort, setEffort] = useState(bot.routing.effort ?? "");
   const [permissionPreset, setPermissionPreset] = useState(bot.permissionPreset);
   const [computer, setComputer] = useState(bot.computer);
+  const [unrestrictedRoutineBudget, setUnrestrictedRoutineBudget] = useState(
+    bot.limits.unrestrictedRoutineBudget ?? false,
+  );
   const [status, setStatus] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
 
@@ -36,6 +39,7 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
     setEffort(bot.routing.effort ?? "");
     setPermissionPreset(bot.permissionPreset);
     setComputer(bot.computer);
+    setUnrestrictedRoutineBudget(bot.limits.unrestrictedRoutineBudget ?? false);
   }, [bot]);
 
   const save = async (e: FormEvent) => {
@@ -57,6 +61,7 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
         routing,
         permissionPreset,
         computer,
+        limits: { ...bot.limits, unrestrictedRoutineBudget },
       });
       await refresh();
       setStatus("Saved");
@@ -82,7 +87,8 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
     model !== modelKey(bot.routing) ||
     effort !== (bot.routing.effort ?? "") ||
     permissionPreset !== bot.permissionPreset ||
-    computer !== bot.computer;
+    computer !== bot.computer ||
+    unrestrictedRoutineBudget !== (bot.limits.unrestrictedRoutineBudget ?? false);
 
   const current = modelKey(bot.routing);
   const known = engines.some((e) => e.models.some((m) => `${e.engine}:${m.id}` === current));
@@ -178,6 +184,21 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
           <option value="docker">Docker</option>
           <option value="docker+local">Docker + this computer</option>
         </select>
+      </label>
+      <label className="field field-checkbox">
+        <input
+          type="checkbox"
+          checked={unrestrictedRoutineBudget}
+          onChange={(e) => setUnrestrictedRoutineBudget(e.target.checked)}
+        />
+        <span>
+          <span className="field-label">Let its routines run past their cost/token cap</span>
+          <span className="field-help">
+            Off by default: a routine run that passes its own per-run cost or token limit is stopped
+            mid-task. Turn this on for this bot if you'd rather it finish a long task than get cut
+            off — you're still protected by the routine's daily limit and run count.
+          </span>
+        </span>
       </label>
       <div className="settings-card-actions">
         <button type="submit" className="btn btn-primary" disabled={!dirty || !name.trim()}>

@@ -77,6 +77,9 @@ export interface SpawnThresholds {
   duplicatesExistingMax: number;
   recurringOwnershipMin: number;
   distinctBoundaryMin: number;
+  /** Above this route confidence, `existingCanDoOverrideMax` replaces `existingCanDoMax` — a very sure "new_bot" tolerates more doubt in one secondary signal. */
+  routeConfidenceOverrideMin: number;
+  existingCanDoOverrideMax: number;
 }
 
 export interface NotifyThresholds {

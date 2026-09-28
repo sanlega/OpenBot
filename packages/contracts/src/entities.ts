@@ -57,6 +57,8 @@ export const Bot = z.object({
   limits: z.object({
     dailyUsd: z.number().nonnegative().optional(),
     dailyTokens: z.number().int().nonnegative().optional(),
+    /** Opt-in, off by default: skips a routine run's own per-run cost/token cap for this bot, so a long task isn't cut off mid-work. The routine's own perRun numbers still show in its settings; this only stops them from interrupting the turn. */
+    unrestrictedRoutineBudget: z.boolean().optional(),
   }),
   justification: BotJustification.optional(),
 });

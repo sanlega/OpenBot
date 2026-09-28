@@ -41,8 +41,20 @@ export function evaluateSpawnRule(
   const distinctBoundary = noul(answers, "distinct_boundary");
   const duplicatesExisting = noul(answers, "duplicates_existing");
 
+  // A very confident "new_bot" tolerates more doubt in existingCanDo alone — the other
+  // signals (one-off, duplicates, recurring/boundary) still gate it the same either way.
+  const veryConfidentNewBot =
+    route.choice === "new_bot" &&
+    route.confidence >= thresholds.routeConfidenceOverrideMin &&
+    existingCanDo <= thresholds.existingCanDoOverrideMax &&
+    oneOff <= thresholds.oneOffMax &&
+    duplicatesExisting <= thresholds.duplicatesExistingMax &&
+    (recurringOwnership >= thresholds.recurringOwnershipMin ||
+      distinctBoundary >= thresholds.distinctBoundaryMin);
+
   const allow =
     userRequested >= thresholds.userRequestedMin ||
+    veryConfidentNewBot ||
     (route.choice === "new_bot" &&
       route.confidence >= thresholds.routeConfidenceMin &&
       existingCanDo <= thresholds.existingCanDoMax &&

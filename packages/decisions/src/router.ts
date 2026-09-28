@@ -10,7 +10,11 @@ import { buildRouteQuestions } from "./questions/route.js";
 import { markUntrusted, buildDecisionState } from "./state-builders.js";
 import type { DecisionServiceImpl } from "./decision-service.js";
 
-export function buildRouteState(bot: Bot, task: string, ctx: RouteContext): Record<string, unknown> {
+export function buildRouteState(
+  bot: Bot,
+  task: string,
+  ctx: RouteContext,
+): Record<string, unknown> {
   return buildDecisionState({
     bot: {
       id: bot.id,

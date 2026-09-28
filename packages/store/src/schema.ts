@@ -41,6 +41,9 @@ export const bots = sqliteTable("bots", {
   connectors: text("connectors", { mode: "json" }).notNull().$type<string[]>(),
   dailyUsd: real("daily_usd"),
   dailyTokens: integer("daily_tokens"),
+  unrestrictedRoutineBudget: integer("unrestricted_routine_budget", { mode: "boolean" })
+    .notNull()
+    .default(false),
   justification: text("justification", { mode: "json" }).$type<BotJustification>(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 });

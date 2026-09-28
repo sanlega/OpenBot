@@ -28,6 +28,7 @@ export const CreateBotBody = z.object({
     .object({
       dailyUsd: z.number().nonnegative().optional(),
       dailyTokens: z.number().int().nonnegative().optional(),
+      unrestrictedRoutineBudget: z.boolean().optional(),
     })
     .default({}),
 });
@@ -49,6 +50,7 @@ export const UpdateBotBody = z.object({
     .object({
       dailyUsd: z.number().nonnegative().optional(),
       dailyTokens: z.number().int().nonnegative().optional(),
+      unrestrictedRoutineBudget: z.boolean().optional(),
     })
     .optional(),
 });

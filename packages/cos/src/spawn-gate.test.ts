@@ -74,6 +74,32 @@ describe("evaluateSpawnRule", () => {
     expect(result.allow).toBe(true);
   });
 
+  it("allows a very confident new_bot call despite existing_can_do missing its normal ceiling (the 0.97/0.32 near-miss found in live testing)", () => {
+    const result = evaluateSpawnRule({
+      route: choice("route", "new_bot", 0.97),
+      user_requested: noul("user_requested", 0.03),
+      existing_can_do: noul("existing_can_do", 0.32),
+      one_off: noul("one_off", 0.03),
+      recurring_ownership: noul("recurring_ownership", 0.98),
+      distinct_boundary: noul("distinct_boundary", 0.63),
+      duplicates_existing: noul("duplicates_existing", 0.16),
+    });
+    expect(result.allow).toBe(true);
+  });
+
+  it("still denies a very confident new_bot call if existing_can_do is genuinely high, not just borderline", () => {
+    const result = evaluateSpawnRule({
+      route: choice("route", "new_bot", 0.97),
+      user_requested: noul("user_requested", 0.03),
+      existing_can_do: noul("existing_can_do", 0.8),
+      one_off: noul("one_off", 0.03),
+      recurring_ownership: noul("recurring_ownership", 0.98),
+      distinct_boundary: noul("distinct_boundary", 0.63),
+      duplicates_existing: noul("duplicates_existing", 0.16),
+    });
+    expect(result.allow).toBe(false);
+  });
+
   it("denies when existing bot can do it", () => {
     const result = evaluateSpawnRule({
       route: choice("route", "new_bot", 0.85),
