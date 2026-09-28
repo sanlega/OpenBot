@@ -432,6 +432,56 @@
   font-size: inherit;
 }
 
+/* Code block: language + Copy on top, the code below in one bordered box. */
+.code-block {
+  margin: 0 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+.code-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.code-block-lang {
+  font-family: var(--mono);
+  text-transform: lowercase;
+}
+
+.code-block-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.code-block-copy:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.code-block .message-markdown pre,
+.message-markdown .code-block pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .message-markdown blockquote {
   border-left: 3px solid var(--border-strong);
   padding-left: 12px;

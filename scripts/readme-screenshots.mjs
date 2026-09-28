@@ -152,7 +152,7 @@ const MESSAGES = [
     "m_rel_2",
     "bot_release",
     "bot_release",
-    "CI is green on **#142 · Release 0.9.0** (412 tests, 3 platforms). I'm ready to merge it into `main`.",
+    "CI is green on **#142 · Release 0.9.0** (412 tests, 3 platforms). I'm ready to merge it into `main` with:\n\n```sh\ngh pr merge 142 --squash --delete-branch\n```\n\nThen I'll post the notes in #releases.",
     2,
   ),
   msg(
