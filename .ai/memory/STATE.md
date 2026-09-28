@@ -46,10 +46,16 @@ _Last updated: 2026-09-28 by Claude_
 - Also done: Audit titles/labels, empty-name validation, model-select copy,
   wizard copy/dots, palette focus, live-view placeholder, connect dialog tool
   summary, locale times, turns stored as running + "Waiting for you" in Audit.
-- Remaining (P2): community tab ordering/spam; letter logos and "coming soon"
-  cards; Settings > Spending has no controls; a turn shows ✓ while its computer
-  task still needs text; roster preview lacks a "You:" prefix; reconnect banner
-  pushes the header down.
+- Round 3 (all remaining audit items done): search-first community tab with
+  readable publishers; "coming soon" connectors sorted last; Settings > Spending
+  lists today's spend per bot vs its limit; a turn says when its computer task
+  still needs text; "You:" in sidebar previews; reconnect toast floats.
+- Permissions: the Full preset no longer asks (built-in denies/asks and steps
+  Jev is sure are major and irreversible still do). Interrupted turns show why.
+- Never reinstall the app while a turn runs (it interrupts the turn): check
+  events for a `turn.started` without a terminal event first.
+- Open: letter logos on connectors (needs licensed SVG marks); merge to main
+  and deleting 18 old app backups (6.4 GB) await the owner.
 - Bot avatars are blobatars (`@blobatar/react`), expression = status.
 - README rewritten with 10 screenshots from `scripts/readme-screenshots.mjs`.
 
