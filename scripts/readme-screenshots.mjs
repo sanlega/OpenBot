@@ -488,6 +488,13 @@ await open("routines", {
   go: then(nav("Routines"), (p) => p.getByText("Weekly release notes").first().click()),
 });
 await open("connectors", { go: nav("Connectors") });
+if (process.env.EXTRA) {
+  await open("connect-dialog", {
+    go: then(nav("Connectors"), (p) =>
+      p.getByRole("button", { name: "Connect", exact: true }).first().click(),
+    ),
+  });
+}
 await open("settings-jev", {
   go: then(nav("Settings"), (p) =>
     p.getByRole("button", { name: "Jev", exact: true }).first().click(),
