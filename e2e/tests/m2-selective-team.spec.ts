@@ -172,7 +172,7 @@ test.describe("M2 Selective team (real gates, scripted Jev)", () => {
       const proactive = messages.body.messages.filter((m) => m.proactive).map((m) => m.text);
       expect(proactive).toEqual(["Cheapest: TAP, 7 Oct, 89 EUR"]);
 
-      // Held messages only show under the activity log's "Not delivered" filter.
+      // Held messages only show under the activity log's "Held for digest" filter.
       const held = await api<{ messages: Array<{ text: string }> }>(
         harness(),
         `/api/threads/${thread.id}/messages?delivery=held`,

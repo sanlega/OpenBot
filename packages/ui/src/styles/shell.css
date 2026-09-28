@@ -169,6 +169,18 @@ body {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* Keyboard focus shows a ring even on the selected row. */
+.bot-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.bot-item[data-active="true"]:focus-visible {
+  box-shadow:
+    inset 2px 0 0 var(--accent),
+    var(--focus);
+}
+
 .bot-meta {
   display: flex;
   flex-direction: column;

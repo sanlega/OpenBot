@@ -133,6 +133,7 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
           type="button"
           className="tab"
           data-active={panel === "chat"}
+          aria-current={panel === "chat" ? "page" : undefined}
           onClick={() => setPanel("chat")}
         >
           Chat
@@ -142,6 +143,7 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
             type="button"
             className="tab"
             data-active={panel === "computer"}
+            aria-current={panel === "computer" ? "page" : undefined}
             onClick={() => setPanel("computer")}
           >
             Computer
@@ -151,6 +153,7 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
           type="button"
           className="tab"
           data-active={panel === "profile"}
+          aria-current={panel === "profile" ? "page" : undefined}
           onClick={() => setPanel("profile")}
         >
           Profile
@@ -167,7 +170,13 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
               stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
             }}
           >
-            <div className="thread-messages" data-testid="thread-messages">
+            <div
+              className="thread-messages"
+              data-testid="thread-messages"
+              role="log"
+              aria-live="polite"
+              aria-label={`Conversation with ${bot.name}`}
+            >
               {messages.length === 0 && !runningTurn ? (
                 <ThreadIntro bot={bot} onPick={(text) => void sendMessage(text)} />
               ) : null}

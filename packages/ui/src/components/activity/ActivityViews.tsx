@@ -63,7 +63,7 @@ const FILTERS: Array<{ id: ActivityFilter; label: string }> = [
   { id: "all", label: "All" },
   { id: "result", label: "Results" },
   { id: "decision", label: "Decisions" },
-  { id: "held", label: "Not delivered" },
+  { id: "held", label: "Held for digest" },
 ];
 
 const KIND_PILLS: Record<NonNullable<Message["kind"]>, { label: string; tone: string }> = {
@@ -361,7 +361,7 @@ function FeedItem({
         <header className="feed-head">
           <span className="feed-author">{authorName}</span>
           {kind ? <span className={`pill ${kind.tone}`}>{kind.label}</span> : null}
-          {held ? <span className="pill pill-warning">Held back</span> : null}
+          {held ? <span className="pill pill-warning">Held for digest</span> : null}
           {message.inputRequestId ? <span className="pill pill-accent">Asked you</span> : null}
           {message.proactive && !kind && !held && !message.inputRequestId ? (
             <span className="pill pill-muted">Update</span>

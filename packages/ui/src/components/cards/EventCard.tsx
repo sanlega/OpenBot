@@ -8,7 +8,7 @@ const EVENT_LABELS: Record<EventType, string> = {
   "message.created": "New message",
   "message.delta": "Writing…",
   "message.completed": "Message sent",
-  "message.held": "Held back",
+  "message.held": "Held for digest",
   "message.merged": "Merged into another update",
   "turn.queued": "Waiting to start",
   "turn.started": "Started working",

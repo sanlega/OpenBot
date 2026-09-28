@@ -47,6 +47,6 @@ describe("AppShell", () => {
     await waitFor(() => expect(screen.getByTestId("bot-list").children.length).toBeGreaterThan(0));
     await user.click(screen.getAllByRole("button", { name: "Activity" })[0]!);
     const activity = await screen.findByTestId("activity-view");
-    expect(within(activity).getByRole("button", { name: "Not delivered" })).toBeInTheDocument();
+    expect(within(activity).getByRole("button", { name: "Held for digest" })).toBeInTheDocument();
   });
 });

@@ -402,7 +402,11 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
                     </p>
                   ) : (
                     <p className="field-help" id="setup-jev-help">
-                      Stored encrypted on this computer and only ever sent to TypeSafe.
+                      No key yet?{" "}
+                      <a href="https://console.typesafe.ai/" target="_blank" rel="noreferrer">
+                        Get one in the TypeSafe console
+                      </a>
+                      . It's stored encrypted on this computer and only ever sent to TypeSafe.
                     </p>
                   )}
                 </div>

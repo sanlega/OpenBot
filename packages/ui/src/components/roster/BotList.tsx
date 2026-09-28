@@ -51,6 +51,7 @@ export function BotList({
         type="button"
         className="bot-item"
         data-active={active}
+        aria-current={active ? "page" : undefined}
         data-status={status}
         onClick={() => {
           selectThread(thread.id);

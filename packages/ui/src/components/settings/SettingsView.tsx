@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Settings, SetupState } from "@openbot/contracts";
-import { Check, Eye, EyeOff, Laptop, Moon, Sun } from "lucide-react";
+import { Check, Eye, EyeOff, Laptop, Moon, Sparkle, SquareTerminal, Sun } from "lucide-react";
 import type { EnginesResponse, SettingsPatch } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { getStoredTheme, setTheme, type ThemePreference } from "../../state/theme.js";
@@ -483,7 +483,7 @@ function EngineRow({ engine, setup }: { engine: Engine; setup: SetupState }) {
     <SettingRow
       leading={
         <span className="engine-mark" data-engine={engine.id} aria-hidden>
-          {engineName(engine.id).charAt(0)}
+          {engine.id === "claude" ? <Sparkle size={18} /> : <SquareTerminal size={18} />}
         </span>
       }
       label={engineName(engine.id)}

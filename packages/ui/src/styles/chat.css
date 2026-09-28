@@ -723,7 +723,8 @@
   font-family: var(--mono);
   font-size: var(--text-sm);
   white-space: pre-wrap;
-  word-break: break-all;
+  /* Wrap at spaces first; split a token only if it can't fit at all. */
+  overflow-wrap: anywhere;
   max-height: 160px;
   overflow: auto;
 }
@@ -733,6 +734,30 @@
   font-size: var(--text-sm);
   color: var(--text-2);
   width: fit-content;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.approval-details summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A chevron like the turn steps', turning when open. */
+.approval-details summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--fast) var(--ease);
+  margin-right: 2px;
+}
+
+.approval-details[open] summary::before {
+  transform: rotate(45deg);
 }
 
 .approval-details pre {

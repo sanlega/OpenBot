@@ -398,7 +398,7 @@ erDiagram
 - A **chain** is the unit of loop protection: one user request, routine run, or bot
   hand-off, with counters for turns, hops, bot messages, spend, and computer steps.
 - A **message** records how it was delivered: `delivered`, `held`, or `merged`.
-  Held messages appear only under **Activity → Not delivered** and in the digest.
+  Held messages appear only under **Activity → Held for digest** and in the digest.
 - Secrets never enter prompts, events, or logs. Engines get them only as environment
   variables, and connector tokens never reach model context.
 
