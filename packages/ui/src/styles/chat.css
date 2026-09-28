@@ -456,11 +456,16 @@
   border: 1px solid var(--border);
   padding: 6px 10px;
   text-align: left;
+  /* Words stay whole; a wide table scrolls sideways instead. */
+  overflow-wrap: normal;
+  word-break: normal;
+  min-width: 4ch;
 }
 
 .message-markdown th {
   background: var(--surface-1);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .message-markdown a {
