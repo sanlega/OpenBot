@@ -87,10 +87,22 @@ const RECENT_STEPS_IN_STATE = 6;
  * so a task that already got there isn't reported as a failure.
  */
 export async function runFastLoop(options: FastLoopOptions): Promise<FastLoopResult> {
-  const result = await runSteps(options);
+  // What was done, for the end check ("typed into “Search”", "click “Ada Lovelace”").
+  const history: string[] = [];
+  const result = await runSteps({
+    ...options,
+    onStep: (event) => {
+      if (event.outcome === "executed" && event.action) {
+        history.push(
+          `${event.action.op}${event.targetLabel ? ` “${event.targetLabel.slice(0, 60)}”` : ""}`,
+        );
+      }
+      options.onStep?.(event);
+    },
+  });
   if (result.status !== "escalated" && result.status !== "failed") return result;
   if (!result.lastObservation || options.shouldStop?.()) return result;
-  const met = await goalAlreadyMet(options, result.lastObservation);
+  const met = await goalAlreadyMet(options, result.lastObservation, history.slice(-6));
   if (!met) return result;
   options.onStep?.({
     step: result.steps + 1,
@@ -113,9 +125,11 @@ const GOAL_CHECK_CONFIDENCE = 0.85;
 async function goalAlreadyMet(
   options: FastLoopOptions,
   observation: Observation,
+  history: string[],
 ): Promise<{ decisionId: string } | undefined> {
   const state = buildDecisionState({
     goal: options.goal,
+    ...(history.length > 0 ? { steps_already_done: history } : {}),
     url: observation.url,
     title: observation.title,
     observed_elements: observation.elements.map((el) => ({
@@ -134,7 +148,7 @@ async function goalAlreadyMet(
           goal_met: {
             type: "choice",
             instructions:
-              "Looking only at `url`, `title` and `observed_elements`, is `goal` already accomplished on this page?",
+              "Is `goal` already accomplished? Judge by where the browser is now (`url`, `title`) and `steps_already_done`: if the page the goal asks for is open, the earlier steps (searching, clicking) are done too.",
             criteria: {
               yes: "The page shows the goal is done (e.g. the requested page is open or the result is visible)",
               no: "The goal is not done yet, or the page doesn't show it",
@@ -508,6 +522,16 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     }
 
     remember(describeAction(action, targetElement));
+    // Typing into a search box means searching: submit it in the same step, as
+    // Jev rarely infers the Enter on its own.
+    if (action.op === "type" && targetElement && isSearchField(targetElement)) {
+      const submitted = await withDeadline(
+        screen.act({ op: "key", text: "Enter" }),
+        limit.act,
+        "timeout",
+      ).catch(() => ({ ok: false }));
+      if (submitted.ok) remember("pressed Enter to search");
+    }
     if (settleMs > 0 && ["click", "key", "type", "select"].includes(action.op)) {
       await new Promise((resolve) => setTimeout(resolve, settleMs));
     }
@@ -530,6 +554,13 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     lastObservation,
     summary: `Stopped after ${steps} steps without finishing.`,
   };
+}
+
+function isSearchField(el: ObservedElement): boolean {
+  return (
+    /^searchbox$/i.test(el.role) ||
+    /\b(search|buscar|busca|rechercher|suchen|cerca)\b/i.test(el.label)
+  );
 }
 
 /** Buttons that dismiss a cookie/consent notice; rejecting is preferred. */

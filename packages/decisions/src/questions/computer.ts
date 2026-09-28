@@ -96,7 +96,7 @@ export function buildComputerActionQuestions(
     action: {
       type: "choice",
       instructions:
-        "Given `goal`, the user's `instructions`, `recent_steps` and the page (`url`, `title`), which single action moves toward the goal next? Close popups that block the page first. Pick `done` only if the page already shows the goal achieved.",
+        "Given `goal`, the user's `instructions`, `recent_steps` and the page (`url`, `title`), which single action moves toward the goal next? Pick `done` only if the page already shows the goal achieved.",
       criteria,
     },
     is_destructive: {

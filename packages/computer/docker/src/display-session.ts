@@ -41,12 +41,22 @@ export interface PageInput {
   click(debugPort: number, x: number, y: number): Promise<boolean>;
   /** Clicks the field, then replaces its text. Resolves false when unreachable. */
   typeInto(debugPort: number, x: number, y: number, text: string): Promise<boolean>;
+  /** Presses a key in the page. Resolves false when unreachable. */
+  press(debugPort: number, key: string): Promise<boolean>;
 }
 
 const cdpPageInput: PageInput = {
   async click(debugPort, x, y) {
     try {
       await withCdp(debugPort, (client) => client.clickAt(x, y), 3_000);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  async press(debugPort, key) {
+    try {
+      await withCdp(debugPort, (client) => client.pressKey(key), 3_000);
       return true;
     } catch {
       return false;
@@ -234,7 +244,11 @@ export class DisplaySessionManager {
         return { ok: true };
       }
       case "key":
-        if (action.text) await this.shell.run("xdotool", ["key", xdotoolKey(action.text)], env);
+        if (!action.text) return { ok: true };
+        session.lastObservation = undefined;
+        // In the page over CDP: X focus may sit on the address bar, not the page.
+        if (await this.pageInput.press(session.debugPort, action.text)) return { ok: true };
+        await this.shell.run("xdotool", ["key", xdotoolKey(action.text)], env);
         return { ok: true };
       case "click":
       case "select":

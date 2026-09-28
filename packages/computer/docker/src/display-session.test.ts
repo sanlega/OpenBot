@@ -42,6 +42,10 @@ function setup(navigateOk = true) {
         pageActions.push(`type ${x},${y} ${text}`);
         return true;
       },
+      press: async (_port, key) => {
+        pageActions.push(`press ${key}`);
+        return true;
+      },
     },
   });
   return { sessions, commands, navigations, pageActions };
@@ -76,6 +80,13 @@ describe("DisplaySessionManager", () => {
     const result = await sessions.act("bot_1", { op: "type", target: 7, text: "x" });
 
     expect(result.ok).toBe(false);
+    expect(commands).toEqual([]);
+  });
+
+  it("presses keys inside the page", async () => {
+    const { sessions, commands, pageActions } = setup();
+    await sessions.act("bot_1", { op: "key", text: "Enter" });
+    expect(pageActions).toEqual(["press Enter"]);
     expect(commands).toEqual([]);
   });
 

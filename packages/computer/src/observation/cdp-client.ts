@@ -74,6 +74,19 @@ export class CdpClient {
     await this.send("Input.dispatchMouseEvent", { ...base, type: "mouseReleased" });
   }
 
+  /** Presses a key in the page (Enter, Escape, Tab), wherever window focus is. */
+  async pressKey(key: string): Promise<void> {
+    const codes: Record<string, number> = { Enter: 13, Escape: 27, Tab: 9 };
+    const code = codes[key] ?? 0;
+    const base = { key, code: key, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code };
+    await this.send("Input.dispatchKeyEvent", {
+      ...base,
+      type: "keyDown",
+      ...(key === "Enter" ? { text: "\r", unmodifiedText: "\r" } : {}),
+    });
+    await this.send("Input.dispatchKeyEvent", { ...base, type: "keyUp" });
+  }
+
   /** Types into the focused field, replacing what it held. */
   async replaceFocusedText(text: string): Promise<void> {
     await this.evaluate(

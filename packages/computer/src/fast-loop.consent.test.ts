@@ -78,3 +78,56 @@ describe("cookie notices", () => {
     expect(steps[0]).toMatchObject({ outcome: "executed", reason: "Closed a cookie notice" });
   });
 });
+
+describe("search boxes", () => {
+  it("submits a search box right after typing into it", async () => {
+    const acts: Action[] = [];
+    const page: Observation = {
+      url: "https://en.wikipedia.org/",
+      title: "Wikipedia",
+      elements: [{ index: 0, role: "searchbox", label: "Search Wikipedia" }],
+    };
+    const screen: Screen = {
+      observe: async () => page,
+      act: async (action) => {
+        acts.push(action);
+        return { ok: true };
+      },
+      liveView: async () => ({ url: "", token: "", expiresAt: "" }),
+      takeover: async () => undefined,
+    };
+    const typeIt = {
+      decide: async () => ({
+        answers: {
+          action: {
+            type: "choice",
+            choice: "type_0",
+            confidence: 0.9,
+            probabilities: { type_0: 0.92 },
+          },
+          is_destructive: { type: "noul", noul: 0.02 },
+        },
+        provider: "jev",
+        model: "test",
+        latencyMs: 1,
+        decisionId: "dec_1",
+      }),
+    } as unknown as DecisionService;
+
+    await runFastLoop({
+      screen,
+      decisionService: typeIt,
+      goal: "Search Wikipedia for Ada Lovelace",
+      botId: "bot_1",
+      chainId: "chn_1",
+      providerId: "fake",
+      maxSteps: 1,
+      textForType: async () => "Ada Lovelace",
+    });
+
+    expect(acts.slice(0, 2)).toEqual([
+      { op: "type", target: 0, text: "Ada Lovelace" },
+      { op: "key", text: "Enter" },
+    ]);
+  });
+});

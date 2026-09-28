@@ -116,12 +116,17 @@ export function buildCandidates(
   };
   candidates.push(
     ...(options.typedRecently ? [enter] : []),
-    {
-      id: "escape",
-      description: "Press Escape to close a popup, menu or dialog",
-      action: { op: "key", text: "Escape" },
-      reversible: true,
-    },
+    // Offered only when something looks like a popup: otherwise it's a distractor.
+    ...(hasPopup(observation)
+      ? [
+          {
+            id: "escape",
+            description: "Press Escape to close a popup, menu or dialog",
+            action: { op: "key", text: "Escape" } as Action,
+            reversible: true,
+          },
+        ]
+      : []),
     {
       id: "scroll_down",
       description: "Scroll down to see more of the page",
@@ -155,6 +160,14 @@ export function buildCandidates(
     },
   );
   return candidates;
+}
+
+function hasPopup(observation: Observation): boolean {
+  return observation.elements.some(
+    (el) =>
+      /^(dialog|alertdialog|menu|listbox)$/i.test(el.role) ||
+      /^(close|dismiss|×|✕|x)$/i.test(el.label.trim()),
+  );
 }
 
 /** The candidate id for an operation on an observed index (tests and evals script steps this way). */
