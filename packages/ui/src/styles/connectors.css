@@ -231,3 +231,8 @@ a.conn-kind:hover {
   font-weight: 600;
   color: var(--text);
 }
+
+.conn-suggestions {
+  justify-content: center;
+  margin-top: var(--space-3);
+}
