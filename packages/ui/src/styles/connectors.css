@@ -141,7 +141,10 @@ a.conn-kind:hover {
 
 .conn-card-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 28px;
 }
 
 .conn-mark {

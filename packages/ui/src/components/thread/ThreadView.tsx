@@ -95,7 +95,13 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
       ? "Working…"
       : status === "needs-you"
         ? "Waiting for you"
-        : (bot.label ?? (bot.isChiefOfStaff ? "Chief of Staff" : oneLine(bot.description)));
+        : (bot.label ??
+          (bot.isChiefOfStaff
+            ? // Don't repeat the name: say the role only when it adds something.
+              bot.name === "Chief of Staff"
+              ? "Your first point of contact"
+              : "Chief of Staff"
+            : oneLine(bot.description)));
 
   return (
     <div className="thread">

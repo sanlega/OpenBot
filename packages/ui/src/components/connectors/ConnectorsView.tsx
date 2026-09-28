@@ -318,13 +318,15 @@ function ConnectorCard({
           {entry.kind === "remote" ? "Hosted by the app" : "Runs on this computer"}
         </span>
         {writes > 0 ? <span className="conn-kind">Can make changes</span> : null}
+      </div>
+      <div className="conn-card-actions">
         {entry.setup?.docsUrl ? (
           <a className="conn-kind" href={entry.setup.docsUrl} target="_blank" rel="noreferrer">
             Docs <ExternalLink size={11} />
           </a>
-        ) : null}
-      </div>
-      <div className="conn-card-actions">
+        ) : (
+          <span />
+        )}
         {entry.connected ? (
           <span className="pill pill-success">Connected</span>
         ) : oauthSoon ? (
