@@ -66,6 +66,22 @@ export class CdpClient {
     return result.result?.value as T;
   }
 
+  /** A real mouse click at viewport coordinates (CSS pixels), wherever the window is. */
+  async clickAt(x: number, y: number): Promise<void> {
+    const base = { x, y, button: "left", clickCount: 1 };
+    await this.send("Input.dispatchMouseEvent", { ...base, type: "mouseMoved" });
+    await this.send("Input.dispatchMouseEvent", { ...base, type: "mousePressed" });
+    await this.send("Input.dispatchMouseEvent", { ...base, type: "mouseReleased" });
+  }
+
+  /** Types into the focused field, replacing what it held. */
+  async replaceFocusedText(text: string): Promise<void> {
+    await this.evaluate(
+      "(() => { const el = document.activeElement; if (el && typeof el.select === 'function') el.select(); })()",
+    );
+    await this.send("Input.insertText", { text });
+  }
+
   /** Loads `url` in this tab (not a new one) and waits for the page to load. */
   async navigate(url: string, timeoutMs = 15_000): Promise<void> {
     await this.send("Page.navigate", { url });

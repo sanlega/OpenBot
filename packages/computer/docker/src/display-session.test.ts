@@ -18,6 +18,7 @@ const searchPage: ObservationResult = {
 function setup(navigateOk = true) {
   const commands: string[] = [];
   const navigations: string[] = [];
+  const pageActions: string[] = [];
   const shell: ShellExec = {
     run: async (cmd, args) => {
       commands.push([cmd, ...args].join(" "));
@@ -32,24 +33,40 @@ function setup(navigateOk = true) {
       navigations.push(url);
       return navigateOk;
     },
+    pageInput: {
+      click: async (_port, x, y) => {
+        pageActions.push(`click ${x},${y}`);
+        return true;
+      },
+      typeInto: async (_port, x, y, text) => {
+        pageActions.push(`type ${x},${y} ${text}`);
+        return true;
+      },
+    },
   });
-  return { sessions, commands, navigations };
+  return { sessions, commands, navigations, pageActions };
 }
 
 describe("DisplaySessionManager", () => {
-  it("clicks the field before typing, so the text lands in it", async () => {
-    const { sessions, commands } = setup();
+  it("types into the chosen field itself, in page coordinates", async () => {
+    const { sessions, commands, pageActions } = setup();
     await sessions.observe("bot_1");
 
     const result = await sessions.act("bot_1", { op: "type", target: 1, text: "sanlega" });
 
     expect(result.ok).toBe(true);
-    expect(commands).toEqual([
-      "xdotool mousemove 500 25",
-      "xdotool click 1",
-      "xdotool key ctrl+a",
-      "xdotool type --delay 20 -- sanlega",
-    ]);
+    expect(pageActions).toEqual(["type 500,25 sanlega"]);
+    expect(commands).toEqual([]);
+  });
+
+  it("clicks inside the page, not at screen coordinates", async () => {
+    const { sessions, commands, pageActions } = setup();
+    await sessions.observe("bot_1");
+
+    await sessions.act("bot_1", { op: "click", target: 0 });
+
+    expect(pageActions).toEqual(["click 20,10"]);
+    expect(commands).toEqual([]);
   });
 
   it("refuses to type into an element it never observed", async () => {

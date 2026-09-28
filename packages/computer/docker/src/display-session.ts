@@ -23,6 +23,8 @@ export interface DisplaySessionOptions {
    * Resolves false when the browser isn't reachable (then a new one is launched).
    */
   navigateTab?: (debugPort: number, url: string) => Promise<boolean>;
+  /** Clicks and types in the page over CDP (stubbed in tests). */
+  pageInput?: PageInput;
   /** Starts Xvfb, the window manager, VNC and Chromium for a display (stubbed in tests). */
   startDisplay?: (display: number, debugPort: number, vncPort: number) => Promise<void>;
   /** Reads the page (stubbed in tests). */
@@ -32,6 +34,40 @@ export interface DisplaySessionOptions {
     mode: ObservationMode,
   ) => Promise<ObservationResult>;
 }
+
+/** Drives the page itself, in viewport coordinates, so window position doesn't matter. */
+export interface PageInput {
+  /** Resolves false when the browser can't be reached. */
+  click(debugPort: number, x: number, y: number): Promise<boolean>;
+  /** Clicks the field, then replaces its text. Resolves false when unreachable. */
+  typeInto(debugPort: number, x: number, y: number, text: string): Promise<boolean>;
+}
+
+const cdpPageInput: PageInput = {
+  async click(debugPort, x, y) {
+    try {
+      await withCdp(debugPort, (client) => client.clickAt(x, y), 3_000);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  async typeInto(debugPort, x, y, text) {
+    try {
+      await withCdp(
+        debugPort,
+        async (client) => {
+          await client.clickAt(x, y);
+          await client.replaceFocusedText(text);
+        },
+        3_000,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
 
 async function navigateTabOverCdp(debugPort: number, url: string): Promise<boolean> {
   try {
@@ -67,11 +103,13 @@ export class DisplaySessionManager {
   private readonly sessions = new Map<string, SessionState>();
   private readonly shell: ShellExec;
   private readonly navigateTab: (debugPort: number, url: string) => Promise<boolean>;
+  private readonly pageInput: PageInput;
 
   constructor(private readonly options: DisplaySessionOptions = {}) {
     this.screens = new ScreenManager(options.maxScreens ?? 4);
     this.shell = options.shell ?? createShellExec();
     this.navigateTab = options.navigateTab ?? navigateTabOverCdp;
+    this.pageInput = options.pageInput ?? cdpPageInput;
   }
 
   assign(botId: string): SessionState {
@@ -173,8 +211,6 @@ export class DisplaySessionManager {
         return { ok: true };
       case "type": {
         if (!action.text) return { ok: false, reason: "type requires text" };
-        // Focus the field first (typing otherwise goes wherever focus happens to
-        // be), then replace what it holds.
         if (action.target !== undefined) {
           const meta = session.lastObservation?._meta?.[action.target];
           if (!meta) {
@@ -183,9 +219,14 @@ export class DisplaySessionManager {
               reason: `index ${action.target} was not returned by the last observe()`,
             };
           }
+          // Focus that field and replace its text; typing with xdotool alone
+          // goes wherever focus happens to be.
           if (meta.bounds) {
-            await this.click(session, action.target, env);
-            await this.shell.run("xdotool", ["key", "ctrl+a"], env);
+            const { x, y } = center(meta.bounds);
+            if (await this.pageInput.typeInto(session.debugPort, x, y, action.text)) {
+              session.lastObservation = undefined;
+              return { ok: true };
+            }
           }
         }
         await this.shell.run("xdotool", ["type", "--delay", "20", "--", action.text], env);
@@ -227,8 +268,10 @@ export class DisplaySessionManager {
       return { ok: false, reason: `index ${target} was not returned by the last observe()` };
     }
     if (meta.bounds) {
-      const x = meta.bounds.x + Math.floor(meta.bounds.width / 2);
-      const y = meta.bounds.y + Math.floor(meta.bounds.height / 2);
+      // Bounds are viewport coordinates: click inside the page over CDP.
+      const { x, y } = center(meta.bounds);
+      session.lastObservation = undefined;
+      if (await this.pageInput.click(session.debugPort, x, y)) return { ok: true };
       await this.shell.run("xdotool", ["mousemove", String(x), String(y)], env);
       await this.shell.run("xdotool", ["click", "1"], env);
       return { ok: true };
@@ -283,6 +326,13 @@ export class DisplaySessionManager {
     session.processes.push(...procs);
     await waitForPort(session.vncPort);
   }
+}
+
+function center(bounds: { x: number; y: number; width: number; height: number }) {
+  return {
+    x: bounds.x + Math.floor(bounds.width / 2),
+    y: bounds.y + Math.floor(bounds.height / 2),
+  };
 }
 
 async function waitForDisplay(display: number, timeoutMs = 15_000): Promise<void> {
