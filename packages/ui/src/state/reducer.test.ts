@@ -191,6 +191,52 @@ describe("computer steps in the chat", () => {
   });
 });
 
+describe("computer task status", () => {
+  it("remembers a task still waiting for text after the turn ends", () => {
+    let state = createInitialState(SEED_BOTS);
+    const base = { botId: "bot_code_01", threadId: "thr_code", turnId: "turn_w" };
+    for (const event of [
+      {
+        ...base,
+        id: "w1",
+        seq: 1,
+        ts: "2026-09-27T10:00:00.000Z",
+        type: "turn.started",
+        payload: {},
+      },
+      {
+        ...base,
+        id: "w2",
+        seq: 2,
+        ts: "2026-09-27T10:00:01.000Z",
+        type: "tool.started",
+        payload: { toolName: "mcp__openbot__computer_task", toolUseId: "tu_w", input: {} },
+      },
+      {
+        id: "w3",
+        seq: 3,
+        ts: "2026-09-27T10:00:02.000Z",
+        type: "computer.task_started",
+        botId: "bot_code_01",
+        payload: { taskId: "ctask_1", status: "needs_input", needsText: "Subject" },
+      },
+      {
+        ...base,
+        id: "w4",
+        seq: 4,
+        ts: "2026-09-27T10:00:03.000Z",
+        type: "turn.completed",
+        payload: {},
+      },
+    ] as OBEvent[]) {
+      state = uiReducer(state, { type: "event", event });
+    }
+    const turn = state.turns.get("turn_w");
+    expect(turn?.status).toBe("done");
+    expect(turn?.steps[0]?.taskStatus).toBe("needs_input");
+  });
+});
+
 describe("interrupted turns", () => {
   it("keep the reason they were interrupted", () => {
     let state = createInitialState(SEED_BOTS);

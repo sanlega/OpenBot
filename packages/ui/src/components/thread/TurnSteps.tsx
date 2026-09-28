@@ -45,6 +45,10 @@ export function TurnSteps({
   );
   const steps = turn.steps.length;
   const current = turn.steps[steps - 1];
+  // A computer task can keep going (or wait for text) after the turn replied.
+  const openTask = running
+    ? undefined
+    : turn.steps.find((s) => s.taskStatus === "needs_input" || s.taskStatus === "running");
   const summary = waiting
     ? "Waiting for your approval"
     : running
@@ -53,7 +57,9 @@ export function TurnSteps({
         : "Thinking…"
       : turn.status === "failed"
         ? `Couldn't finish · ${formatDuration(seconds)}`
-        : `Worked for ${formatDuration(seconds)} · ${steps} ${steps === 1 ? "step" : "steps"}`;
+        : openTask
+          ? `Worked for ${formatDuration(seconds)} · computer task ${openTask.taskStatus === "needs_input" ? "needs text" : "still running"}`
+          : `Worked for ${formatDuration(seconds)} · ${steps} ${steps === 1 ? "step" : "steps"}`;
 
   return (
     <details
@@ -69,6 +75,8 @@ export function TurnSteps({
           <Loader2 size={14} className="spin" aria-hidden />
         ) : turn.status === "failed" ? (
           <X size={14} className="turn-failed" aria-hidden />
+        ) : openTask ? (
+          <Monitor size={14} className="turn-waiting" aria-hidden />
         ) : (
           <Check size={14} aria-hidden />
         )}

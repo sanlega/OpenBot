@@ -436,6 +436,7 @@ body {
 }
 
 .main-panel {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -534,6 +535,22 @@ body {
   border-radius: 12px;
   background: url("/app/icon-512.png") center / cover no-repeat;
   animation: pulse 1.6s var(--ease) infinite;
+}
+
+/* Floats over the content so the header doesn't jump when it comes and goes. */
+.reconnect-toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-1);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+  font-size: var(--text-sm);
 }
 
 .banner-dot {

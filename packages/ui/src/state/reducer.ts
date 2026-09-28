@@ -8,6 +8,8 @@ export interface TurnStep {
   status: "running" | "done" | "error";
   /** What a computer task did on screen, one line per step, as it happens. */
   live?: Array<{ step: number; text: string; outcome?: string }>;
+  /** The computer task's own status (it can outlive the turn that started it). */
+  taskStatus?: string;
 }
 
 /** What a Bot did during one turn: shown folded above its reply, like a "thinking" block. */
@@ -370,23 +372,32 @@ function applyEvent(state: UiState, event: OBEvent): void {
       }
       break;
     }
+    case "computer.task_started":
     case "computer.step":
     case "computer.escalated": {
       const turn = runningTurnOf(state, event.botId);
+      if (!turn) break;
+      const index = findLastIndex(turn.steps, (s) => /computer_(task|steer)$/.test(s.tool));
+      if (index < 0) break;
+      const status = typeof p.status === "string" ? p.status : undefined;
+      if (status) {
+        const withStatus = [...turn.steps];
+        withStatus[index] = { ...withStatus[index]!, taskStatus: status };
+        state.turns.set(turn.id, { ...turn, steps: withStatus });
+      }
       const raw = p.step as
         | { step?: number; op?: string; target?: string; outcome?: string; reason?: string }
         | undefined;
-      if (!turn || !raw || typeof raw.step !== "number") break;
-      const index = findLastIndex(turn.steps, (s) => /computer_(task|steer)$/.test(s.tool));
-      if (index < 0) break;
-      const target = turn.steps[index]!;
+      if (!raw || typeof raw.step !== "number") break;
+      const current = state.turns.get(turn.id)!;
+      const target = current.steps[index]!;
       const line = { step: raw.step, text: describeComputerStep(raw), outcome: raw.outcome };
       const live = [...(target.live ?? []).filter((l) => l.step !== raw.step), line].sort(
         (a, b) => a.step - b.step,
       );
-      const steps = [...turn.steps];
+      const steps = [...current.steps];
       steps[index] = { ...target, live };
-      state.turns.set(turn.id, { ...turn, steps });
+      state.turns.set(turn.id, { ...current, steps });
       break;
     }
     default:
