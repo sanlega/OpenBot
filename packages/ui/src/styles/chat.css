@@ -852,6 +852,10 @@
   background: var(--text-2);
 }
 
+.composer-hint[data-offline] {
+  color: var(--warning);
+}
+
 .composer-hint {
   margin: 6px 0 0;
   text-align: center;
@@ -875,6 +879,9 @@
   }
   .composer-hint {
     display: none;
+  }
+  .composer-hint[data-offline] {
+    display: block;
   }
   .turn-steps {
     margin-left: 0;

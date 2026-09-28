@@ -222,6 +222,7 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
             running={Boolean(runningTurn)}
             onSend={(text) => sendMessage(text)}
             onStop={stop}
+            offline={!state.connected}
           />
         </>
       ) : null}
