@@ -43,12 +43,13 @@ _Last updated: 2026-09-28 by Claude_
   ("Held for digest"), engine icons, wizard "get a key" link, aria-current +
   live region, bot-row focus ring, approval command wrapping + chevron, code
   block language + Copy, connector host copy, routine first-run cause.
-- Remaining: connect dialog lists raw tool ids; community tab sorting; letter
-  logos / "coming soon" cards; Audit rows too generic; palette focus return;
-  12h/24h time mix; form-card secret copy; wizard copy/dots; jargon in model
-  select and budgets; Spending section; empty-name validation; live-view
-  loading placeholder; turn ✓ while computer task needs text; Audit "Queued"
-  vs "Waiting for you".
+- Also done: Audit titles/labels, empty-name validation, model-select copy,
+  wizard copy/dots, palette focus, live-view placeholder, connect dialog tool
+  summary, locale times, turns stored as running + "Waiting for you" in Audit.
+- Remaining (P2): community tab ordering/spam; letter logos and "coming soon"
+  cards; Settings > Spending has no controls; a turn shows ✓ while its computer
+  task still needs text; roster preview lacks a "You:" prefix; reconnect banner
+  pushes the header down.
 - Bot avatars are blobatars (`@blobatar/react`), expression = status.
 - README rewritten with 10 screenshots from `scripts/readme-screenshots.mjs`.
 
