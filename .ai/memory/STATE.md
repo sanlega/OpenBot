@@ -3,20 +3,53 @@
 _Last updated: 2026-09-28 by Claude_
 
 ## In progress
+- **RESOLVED (2026-09-28) — old ref exposure**: the previous `sanlega/OpenBot`
+  repo's history-cleanup left `refs/pull/1..18/head` pointing at pre-rewrite commits
+  (personal email, local machine paths, a private metaharness URL, a private Claude
+  session URL, identifying sample names). GitHub confirmed those hidden refs can't be
+  deleted by the owner (`deny updating a hidden ref`) — only Support can purge them.
+  A Support ticket for that purge was submitted 2026-09-28 (confirmed sent) but is
+  slow/uncertain, so instead: that repo was renamed to `sanlega/OpenBot-old` and set
+  **private** (verified with an unauthenticated `curl` → `401`, not just `gh`/stored
+  credentials), and a brand-new `sanlega/OpenBot` was created public with `main`
+  (already-clean history) pushed as its only branch/history. A fresh repo has no PRs
+  ever opened against it, so it has zero `refs/pull/*` and can never inherit this
+  exposure — this is the permanent fix, the Support ticket is now a nice-to-have for
+  `OpenBot-old` (which stays private regardless). Local `origin` now points at the new
+  repo. Cost of the move: negligible — the old repo was 2 days old, 0 issues, 0
+  releases, 0 forks, 1 star; all 18 PR *branches* were already merged/closed into
+  `main` before the move, only PR *discussion metadata* was left behind (not code).
+  README/CI-badge links needed no changes since owner+name are identical.
+  Still open: first CI run on the new repo was `queued` right after the push — check
+  `gh run list -R sanlega/OpenBot` for whether the account-level GitHub Actions
+  billing block (see below) still applies there, since that's separate from this fix.
+- **DONE (2026-09-28)** — Settings action to get/reset the Computer desktop image
+  (Docker), so users don't need a terminal. Plan (all 10 tasks checked off):
+  `.ai/memory/plans/2026-09-28-computer-image-settings.md` (D-020: the image ships via
+  GHCR, `ghcr.io/sanlega/openbot-desktop`; local `docker build` stays a dev-checkout
+  convenience only, auto-detected via `findLocalDockerfile()`). Shipped: `ComputerImageManager`
+  (`packages/computer/docker/src/image-manager.ts`) with get/reset/refresh + a
+  `computer.image_status` event on every transition; three new core routes
+  (`GET/POST /api/computer/image`, `POST /api/computer/image/reset`); `POST
+  /api/computer/start` now replies `409 image_missing` instead of a raw error when the
+  image isn't ready; a Settings > Computer card with live WS-driven status and an
+  inline-confirm Reset; the bot Computer tab points to Settings on that same 409. CI
+  gained a `publish-desktop-image` job on `.github/workflows/release.yml` (validated
+  with `js-yaml` — the initial version had a real YAML syntax error from an unquoted
+  colon in a step name, caught before commit). Full verification: build, typecheck,
+  831 tests passed (0 failed, 18 pre-existing skips), lint (same 3 pre-existing
+  warnings, 0 new), format, `mh check` — all clean. Still open: the GHCR-visibility
+  risk from the plan (package inheriting private/public from the repo) — verify actual
+  package visibility after the *first real* CI publish (a `v*` tag push), since this
+  session never ran that workflow for real.
 - Prepare the first downloadable GitHub release (`v0.1.0`) and polish the public repository.
-  Plan: `.ai/memory/plans/2026-09-27-github-release.md`.
-- Public-release README, contributor guide, issue/PR templates, changelog, and installer
-  workflow are in the product-polish branch. PR #18 targets `main`; do not merge before
-  exact-head CI passes.
-- The user approved history cleanup. All 18 branch heads were rewritten; old local session
-  notes, machine paths, a personal email, a private metaharness URL, a private Claude
-  session URL, and identifying sample names were scrubbed. PR #17 metadata was edited.
-  GitHub's read-only `refs/pull/1..16/head` still point to old commits; contact GitHub
-  Support to purge those refs and cached views before changing repository visibility.
-- PR #18's current pushed head is `6568bf78d8c0fa0ea4ff74a4234387257f2fd52a`. CI run
-  76 reports all ten jobs failed; GitHub exposes neither job steps nor downloadable logs
-  (`BlobNotFound`). Do not merge until required exact-head checks pass and this is
-  understood.
+  Plan: `.ai/memory/plans/2026-09-27-github-release.md`. Note: this plan predates the
+  repo migration above — re-check its PR #18 references against the new repo (which has
+  no PR history at all; `main` already has everything PR #18 would have brought).
+- The user approved history cleanup. All 18 branch heads on the old repo were rewritten;
+  old local session notes, machine paths, a personal email, a private metaharness URL,
+  a private Claude session URL, and identifying sample names were scrubbed. Superseded
+  by the repo migration above for the exposure this left behind.
 - A protected local history backup exists outside the repository. Its location and
   recovery notes are in ignored `.ai/local/history-cleanup.md`.
 - Credential-pattern scan found no real credentials. One synthetic credential-shaped
@@ -190,11 +223,13 @@ _Last updated: 2026-09-28 by Claude_
 ## Known gaps
 - Real Claude/Codex and Jev credentials, Docker on other operating systems, and
   remote-provider integrations need broader manual testing.
-- A real-key Jev + Docker live-use test remains. Current GitHub CI run 75 marked all jobs
-  failed, but the connector could not fetch job logs. Local tests/build/typecheck/format/
-  lint and desktop E2E pass.
-- The GitHub Support purge for closed PR refs and cached views remains outstanding; keep
-  the repository private until resolved.
+- A real-key Jev + Docker live-use test remains. GitHub CI run history below this point
+  predates the 2026-09-28 repo migration (see "In progress" above) — re-check CI on the
+  new `sanlega/OpenBot` rather than assuming old run numbers still apply.
+- The GitHub Support purge for `OpenBot-old`'s closed PR refs and cached views remains
+  outstanding, but is no longer a repository-visibility blocker: the current
+  `sanlega/OpenBot` is a fresh repo with no PR history at all (see "In progress" above),
+  and `OpenBot-old` stays private regardless of whether Support ever purges it.
 - Desktop packages are unsigned and will show operating-system warnings.
 - Follow-up work includes code signing/notarization and deeper end-to-end coverage for
   routine editing and remote pairing.
