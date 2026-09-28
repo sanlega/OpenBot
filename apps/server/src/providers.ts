@@ -11,6 +11,7 @@ import { createDockerProvider } from "@openbot/computer-docker";
 import { LocalProvider } from "@openbot/computer-local";
 import {
   createDecisionService,
+  DecisionLog,
   FakeDecisionService,
   JevClient,
   KeyedDecisionService,
@@ -82,7 +83,9 @@ function resolveDecisionService(ctx: CoreContext): DecisionService {
   const baseUrl = process.env.JEV_BASE_URL || undefined;
   return new KeyedDecisionService({
     getApiKey: async () => process.env.JEV_API_KEY || (await ctx.vault.get(VAULT_KEYS.typesafe)),
-    create: (apiKey) => createDecisionService({ apiKey, baseUrl }),
+    // Every decision lands in the `decisions` table (Audit, and diagnosing a task later).
+    create: (apiKey) =>
+      createDecisionService({ apiKey, baseUrl, decisionLog: new DecisionLog(ctx.repos.decisions) }),
     probeKey: (apiKey) => new JevClient({ apiKey, baseUrl }).validateKey(),
   });
 }

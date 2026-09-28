@@ -6,7 +6,12 @@ import type { EngineStatus } from "@openbot/contracts";
 import { FakeClock } from "@openbot/testkit";
 import { createCoreContext } from "@openbot/core";
 import { FakeComputerProvider } from "@openbot/computer-fake";
-import { FakeDecisionService, KeyedDecisionService, UNCONFIGURED_MODEL } from "@openbot/decisions";
+import {
+  FakeDecisionService,
+  FakeJevServer,
+  KeyedDecisionService,
+  UNCONFIGURED_MODEL,
+} from "@openbot/decisions";
 import { FakeEngineDriver } from "@openbot/engines-fake";
 import { ClaudeDriver } from "@openbot/engines-claude";
 import { CodexDriver } from "@openbot/engines-codex";
@@ -88,6 +93,40 @@ describe("bootstrapProviders", () => {
 
     ctx.closeDb();
     process.env = prev;
+  });
+
+  it("records every Jev decision in the decisions table", async () => {
+    const prev = { ...process.env };
+    delete process.env.OPENBOT_FAKE_JEV;
+    delete process.env.JEV_API_KEY;
+    const jev = new FakeJevServer({ apiKey: "ts_live_key_1234567890" });
+    const { url } = await jev.listen();
+    process.env.JEV_BASE_URL = url;
+    try {
+      const ctx = await testContext();
+      await ctx.vault.set("typesafe.apiKey", "ts_live_key_1234567890");
+      const { decisionService } = await bootstrapProviders(ctx, mockDetection());
+
+      await decisionService.decide({
+        purpose: "computer",
+        state: "a page",
+        questions: {
+          action: {
+            type: "choice",
+            instructions: "Next?",
+            criteria: { wait: "Wait", done: "Done" },
+          },
+        },
+      });
+
+      const rows = ctx.repos.decisions.list({ purpose: "computer" });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ provider: "jev", purpose: "computer" });
+      ctx.closeDb();
+    } finally {
+      await jev.close();
+      process.env = prev;
+    }
   });
 
   it("marks the TypeSafe setup step as not connected when the saved key is missing", async () => {
