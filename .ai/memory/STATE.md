@@ -37,6 +37,21 @@ _Last updated: 2026-09-28 by Claude_
   increased" (Billing & plans). Code passes the full pipeline locally on macOS;
   Windows/Linux untested until billing is fixed.
 
+## Design audit round 2 (2026-09-28)
+- Audit (30 items) fixed so far: P0 lost-message-while-reconnecting, markdown
+  tables breaking words, Activity overflow on phone; P1 held-message naming
+  ("Held for digest"), engine icons, wizard "get a key" link, aria-current +
+  live region, bot-row focus ring, approval command wrapping + chevron, code
+  block language + Copy, connector host copy, routine first-run cause.
+- Remaining: connect dialog lists raw tool ids; community tab sorting; letter
+  logos / "coming soon" cards; Audit rows too generic; palette focus return;
+  12h/24h time mix; form-card secret copy; wizard copy/dots; jargon in model
+  select and budgets; Spending section; empty-name validation; live-view
+  loading placeholder; turn ✓ while computer task needs text; Audit "Queued"
+  vs "Waiting for you".
+- Bot avatars are blobatars (`@blobatar/react`), expression = status.
+- README rewritten with 10 screenshots from `scripts/readme-screenshots.mjs`.
+
 ## Computer loop v2 (2026-09-28, verified live)
 - Jev answers one `action` choice among described candidates
   (`packages/computer/src/candidates.ts`: goal-matching elements first, ≤24,
