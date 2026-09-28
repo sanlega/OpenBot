@@ -6,6 +6,8 @@ export interface TurnStep {
   tool: string;
   input: unknown;
   status: "running" | "done" | "error";
+  /** What a computer task did on screen, one line per step, as it happens. */
+  live?: Array<{ step: number; text: string; outcome?: string }>;
 }
 
 /** What a Bot did during one turn: shown folded above its reply, like a "thinking" block. */
@@ -369,12 +371,79 @@ function applyEvent(state: UiState, event: OBEvent): void {
       }
       break;
     }
+    case "computer.step":
+    case "computer.escalated": {
+      const turn = runningTurnOf(state, event.botId);
+      const raw = p.step as
+        | { step?: number; op?: string; target?: string; outcome?: string; reason?: string }
+        | undefined;
+      if (!turn || !raw || typeof raw.step !== "number") break;
+      const index = findLastIndex(turn.steps, (s) => /computer_(task|steer)$/.test(s.tool));
+      if (index < 0) break;
+      const target = turn.steps[index]!;
+      const line = { step: raw.step, text: describeComputerStep(raw), outcome: raw.outcome };
+      const live = [...(target.live ?? []).filter((l) => l.step !== raw.step), line].sort(
+        (a, b) => a.step - b.step,
+      );
+      const steps = [...turn.steps];
+      steps[index] = { ...target, live };
+      state.turns.set(turn.id, { ...turn, steps });
+      break;
+    }
     default:
       break;
   }
 }
 
 /** The activity record for an event's turn, created on first sight (bus order is not guaranteed). */
+/** Computer events carry the Bot but not the turn: use that Bot's running turn. */
+function runningTurnOf(state: UiState, botId?: string): TurnActivity | undefined {
+  if (!botId) return undefined;
+  let latest: TurnActivity | undefined;
+  for (const turn of state.turns.values()) {
+    if (turn.botId !== botId || turn.status !== "running") continue;
+    if (!latest || turn.startedAt > latest.startedAt) latest = turn;
+  }
+  return latest;
+}
+
+function findLastIndex<T>(items: T[], test: (item: T) => boolean): number {
+  for (let i = items.length - 1; i >= 0; i -= 1) if (test(items[i]!)) return i;
+  return -1;
+}
+
+/** One computer step in words: "Clicked “Search”", "Typed into “Search”", … */
+export function describeComputerStep(step: {
+  op?: string;
+  target?: string;
+  outcome?: string;
+  reason?: string;
+}): string {
+  const on = step.target ? ` “${step.target}”` : "";
+  if (step.outcome === "done") return step.reason ?? "Done";
+  if (step.outcome && step.outcome !== "executed") {
+    return step.reason ?? `Stopped (${step.outcome})`;
+  }
+  switch (step.op) {
+    case "click":
+      return `Clicked${on}`;
+    case "type":
+      return `Typed into${on}`;
+    case "select":
+      return `Chose${on}`;
+    case "key":
+      return "Pressed a key";
+    case "scroll":
+      return "Scrolled";
+    case "navigate":
+      return "Opened a page";
+    case "wait":
+      return "Waited for the page";
+    default:
+      return step.op ? `${step.op}${on}` : "Worked on the screen";
+  }
+}
+
 function turnFor(state: UiState, event: OBEvent): TurnActivity | undefined {
   if (!event.turnId || !event.botId) return undefined;
   const existing = state.turns.get(event.turnId);

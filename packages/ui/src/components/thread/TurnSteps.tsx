@@ -10,6 +10,7 @@ import {
   ListTodo,
   Loader2,
   MessageSquare,
+  Monitor,
   Pencil,
   Search,
   Terminal,
@@ -87,6 +88,15 @@ export function TurnSteps({
               </span>
               <span className="turn-step-tool">{toolName(step.tool)}</span>
               {detail(step) ? <span className="turn-step-detail">{detail(step)}</span> : null}
+              {step.live?.length ? (
+                <ol className="turn-substeps">
+                  {step.live.map((line) => (
+                    <li key={line.step} data-outcome={line.outcome}>
+                      {line.text}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
             </li>
           ))}
         </ol>
@@ -138,6 +148,8 @@ function toolName(tool: string): string {
 }
 
 function stepTitle(step: TurnStep): string {
+  const last = step.live?.[step.live.length - 1];
+  if (last && step.status === "running") return `On the computer · ${last.text}`;
   const d = detail(step);
   return d ? `${toolName(step.tool)} ${d}` : `${toolName(step.tool)}…`;
 }
@@ -154,6 +166,7 @@ function iconFor(tool: string): ReactNode {
     return <MessageSquare size={size} />;
   }
   if (tool.endsWith("ask_user")) return <ClipboardList size={size} />;
+  if (/computer_(task|steer|status)$/.test(tool)) return <Monitor size={size} />;
   if (tool.startsWith(OPENBOT_PREFIX)) return <Bot size={size} />;
   return <Wrench size={size} />;
 }
@@ -162,6 +175,7 @@ function iconFor(tool: string): ReactNode {
 function detail(step: TurnStep): string | undefined {
   const input = (step.input ?? {}) as Record<string, unknown>;
   for (const key of [
+    "goal",
     "file_path",
     "path",
     "command",

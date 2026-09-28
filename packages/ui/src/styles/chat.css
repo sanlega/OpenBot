@@ -575,9 +575,38 @@
 
 .turn-step-list li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+/* A computer task's own steps, under it, as they happen. */
+.turn-step-list .turn-substeps {
+  flex-basis: 100%;
+  margin: 2px 0 2px 30px;
+  padding: 0 0 0 12px;
+  border-left: 1px solid var(--border);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.turn-step-list .turn-substeps li {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.turn-step-list .turn-substeps li[data-outcome="escalated"],
+.turn-step-list .turn-substeps li[data-outcome="blocked"],
+.turn-step-list .turn-substeps li[data-outcome="denied"] {
+  color: var(--warning);
+}
+
+.turn-step-list .turn-substeps li[data-outcome="done"] {
+  color: var(--success);
 }
 
 .turn-step-icon {

@@ -146,6 +146,51 @@ describe("uiReducer", () => {
   });
 });
 
+describe("computer steps in the chat", () => {
+  it("adds each step under the running computer task, once, in order", () => {
+    const ev = (
+      seq: number,
+      type: string,
+      payload: Record<string, unknown>,
+      turn = true,
+    ): OBEvent => ({
+      id: `evt_${seq}`,
+      seq,
+      ts: `2026-09-27T10:00:0${seq}.000Z`,
+      type: type as OBEvent["type"],
+      botId: "bot_code_01",
+      ...(turn ? { threadId: "thr_code", turnId: "turn_c" } : {}),
+      payload,
+    });
+    const step = (n: number, extra: Record<string, unknown>) => ({
+      taskId: "ctask_1",
+      step: { step: n, at: "2026-09-27T10:00:00.000Z", ...extra },
+    });
+    let state = createInitialState(SEED_BOTS);
+    for (const event of [
+      ev(1, "turn.started", { engine: "claude", model: "m" }),
+      ev(2, "tool.started", {
+        toolName: "mcp__openbot__computer_task",
+        toolUseId: "tu_c",
+        input: { goal: "Search YouTube" },
+      }),
+      // Computer events carry no turn id, arrive duplicated and out of order.
+      ev(4, "computer.step", step(2, { op: "type", target: "Search", outcome: "executed" }), false),
+      ev(
+        3,
+        "computer.step",
+        step(1, { op: "click", target: "Reject all", outcome: "executed" }),
+        false,
+      ),
+      ev(5, "computer.step", step(2, { op: "type", target: "Search", outcome: "executed" }), false),
+    ]) {
+      state = uiReducer(state, { type: "event", event });
+    }
+    const live = state.turns.get("turn_c")?.steps[0]?.live;
+    expect(live?.map((l) => l.text)).toEqual(["Clicked “Reject all”", "Typed into “Search”"]);
+  });
+});
+
 describe("seed messages", () => {
   it("includes held delivery for activity filter", () => {
     const held = SEED_MESSAGES.filter((m) => m.delivery === "held");
