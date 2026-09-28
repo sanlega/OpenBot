@@ -146,6 +146,7 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
   };
 
   const anyEngine = ENGINE_IDS.some((id) => engines[id].state === "ready");
+  const allEngines = ENGINE_IDS.every((id) => engines[id].state === "ready");
 
   const go = (to: Step) => {
     setStep(to);
@@ -315,9 +316,11 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
               ))}
               <div className="setup-inline-row">
                 <span className="setup-muted">
-                  {anyEngine
-                    ? "You can add the other engine later in Settings."
-                    : "Connect at least one engine to continue."}
+                  {allEngines
+                    ? "Both engines are ready. Bots can use either one."
+                    : anyEngine
+                      ? "You can add the other engine later in Settings."
+                      : "Connect at least one engine to continue."}
                 </span>
                 <button
                   type="button"

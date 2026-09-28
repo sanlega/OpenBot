@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useOpenBot } from "../../state/context.js";
+import { modelLabel } from "../thread/RouteChip.js";
 import { BotAvatar } from "../common/BotAvatar.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
 import { dayLabel, sameDay } from "../common/time.js";
@@ -459,7 +460,7 @@ function engineName(engine: string): string {
 }
 
 export function AuditView() {
-  const { transport, bots } = useOpenBot();
+  const { transport, bots, state } = useOpenBot();
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [botFilter, setBotFilter] = useState<string>("all");
@@ -508,6 +509,16 @@ export function AuditView() {
         raw: a.detail && a.detail !== approvalTarget(a) ? a.detail : undefined,
       });
     }
+    // What each turn was about: the message that started its chain (yours, or
+    // a task from another bot).
+    const askedFor = new Map<string, string>();
+    for (const messages of state.messagesByThread.values()) {
+      for (const m of [...messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+        if (!m.chainId || askedFor.has(m.chainId) || m.author.type === "system") continue;
+        const line = plainText(m.text).slice(0, 90);
+        if (line) askedFor.set(m.chainId, line);
+      }
+    }
     for (const t of turns) {
       const tokens = t.usage.inputTokens + t.usage.outputTokens;
       out.push({
@@ -515,18 +526,21 @@ export function AuditView() {
         ts: t.createdAt,
         botId: t.botId,
         kind: "turn",
-        action: "Worked on a task",
-        sub: `${engineName(t.engine)} · ${t.model}`,
+        action: askedFor.get(t.chainId) ?? "Worked on a task",
+        sub: `${engineName(t.engine)} · ${modelLabel(t.model)}`,
         outcome: TURN_STATUS[t.status] ?? { label: t.status, tone: "muted" },
         details: [
-          ["Engine", `${engineName(t.engine)} · ${t.model}${t.effort ? ` · ${t.effort}` : ""}`],
+          [
+            "Engine",
+            `${engineName(t.engine)} · ${modelLabel(t.model)}${t.effort ? ` · ${t.effort}` : ""}`,
+          ],
           ["Started", fullTime(t.createdAt)],
           ["Usage", `${tokens.toLocaleString()} tokens · $${t.usage.usd.toFixed(2)}`],
         ],
       });
     }
     return out.sort((a, b) => b.ts.localeCompare(a.ts));
-  }, [approvals, turns, names]);
+  }, [approvals, turns, names, state.messagesByThread]);
 
   const visible = rows.filter(
     (r) =>

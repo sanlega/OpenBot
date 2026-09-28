@@ -95,7 +95,17 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
       </div>
       <label className="field">
         <span className="field-label">Name</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          aria-invalid={!name.trim() || undefined}
+          aria-describedby={!name.trim() ? "profile-name-error" : undefined}
+        />
+        {!name.trim() ? (
+          <span className="form-error" id="profile-name-error">
+            A bot needs a name.
+          </span>
+        ) : null}
       </label>
       <label className="field">
         <span className="field-label">Instructions</span>
@@ -110,7 +120,7 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
             : "Every message runs on this model."}
         </span>
         <select aria-label="Model" value={model} onChange={(e) => setModel(e.target.value)}>
-          <option value={AUTO}>Auto: Jev picks per turn</option>
+          <option value={AUTO}>Auto (the best model for each message)</option>
           {!known && current !== AUTO ? (
             <option value={current}>
               {current.endsWith(":") ? `${current.slice(0, -1)} (default model)` : current}
@@ -166,7 +176,7 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
         </select>
       </label>
       <div className="settings-card-actions">
-        <button type="submit" className="btn btn-primary" disabled={!dirty}>
+        <button type="submit" className="btn btn-primary" disabled={!dirty || !name.trim()}>
           Save
         </button>
         {status ? <span className="save-status">{status}</span> : null}
