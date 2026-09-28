@@ -759,3 +759,13 @@ a.pair-url:hover {
   color: var(--text);
   font-size: var(--text-base);
 }
+
+.spend-today {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.spend-today[data-over="true"] {
+  color: var(--warning);
+}

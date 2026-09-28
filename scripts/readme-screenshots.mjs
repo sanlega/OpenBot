@@ -489,6 +489,9 @@ await open("routines", {
 });
 await open("connectors", { go: nav("Connectors") });
 if (process.env.EXTRA) {
+  await open("settings-spending", {
+    go: then(nav("Settings"), (p) => p.getByRole("button", { name: "Spending", exact: true }).first().click()),
+  });
   await open("connect-dialog", {
     go: then(nav("Connectors"), (p) =>
       p.getByRole("button", { name: "Connect", exact: true }).first().click(),

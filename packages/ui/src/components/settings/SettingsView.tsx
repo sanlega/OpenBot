@@ -5,6 +5,7 @@ import type { EnginesResponse, SettingsPatch } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { getStoredTheme, setTheme, type ThemePreference } from "../../state/theme.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
+import { SpendingToday } from "./SpendingToday.js";
 import {
   BUDGET_META,
   CAP_META,
@@ -335,7 +336,8 @@ export function SettingsView() {
             </SettingsSection>
 
             <SettingsSection id="spending" title="Spending">
-              <SettingsGroup>
+              <SpendingToday />
+              <SettingsGroup title="Limits">
                 <SettingRow
                   label="Daily limit per bot"
                   help="Set on each bot's profile. When a bot hits its limit it pauses and tells you once."
