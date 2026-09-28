@@ -20,6 +20,18 @@ function setTransport(
   transport = { baseUrl: "http://127.0.0.1:4577", get, post } as unknown as Transport;
 }
 
+/** Routes `/api/computer/status` (docker) and `/api/computer/image` (the given status) — the shape the real harness serves. */
+function setDockerTransport(
+  imageStatus: ComputerImageStatus,
+  post: (path: string, body?: unknown) => Promise<unknown> = async () => ({}),
+) {
+  setTransport(async (path) => {
+    if (path === "/api/computer/status") return { provider: "docker" };
+    if (path === "/api/computer/image") return imageStatus;
+    throw new Error(`unexpected GET ${path}`);
+  }, post);
+}
+
 const READY: ComputerImageStatus = {
   state: "ready",
   tag: "ghcr.io/sanlega/openbot-desktop:latest",
@@ -38,19 +50,22 @@ describe("ComputerImageCard", () => {
     computerImage = null;
   });
 
-  it("renders nothing when this OpenBot isn't using the docker provider (501)", async () => {
-    setTransport(async () => {
-      throw new Error("GET /api/computer/image failed: 501");
+  it("renders nothing when this OpenBot isn't using the docker provider, and never calls the image-only route", async () => {
+    const get = vi.fn(async (path: string) => {
+      if (path === "/api/computer/status") return { provider: "local" };
+      throw new Error(`unexpected GET ${path}`);
     });
+    setTransport(get);
 
     render(<ComputerImageCard />);
 
     await screen.findByText("Desktop image", { exact: false }).catch(() => {});
     expect(document.body.querySelector(".set-group")).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalledWith("/api/computer/image");
   });
 
   it("shows Not downloaded and a Get desktop image button when the image is missing", async () => {
-    setTransport(async () => MISSING);
+    setDockerTransport(MISSING);
 
     render(<ComputerImageCard />);
 
@@ -62,7 +77,7 @@ describe("ComputerImageCard", () => {
     const post = vi.fn(
       async () => ({ ...MISSING, state: "pulling" }) satisfies ComputerImageStatus,
     );
-    setTransport(async () => MISSING, post);
+    setDockerTransport(MISSING, post);
 
     render(<ComputerImageCard />);
     await userEvent.setup().click(await screen.findByRole("button", { name: "Get desktop image" }));
@@ -72,7 +87,7 @@ describe("ComputerImageCard", () => {
   });
 
   it("does not show Get desktop image once ready, but does show Reset", async () => {
-    setTransport(async () => READY);
+    setDockerTransport(READY);
 
     render(<ComputerImageCard />);
 
@@ -83,7 +98,7 @@ describe("ComputerImageCard", () => {
 
   it("Reset requires a confirm click before calling the reset endpoint", async () => {
     const post = vi.fn(async () => ({}));
-    setTransport(async () => READY, post);
+    setDockerTransport(READY, post);
 
     render(<ComputerImageCard />);
     const user = userEvent.setup();
@@ -96,7 +111,7 @@ describe("ComputerImageCard", () => {
   });
 
   it("reflects a computer.image_status event without a new GET", async () => {
-    setTransport(async () => MISSING);
+    setDockerTransport(MISSING);
     computerImage = null;
 
     const { rerender } = render(<ComputerImageCard />);

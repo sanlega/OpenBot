@@ -5,7 +5,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages packages
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @openbot/contracts --filter @openbot/decisions --filter @openbot/computer --filter @openbot/computer-docker run build
+RUN pnpm --filter "@openbot/computer-docker..." run build
 
 FROM debian:bookworm-slim
 

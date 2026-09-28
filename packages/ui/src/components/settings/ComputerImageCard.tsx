@@ -25,31 +25,27 @@ function errorText(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-/** The transport only keeps `${method} ${path} failed: ${status}` — no parsed body — so callers that need to branch on the status match it back out of that message. */
-function statusOf(err: unknown): number | undefined {
-  const match = err instanceof Error ? /: (\d{3})$/.exec(err.message) : null;
-  return match ? Number(match[1]) : undefined;
-}
-
-/** Settings > Computer: get/reset the shared desktop image bots use for Computer tasks (D-020). Hidden when this OpenBot isn't using the docker provider. */
+/** Settings > Computer: get/reset the shared desktop image bots use for Computer tasks (D-020). Hidden when this OpenBot isn't using the docker provider — checks `/api/computer/status` first (never fails) so it never has to call the docker-only `/api/computer/image` and hit its 501. */
 export function ComputerImageCard() {
   const { transport, state } = useOpenBot();
   const [status, setStatus] = useState<ComputerImageStatus | null>(null);
-  const [wired, setWired] = useState(true);
+  const [wired, setWired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingReset, setConfirmingReset] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void transport
-      .get<ComputerImageStatus>("/api/computer/image")
+      .get<{ provider?: string }>("/api/computer/status")
       .then((s) => {
-        if (!cancelled) setStatus(s);
+        if (cancelled || s.provider !== "docker") return;
+        setWired(true);
+        return transport.get<ComputerImageStatus>("/api/computer/image").then((image) => {
+          if (!cancelled) setStatus(image);
+        });
       })
       .catch((err) => {
-        if (cancelled) return;
-        if (statusOf(err) === 501) setWired(false);
-        else setError(errorText(err, "Could not load the desktop image status."));
+        if (!cancelled) setError(errorText(err, "Could not load the desktop image status."));
       });
     return () => {
       cancelled = true;

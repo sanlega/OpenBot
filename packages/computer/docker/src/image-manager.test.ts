@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComputerImageStatus } from "@openbot/contracts";
 import { ImageManager, findLocalDockerfile, type DockerImageEngine } from "./image-manager.js";
@@ -90,9 +90,11 @@ describe("ImageManager", () => {
 
   it("get('local') shells out to docker build against the checkout root, not the images/desktop dir", async () => {
     const runBuild = vi.fn(async () => {});
+    const repoRoot = resolve("/repo");
+    const dockerfile = join(repoRoot, "images", "desktop", "Dockerfile");
     const manager = new ImageManager({
       docker: fakeDocker(),
-      localDockerfile: join("C:", "repo", "images", "desktop", "Dockerfile"),
+      localDockerfile: dockerfile,
       runBuild,
     });
 
@@ -105,8 +107,8 @@ describe("ImageManager", () => {
       "-t",
       "ghcr.io/sanlega/openbot-desktop:latest",
       "-f",
-      join("C:", "repo", "images", "desktop", "Dockerfile"),
-      join("C:", "repo"),
+      dockerfile,
+      repoRoot,
     ]);
   });
 

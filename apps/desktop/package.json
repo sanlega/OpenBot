@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "OpenBot desktop app: manage a roster of persistent Claude Code and Codex bots.",
+  "homepage": "https://github.com/sanlega/OpenBot",
+  "license": "MIT",
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.preload.json && mv dist/preload.js dist/preload.cjs && node ./scripts/build-harness.mjs",
@@ -81,7 +84,8 @@
         "deb"
       ],
       "category": "Utility",
-      "icon": "resources/icon.png"
+      "icon": "resources/icon.png",
+      "maintainer": "OpenBot Contributors"
     }
   }
 }
