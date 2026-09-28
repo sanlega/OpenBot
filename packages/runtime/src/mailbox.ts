@@ -218,10 +218,12 @@ export class Mailbox {
     }
 
     let replyText = "";
+    let toolCallCount = 0;
     const pendingToolEffects: Promise<void>[] = [];
 
     const hooks: TurnHooks = {
       emit: (e: EngineEvent) => {
+        if (e.type === "tool_started") toolCallCount += 1;
         this.handleEngineEvent({ botId, input, turnId, event: e, pendingToolEffects }, (t) => {
           replyText += t;
         });
@@ -259,6 +261,15 @@ export class Mailbox {
     } else if (status === "failed" && storedSessionId) {
       // Don't keep resuming a session the engine just failed on.
       this.opts.sessions?.clear(botId, input.engine);
+    }
+    if (status === "completed" && replyText.length === 0) {
+      // The engine can end a turn on a tool call with no closing text (seen with
+      // Codex/gpt-5.5 on multi-step tasks) — without this, the turn is silently
+      // dropped: no message, no error, nothing the user can see went wrong.
+      replyText =
+        toolCallCount > 0
+          ? `Finished ${toolCallCount} tool call${toolCallCount === 1 ? "" : "s"} but didn't return a summary — check Activity for what it did.`
+          : "Finished without returning any text.";
     }
     this.opts.events.emit({
       ts: this.opts.clock.now().toISOString(),

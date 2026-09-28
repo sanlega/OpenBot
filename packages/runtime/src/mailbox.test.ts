@@ -117,6 +117,46 @@ describe("Mailbox basic turn lifecycle (against @openbot/engines-fake)", () => {
     ).toBe(true);
   });
 
+  it("a turn that ends on a tool call with no closing text still gets a visible reply, not silence", async () => {
+    const script = async (hooks: TurnHooks): Promise<TurnResult> => {
+      hooks.emit({ type: "session_started", sessionId: "sess_1" });
+      hooks.emit({
+        type: "tool_started",
+        toolName: "write_file",
+        input: { path: "report.md" },
+        toolUseId: "t1",
+      });
+      hooks.emit({ type: "tool_completed", toolUseId: "t1", output: {}, isError: false });
+      // No text_delta at all — the engine ended the turn on the tool call.
+      return turnResult();
+    };
+    const runtime = buildRuntime(new ScriptedEngineDriver(script));
+    const outcome = await runtime.mailbox.submit(makeInput(runtime));
+
+    expect(outcome.status).toBe("completed");
+    expect(outcome.text).toBe(
+      "Finished 1 tool call but didn't return a summary — check Activity for what it did.",
+    );
+    expect(
+      runtime.events
+        .byType("message.created")
+        .some((e) => typeof e.payload.text === "string" && e.payload.text.length > 0),
+    ).toBe(true);
+  });
+
+  it("a turn that ends with neither tool calls nor text still gets a visible reply", async () => {
+    const runtime = buildRuntime(
+      new ScriptedEngineDriver(async (hooks) => {
+        hooks.emit({ type: "session_started", sessionId: "sess_1" });
+        return turnResult();
+      }),
+    );
+    const outcome = await runtime.mailbox.submit(makeInput(runtime));
+
+    expect(outcome.status).toBe("completed");
+    expect(outcome.text).toBe("Finished without returning any text.");
+  });
+
   it("processes only one active turn per Bot, FIFO-queuing the rest", async () => {
     const runtime = buildRuntime(new FakeEngineDriver());
     const input = makeInput(runtime);
