@@ -315,7 +315,9 @@ function ConnectorCard({
       <div className="conn-meta">
         <span className="conn-kind">
           {entry.kind === "remote" ? <Cloud size={12} /> : <HardDrive size={12} />}
-          {entry.kind === "remote" ? "Hosted by the app" : "Runs on this computer"}
+          {entry.kind === "remote"
+            ? `Hosted by ${entry.publisher && !/reference server/i.test(entry.publisher) ? entry.publisher : "the provider"}`
+            : "Runs on this computer"}
         </span>
         {writes > 0 ? <span className="conn-kind">Can make changes</span> : null}
       </div>

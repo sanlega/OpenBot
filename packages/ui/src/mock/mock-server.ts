@@ -75,7 +75,7 @@ const MOCK_CATALOG: Array<Omit<CatalogEntry, "connected" | "connectionId">> = [
   {
     id: "curated:filesystem",
     name: "Filesystem",
-    publisher: "Model Context Protocol",
+    publisher: "MCP reference server",
     category: "System",
     description: "Read and write files inside one folder you choose.",
     kind: "local",
@@ -96,7 +96,7 @@ const MOCK_CATALOG: Array<Omit<CatalogEntry, "connected" | "connectionId">> = [
   {
     id: "curated:time",
     name: "Time",
-    publisher: "Model Context Protocol",
+    publisher: "MCP reference server",
     category: "Productivity",
     description: "Current time and time-zone conversions.",
     kind: "local",

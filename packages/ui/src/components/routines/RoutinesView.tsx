@@ -54,6 +54,7 @@ const RUN_STATUS: Record<string, { label: string; tone: string }> = {
 const CAUSES: Record<string, string> = {
   schedule: "On schedule",
   manual: "Started by you",
+  test: "First rehearsal (automatic)",
   event: "Triggered by an event",
   catch_up: "Catch-up run",
 };
