@@ -38,6 +38,18 @@ _Last updated: 2026-09-28 by Claude_
   billing/minutes on the private repo, not code. Next: owner runs `gh auth login`,
   then read `gh run view --log-failed` and the repo's Actions billing, then merge.
 
+## Computer loop v2 (2026-09-28, verified live)
+- Jev answers one `action` choice among described candidates
+  (`packages/computer/src/candidates.ts`: goal-matching elements first, ≤24,
+  plus enter/escape/scroll/wait/done/blocked); reversible steps may run on a
+  clear lead; unsure → reason lists top options for the engine. Cookie notices
+  are closed without Jev. Jev computer timeout 3 s with retries (was 400 ms, no
+  retry → "Jev is unavailable"). Live YouTube search+open-first-result: 3/3.
+- Research and remaining recommendations (engine-planned sub-steps, engine
+  fallback when unsure, per-action thresholds, persisted decision log):
+  `.ai/resources/2026-09-28-computer-control-research.md`.
+- Gap: the decision log is in memory only (`decisions` table stays empty).
+
 ## Jev + computer control fixes (2026-09-28, verified live)
 - Setup never saved the TypeSafe key (route only probed it); fixed, and a stale
   "ok" without a key is reset at startup. Owner re-entered the key; Jev works.
