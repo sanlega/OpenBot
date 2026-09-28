@@ -38,6 +38,18 @@ _Last updated: 2026-09-28 by Claude_
   billing/minutes on the private repo, not code. Next: owner runs `gh auth login`,
   then read `gh run view --log-failed` and the repo's Actions billing, then merge.
 
+## Jev + computer control fixes (2026-09-28, verified live)
+- Setup never saved the TypeSafe key (route only probed it); fixed, and a stale
+  "ok" without a key is reset at startup. Owner re-entered the key; Jev works.
+- Docker computer: `type` now focuses its field; clicks/typing go through CDP
+  in page coordinates (xdotool screen coords landed in the toolbar); navigate
+  reuses the tab and closes strays; the DOM reader lists visible elements with
+  an open dialog's controls first (cookie consent). Live: YouTube consent →
+  search → results → first result = youtube.com/@sanlega.
+- The `openbot/desktop` image must be rebuilt after changing
+  `packages/computer/docker` (the daemon runs inside it). Rollback:
+  `openbot/desktop:previous` image and stopped `openbot-desktop-previous`.
+
 ## Design audit P0 (done 2026-09-28, on the branch)
 - Approval card reuses `activity/format.ts` (no raw bot ids; "Run a command"; risk
   as low/medium/high). Phone composer: min-height and 16px text (no iOS zoom).
