@@ -39,6 +39,7 @@
     "appId": "com.openbot.desktop",
     "productName": "OpenBot",
     "executableName": "openbot",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "npmRebuild": false,
     "directories": {
       "output": "release",
