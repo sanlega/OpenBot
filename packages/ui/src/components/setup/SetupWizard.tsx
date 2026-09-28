@@ -317,7 +317,7 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
               <div className="setup-inline-row">
                 <span className="setup-muted">
                   {allEngines
-                    ? "Both engines are ready. Bots can use either one."
+                    ? "Both engines are ready. bots can use either one."
                     : anyEngine
                       ? "You can add the other engine later in Settings."
                       : "Connect at least one engine to continue."}
@@ -343,7 +343,7 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
             <div className="setup-stack">
               <ul className="setup-features">
                 <Feature icon={<Route size={16} />} title="Routing">
-                  Picks the right Bot and engine for every task.
+                  Picks the right bot and engine for every task.
                 </Feature>
                 <Feature icon={<ShieldCheck size={16} />} title="Approvals">
                   Flags risky actions so you decide before they happen.
@@ -429,7 +429,7 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
                     <span className="pill pill-muted setup-pill">Optional</span>
                   </div>
                   <p className="setup-option-desc">
-                    Chat with your Bots from anywhere over Tailscale, a private network that only
+                    Chat with your bots from anywhere over Tailscale, a private network that only
                     your devices can join.
                   </p>
                   {tailscale === "ok" ? (
@@ -515,7 +515,7 @@ export function SetupWizard({ transport, onComplete }: SetupWizardProps) {
 const HEADINGS: Record<Exclude<Step, "welcome">, { title: string; lede: string }> = {
   engines: {
     title: "Connect an engine",
-    lede: "Your Bots think with Claude Code or Codex, using your own account. One is enough.",
+    lede: "Your bots think with Claude Code or Codex, using your own account. One is enough.",
   },
   jev: {
     title: "Add the decision layer",
@@ -527,13 +527,13 @@ const HEADINGS: Record<Exclude<Step, "welcome">, { title: string; lede: string }
   },
   done: {
     title: "You're all set",
-    lede: "Your Chief of Staff is ready. Tell it what you need and it will bring in the right Bots.",
+    lede: "Your Chief of Staff is ready. Tell it what you need and it will bring in the right bots.",
   },
 };
 
 function Progress({ index }: { index: number }) {
-  // Dots for the three numbered steps plus done.
-  const dots = STEPS.slice(1);
+  // One dot per numbered step (engines, decision layer, extras).
+  const dots = STEPS.slice(1, -1);
   return (
     <ol className="setup-progress" aria-label={`Step ${index} of ${dots.length}`}>
       {dots.map((s, i) => (

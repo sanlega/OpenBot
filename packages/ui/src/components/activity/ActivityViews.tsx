@@ -528,7 +528,11 @@ export function AuditView() {
         kind: "turn",
         action: askedFor.get(t.chainId) ?? "Worked on a task",
         sub: `${engineName(t.engine)} · ${modelLabel(t.model)}`,
-        outcome: TURN_STATUS[t.status] ?? { label: t.status, tone: "muted" },
+        outcome:
+          t.status === "running" &&
+          (approvals ?? []).some((a) => a.status === "pending" && a.chainId === t.chainId)
+            ? { label: "Waiting for you", tone: "warning" }
+            : (TURN_STATUS[t.status] ?? { label: t.status, tone: "muted" }),
         details: [
           [
             "Engine",

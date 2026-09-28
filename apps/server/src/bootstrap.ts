@@ -378,7 +378,8 @@ export class RepoTurnStore implements TurnStore {
     const turn: Turn = {
       ...input,
       id: input.id ?? newId("turn"),
-      status: "queued",
+      // The mailbox creates a turn as it starts it (right before turn.started).
+      status: "running",
       usage: { inputTokens: 0, outputTokens: 0, usd: 0 },
       createdAt: this.ctx.clock.now().toISOString(),
     };
