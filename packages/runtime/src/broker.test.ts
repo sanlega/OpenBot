@@ -213,6 +213,32 @@ describe("PermissionBroker live evaluation, E6 order", () => {
     const { broker } = setup(new StubRiskDecisionService(0, 0.6));
     const decision = await broker.evaluate(req({ action: "harmless_tool" }), {
       mode: "live",
+      preset: "workspace_write",
+    });
+    expect(decision.outcome).toBe("ask");
+  });
+
+  it("under 'full' an uncertain or moderate step runs without asking", async () => {
+    for (const [score, confidence] of [
+      [0, 0.6],
+      [2, 0.95],
+      [3, 0.6],
+    ] as const) {
+      const { broker, events } = setup(new StubRiskDecisionService(score, confidence));
+      const decision = await broker.evaluate(req({ action: "Bash" }), {
+        mode: "live",
+        preset: "full",
+      });
+      expect(decision.outcome).toBe("allow");
+      expect(decision.reason).toMatch(/full access/);
+      expect(events.byType("approval.requested")).toHaveLength(0);
+    }
+  });
+
+  it("under 'full' a step Jev is sure is major and irreversible still asks", async () => {
+    const { broker } = setup(new StubRiskDecisionService(3, 0.95));
+    const decision = await broker.evaluate(req({ action: "Bash" }), {
+      mode: "live",
       preset: "full",
     });
     expect(decision.outcome).toBe("ask");
@@ -233,7 +259,7 @@ describe("PermissionBroker approvals (30 min timeout, resolve)", () => {
     const { broker } = setup(new StubRiskDecisionService(3, 0.6));
     const decision = await broker.evaluate(req({ action: "risky_tool" }), {
       mode: "live",
-      preset: "full",
+      preset: "workspace_write",
     });
     expect(decision.outcome).toBe("ask");
     const pending = broker.waitForApproval(decision.approvalId as string);
@@ -245,7 +271,7 @@ describe("PermissionBroker approvals (30 min timeout, resolve)", () => {
     const { broker } = setup(new StubRiskDecisionService(3, 0.6));
     const decision = await broker.evaluate(req({ action: "risky_tool" }), {
       mode: "live",
-      preset: "full",
+      preset: "workspace_write",
     });
     const pending = broker.waitForApproval(decision.approvalId as string);
     broker.resolveApproval(decision.approvalId as string, "deny");
@@ -256,7 +282,7 @@ describe("PermissionBroker approvals (30 min timeout, resolve)", () => {
     const { broker, events } = setup(new StubRiskDecisionService(3, 0.6));
     const decision = await broker.evaluate(req({ action: "risky_tool" }), {
       mode: "live",
-      preset: "full",
+      preset: "workspace_write",
     });
     const pending = broker.waitForApproval(decision.approvalId as string);
     const resolvedBefore = events.byType("approval.resolved").length;
@@ -272,7 +298,7 @@ describe("PermissionBroker approvals (30 min timeout, resolve)", () => {
     const { broker, clock, approvalStore } = setup(new StubRiskDecisionService(3, 0.6));
     const decision = await broker.evaluate(req({ action: "risky_tool" }), {
       mode: "live",
-      preset: "full",
+      preset: "workspace_write",
     });
     const pending = broker.waitForApproval(decision.approvalId as string);
     clock.advance(APPROVAL_TIMEOUT_MS);
@@ -284,7 +310,7 @@ describe("PermissionBroker approvals (30 min timeout, resolve)", () => {
     const { broker } = setup(new StubRiskDecisionService(3, 0.6));
     const decision = await broker.evaluate(req({ action: "risky_tool" }), {
       mode: "live",
-      preset: "full",
+      preset: "workspace_write",
     });
     broker.resolveApproval(decision.approvalId as string, "allow");
     expect(await broker.waitForApproval(decision.approvalId as string)).toBe("allow");

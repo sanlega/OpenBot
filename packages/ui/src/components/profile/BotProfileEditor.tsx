@@ -151,7 +151,11 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
       <label className="field">
         <span className="field-label">Permissions</span>
         <span className="field-help">
-          Reads and edits inside its workspace never need you; anything else asks first.
+          {permissionPreset === "full"
+            ? "Runs commands and edits without asking. Logins, payments, connected apps and anything Jev is sure can't be undone still ask you."
+            : permissionPreset === "read_only"
+              ? "Can read, but asks you before changing anything."
+              : "Reads and edits inside its workspace never need you; anything else asks first."}
         </span>
         <select
           aria-label="Permissions"

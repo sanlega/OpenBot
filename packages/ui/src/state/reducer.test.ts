@@ -191,6 +191,36 @@ describe("computer steps in the chat", () => {
   });
 });
 
+describe("interrupted turns", () => {
+  it("keep the reason they were interrupted", () => {
+    let state = createInitialState(SEED_BOTS);
+    const base = { botId: "bot_code_01", threadId: "thr_code", turnId: "turn_i" };
+    for (const event of [
+      {
+        ...base,
+        id: "e1",
+        seq: 1,
+        ts: "2026-09-27T10:00:00.000Z",
+        type: "turn.started",
+        payload: {},
+      },
+      {
+        ...base,
+        id: "e2",
+        seq: 2,
+        ts: "2026-09-27T10:01:00.000Z",
+        type: "turn.interrupted",
+        payload: { errorMessage: "OpenBot restarted before this turn finished." },
+      },
+    ] as OBEvent[]) {
+      state = uiReducer(state, { type: "event", event });
+    }
+    expect(state.turns.get("turn_i")?.errorMessage).toBe(
+      "OpenBot restarted before this turn finished.",
+    );
+  });
+});
+
 describe("seed messages", () => {
   it("includes held delivery for activity filter", () => {
     const held = SEED_MESSAGES.filter((m) => m.delivery === "held");

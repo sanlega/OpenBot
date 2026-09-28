@@ -105,6 +105,7 @@ function upsertMessage(state: UiState, message: Message): void {
   const thread = state.threads.get(message.threadId);
   if (thread) {
     thread.lastMessagePreview = message.text.slice(0, 80);
+    thread.lastMessageAuthor = message.author.type;
     if (!thread.lastMessageAt || message.createdAt > thread.lastMessageAt) {
       thread.lastMessageAt = message.createdAt;
     }
@@ -318,10 +319,8 @@ function applyEvent(state: UiState, event: OBEvent): void {
           ...turn,
           endedAt: event.ts,
           status: event.type === "turn.completed" ? "done" : "failed",
-          errorMessage:
-            event.type === "turn.failed" && typeof p.errorMessage === "string"
-              ? p.errorMessage
-              : undefined,
+          // Interruptions carry their reason too ("OpenBot restarted before…").
+          errorMessage: typeof p.errorMessage === "string" ? p.errorMessage : undefined,
           steps: turn.steps.map((s) => (s.status === "running" ? { ...s, status: "done" } : s)),
         });
       }

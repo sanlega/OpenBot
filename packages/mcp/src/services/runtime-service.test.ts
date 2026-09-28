@@ -49,7 +49,7 @@ async function setup() {
     clock: new FakeClock(0),
     events: new InMemoryEventSink(),
   });
-  const bot = makeBot({ name: "Writer", slug: "writer", permissionPreset: "full" });
+  const bot = makeBot({ name: "Writer", slug: "writer", permissionPreset: "workspace_write" });
   harness.ctx.repos.bots.create(bot);
   const session: SessionContext = {
     botId: bot.id,

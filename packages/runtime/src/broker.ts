@@ -114,7 +114,7 @@ export class PermissionBroker {
       return this.ask(req, ruleReason(resolved.rule));
     }
 
-    return this.consultJevRiskGate(req);
+    return this.consultJevRiskGate(req, preset);
   }
 
   /** An `allow` rule still can't out-rank a *higher-severity* rule matched by a different source — `resolveRules` already picked the most severe, so this is just the terminal allow path. */
@@ -122,7 +122,10 @@ export class PermissionBroker {
     return { outcome: "allow", reason };
   }
 
-  private async consultJevRiskGate(req: BrokerRequest): Promise<BrokerDecision> {
+  private async consultJevRiskGate(
+    req: BrokerRequest,
+    preset: PermissionPreset,
+  ): Promise<BrokerDecision> {
     const decision = await this.opts.decisions.decide({
       purpose: "risk",
       // Jev needs what the action does (the command, the path), not just the tool name.
@@ -151,6 +154,14 @@ export class PermissionBroker {
       return {
         outcome: "allow",
         reason: `Jev risk gate: band=auto, external_side_effect=${sideEffect.toFixed(2)}`,
+      };
+    }
+    // "Full" means the Bot doesn't ask: only a step Jev is sure is major and
+    // irreversible still comes to you (built-in denies and asks ran earlier).
+    if (preset === "full" && !(band === "auto" && sideEffect >= 0.99)) {
+      return {
+        outcome: "allow",
+        reason: `full access preset (Jev risk: band=${band}, external_side_effect=${sideEffect.toFixed(2)})`,
       };
     }
     return this.ask(
