@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import type {
   Clock,
+  ComputerImageManager,
   ComputerProvider,
   DecisionService,
   EngineId,
@@ -151,6 +152,8 @@ export interface CoreContext {
   decisionService?: DecisionService;
   /** Wired in by WS9; computer status/start/live-view/takeover routes 501 until this is set. */
   computerProvider?: ComputerProvider;
+  /** Wired by bootstrap when the provider is docker; gets/resets the desktop image (D-020, plan `2026-09-28-computer-image-settings.md`). Image routes 501 until this is set. */
+  computerImageManager?: ComputerImageManager;
   /** Wired in by WS10; connector catalog/connect/triggers routes 501 until this is set. */
   connectorService?: ConnectorService;
   /** Setup-wizard validators for engine/connector/remote kinds; WS3/WS10/WS11 register theirs at boot. */

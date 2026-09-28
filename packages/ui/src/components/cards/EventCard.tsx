@@ -43,6 +43,7 @@ const EVENT_LABELS: Record<EventType, string> = {
   "usage.recorded": "Usage recorded",
   "decision.made": "Made a decision",
   "computer.status": "Computer status",
+  "computer.image_status": "Desktop image status",
   "computer.task_started": "Started a computer task",
   "computer.step": "Computer step",
   "computer.escalated": "Needs help on the computer",

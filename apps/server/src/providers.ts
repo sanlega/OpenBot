@@ -1,4 +1,5 @@
 import type {
+  ComputerImageManager,
   ComputerProvider,
   DecisionService,
   EngineDriver,
@@ -7,7 +8,11 @@ import type {
 } from "@openbot/contracts";
 import type { CoreContext } from "@openbot/core";
 import { FakeComputerProvider } from "@openbot/computer-fake";
-import { createDockerProvider } from "@openbot/computer-docker";
+import {
+  createDockerProvider,
+  createImageManager,
+  findLocalDockerfile,
+} from "@openbot/computer-docker";
 import { LocalProvider } from "@openbot/computer-local";
 import {
   createDecisionService,
@@ -36,6 +41,7 @@ export interface BootstrapProvidersResult {
   decisionService: DecisionService;
   drivers: Partial<Record<EngineId, EngineDriver>>;
   computerProvider?: ComputerProvider;
+  computerImageManager?: ComputerImageManager;
   engineStatuses: { claude: EngineStatus; codex: EngineStatus };
   availableEngines: EngineId[];
 }
@@ -61,6 +67,8 @@ export async function bootstrapProviders(
   const decisionService = resolveDecisionService(ctx);
   const { drivers, engineStatuses, availableEngines } = await resolveEngineDrivers(detection);
   const computerProvider = resolveComputerProvider();
+  const computerImageManager =
+    computerProvider.id === "docker" ? resolveComputerImageManager(ctx) : undefined;
 
   registerSetupValidators(ctx, decisionService, detection);
   await reconcileTypesafeSetup(ctx);
@@ -68,7 +76,14 @@ export async function bootstrapProviders(
   ctx.availableEngines = availableEngines;
   ctx.engineStatuses = engineStatuses;
 
-  return { decisionService, drivers, computerProvider, engineStatuses, availableEngines };
+  return {
+    decisionService,
+    drivers,
+    computerProvider,
+    computerImageManager,
+    engineStatuses,
+    availableEngines,
+  };
 }
 
 /**
@@ -133,6 +148,16 @@ function resolveComputerProvider(): ComputerProvider {
   // Keep the provider wired even while Docker Desktop is starting. Its start
   // operation checks the daemon again, so opening Docker needs no app restart.
   return createDockerProvider();
+}
+
+/** Gets/resets the docker provider's desktop image (D-020); every status change is published as `computer.image_status`. */
+function resolveComputerImageManager(ctx: CoreContext): ComputerImageManager {
+  return createImageManager({
+    localDockerfile: findLocalDockerfile(),
+    onStatus: (status) => {
+      void ctx.eventBus.publish({ type: "computer.image_status", payload: { ...status } });
+    },
+  });
 }
 
 /**

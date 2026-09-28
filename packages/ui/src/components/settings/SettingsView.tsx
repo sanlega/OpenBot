@@ -5,6 +5,7 @@ import type { EnginesResponse, SettingsPatch } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { getStoredTheme, setTheme, type ThemePreference } from "../../state/theme.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
+import { ComputerImageCard } from "./ComputerImageCard.js";
 import { SpendingToday } from "./SpendingToday.js";
 import {
   BUDGET_META,
@@ -32,6 +33,7 @@ const SECTIONS = [
   { id: "engines", label: "Engines" },
   { id: "jev", label: "Jev" },
   { id: "autonomy", label: "Autonomy" },
+  { id: "computer", label: "Computer" },
   { id: "notifications", label: "Notifications" },
   { id: "spending", label: "Spending" },
   { id: "about", label: "About" },
@@ -287,6 +289,14 @@ export function SettingsView() {
                   ))}
                 </SettingsGroup>
               ) : null}
+            </SettingsSection>
+
+            <SettingsSection
+              id="computer"
+              title="Computer"
+              description="The shared virtual desktop bots use for Computer tasks."
+            >
+              <ComputerImageCard />
             </SettingsSection>
 
             <SettingsSection id="notifications" title="Notifications">

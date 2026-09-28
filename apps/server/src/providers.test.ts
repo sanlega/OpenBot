@@ -89,6 +89,10 @@ describe("bootstrapProviders", () => {
     expect(result.drivers.codex).toBeInstanceOf(CodexDriver);
     expect(result.drivers.fake).toBeUndefined();
     expect(result.computerProvider?.id).toBe("docker");
+    expect(result.computerImageManager?.getStatus()).toMatchObject({
+      tag: "ghcr.io/sanlega/openbot-desktop:latest",
+      state: "missing",
+    });
     expect(result.availableEngines).toEqual(["claude", "codex"]);
 
     ctx.closeDb();
@@ -193,6 +197,7 @@ describe("bootstrapProviders", () => {
     expect(result.drivers.fake).toBeInstanceOf(FakeEngineDriver);
     expect(result.drivers.claude).toBeUndefined();
     expect(result.computerProvider).toBeInstanceOf(FakeComputerProvider);
+    expect(result.computerImageManager).toBeUndefined();
 
     ctx.closeDb();
     process.env = prev;
@@ -226,6 +231,7 @@ describe("bootstrapProviders", () => {
     const result = await bootstrapProviders(ctx, mockDetection());
 
     expect(result.computerProvider?.id).toBe("local");
+    expect(result.computerImageManager).toBeUndefined();
 
     ctx.closeDb();
     process.env = prev;

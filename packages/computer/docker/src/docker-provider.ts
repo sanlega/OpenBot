@@ -31,8 +31,9 @@ export interface DockerProviderOptions {
   idleStopMs?: number;
 }
 
-const DEFAULT_IMAGE = "openbot/desktop:latest";
-const DEFAULT_CONTAINER = "openbot-desktop";
+/** D-020: distributed via GHCR; local `docker build` is a dev-checkout-only fallback (see `image-manager.ts`). */
+export const DEFAULT_IMAGE = "ghcr.io/sanlega/openbot-desktop:latest";
+export const DEFAULT_CONTAINER = "openbot-desktop";
 
 /**
  * Docker-backed computer provider (plan WS9): one shared desktop container with

@@ -128,6 +128,7 @@ export async function bootstrapHarness(
     applyRoutineLiveApproval(ctx, approvalId, resolution);
   };
   ctx.computerProvider = options.computerProvider ?? providers.computerProvider;
+  if (!options.computerProvider) ctx.computerImageManager = providers.computerImageManager;
 
   wireConnectors(ctx);
   await attachRemoteServices(ctx);

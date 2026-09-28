@@ -146,6 +146,14 @@ export const TakeoverBody = z.object({
   on: z.boolean(),
 });
 
+export const ComputerImageBuildBody = z.object({
+  source: z.enum(["registry", "local"]).default("registry"),
+});
+
+export const ComputerImageResetBody = z.object({
+  removeImage: z.boolean().default(true),
+});
+
 export const CloudflareTunnelBody = z.object({
   token: z.string().min(1),
 });

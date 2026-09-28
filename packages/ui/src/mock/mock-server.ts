@@ -6,6 +6,7 @@ import type {
   Approval,
   Bot,
   CatalogEntry,
+  ComputerImageStatus,
   ConnectionView,
   Message,
   OBEvent,
@@ -153,6 +154,12 @@ export class MockClientApiServer {
   private routines = structuredClone(SEED_ROUTINES);
   private routineRuns = structuredClone(SEED_ROUTINE_RUNS);
   private takeoverByBot = new Map<string, boolean>();
+  private computerImage: ComputerImageStatus = {
+    state: "ready",
+    tag: "ghcr.io/sanlega/openbot-desktop:latest",
+    source: "registry",
+    localBuildAvailable: true,
+  };
   private connections: ConnectionView[] = [];
   private remote: {
     enabled: boolean;
@@ -228,6 +235,23 @@ export class MockClientApiServer {
       ws.send(JSON.stringify({ type: "event", event }));
     }
     return event;
+  }
+
+  private setComputerImage(next: Partial<ComputerImageStatus>): void {
+    this.computerImage = { ...this.computerImage, ...next };
+    this.appendEvent({
+      ts: new Date().toISOString(),
+      type: "computer.image_status",
+      payload: { ...this.computerImage },
+    });
+  }
+
+  /** Mirrors the real pull/build → ready|error flow on a short timer, so Settings > Computer sees live progress without a real Docker daemon. */
+  private simulateImageGet(source: "registry" | "local"): void {
+    this.setComputerImage({ state: source === "local" ? "building" : "pulling", source });
+    setTimeout(() => {
+      this.setComputerImage({ state: "ready", detail: undefined });
+    }, 600);
   }
 
   private async handleMessageSend(
@@ -399,6 +423,29 @@ export class MockClientApiServer {
     }
     if (method === "GET" && path === "/api/computer/status") {
       return sendJson(res, 200, { ready: true, provider: "docker" });
+    }
+    if (method === "GET" && path === "/api/computer/image") {
+      return sendJson(res, 200, this.computerImage);
+    }
+    if (method === "POST" && path === "/api/computer/image/build") {
+      if (this.computerImage.state === "pulling" || this.computerImage.state === "building") {
+        return sendJson(res, 409, { error: "already_in_progress" });
+      }
+      const body = await readJson<{ source?: "registry" | "local" }>(req);
+      const source = body.source === "local" ? "local" : "registry";
+      if (source === "local" && !this.computerImage.localBuildAvailable) {
+        return sendJson(res, 400, { error: "local_build_unavailable" });
+      }
+      this.simulateImageGet(source);
+      return sendJson(res, 202, this.computerImage);
+    }
+    if (method === "POST" && path === "/api/computer/image/reset") {
+      if (this.computerImage.state === "pulling" || this.computerImage.state === "building") {
+        return sendJson(res, 409, { error: "already_in_progress" });
+      }
+      this.setComputerImage({ state: "missing", source: undefined, detail: undefined });
+      this.simulateImageGet("registry");
+      return sendJson(res, 202, { state: "missing", tag: this.computerImage.tag });
     }
     if (method === "GET" && path.match(/^\/api\/computer\/screens\/[^/]+\/live$/)) {
       const botId = path.split("/")[4]!;

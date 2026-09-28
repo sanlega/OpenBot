@@ -1,4 +1,11 @@
-import type { Approval, Bot, InputRequest, Message, OBEvent } from "@openbot/contracts";
+import type {
+  Approval,
+  Bot,
+  ComputerImageStatus,
+  InputRequest,
+  Message,
+  OBEvent,
+} from "@openbot/contracts";
 import type { RoutePreview, ThreadView } from "../api/types.js";
 
 export interface TurnStep {
@@ -42,6 +49,8 @@ export interface UiState {
   turnByMessage: Map<string, string>;
   /** `ask_user` forms by id. */
   inputs: Map<string, InputRequest>;
+  /** The docker provider's desktop image (Settings > Computer); null until the first `computer.image_status` event or GET. */
+  computerImage: ComputerImageStatus | null;
   connected: boolean;
   /** Set once the WebSocket first opens, so "Reconnecting…" never shows during start-up. */
   everConnected: boolean;
@@ -65,6 +74,7 @@ export function createInitialState(
     turns: new Map(),
     turnByMessage: new Map(),
     inputs: new Map(),
+    computerImage: null,
     connected: false,
     everConnected: false,
     replayDone: false,
@@ -131,6 +141,7 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
       // Turn activity comes only from events; a re-hydrate must not drop it.
       next.turns = state.turns;
       next.turnByMessage = state.turnByMessage;
+      next.computerImage = state.computerImage;
       next.lastSeq = state.lastSeq;
       next.seenEventIds = state.seenEventIds;
       next.connected = state.connected;
@@ -398,6 +409,10 @@ function applyEvent(state: UiState, event: OBEvent): void {
       const steps = [...current.steps];
       steps[index] = { ...target, live };
       state.turns.set(turn.id, { ...current, steps });
+      break;
+    }
+    case "computer.image_status": {
+      state.computerImage = p as unknown as ComputerImageStatus;
       break;
     }
     default:
