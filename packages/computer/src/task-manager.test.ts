@@ -3,6 +3,7 @@ import type { DecideResult, DecisionService, JevAnswer } from "@openbot/contract
 import { FakeComputerProvider } from "@openbot/computer-fake";
 import { conservativeFallbackAnswers } from "@openbot/decisions";
 import { ComputerTaskManager } from "./task-manager.js";
+import { candidateId } from "./candidates.js";
 
 const choice = (value: string, confidence = 0.97): JevAnswer => ({
   type: "choice",
@@ -21,10 +22,7 @@ function scriptedJev(script: Array<[op: string, target: string]>): DecisionServi
       i += 1;
       return {
         answers: {
-          op: choice(op),
-          target_index: choice(target),
-          key_name: choice("Enter"),
-          scroll_direction: choice("down"),
+          action: choice(candidateId(op, target)),
           is_destructive: safe,
         },
         provider: "jev",

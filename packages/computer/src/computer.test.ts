@@ -42,8 +42,13 @@ describe("runFastLoop", () => {
     const fixture = readFixture("pick-op-and-target.response.json") as unknown as {
       answers: Record<string, JevAnswer>;
     };
-    server.scriptedAnswers.op = fixture.answers.op!;
-    server.scriptedAnswers.target_index = fixture.answers.target_index!;
+    // Jev torn between two elements (recorded pattern: 0.48 vs 0.46).
+    server.scriptedAnswers.action = {
+      type: "choice",
+      choice: "click_0",
+      confidence: 0.4,
+      probabilities: { click_0: 0.48, click_1: 0.46, wait: 0.06 },
+    };
     server.scriptedAnswers.is_destructive = fixture.answers.is_destructive!;
     // The end-of-task check: by default the page doesn't show the goal done.
     server.scriptedAnswers.goal_met = {
@@ -131,17 +136,11 @@ describe("runFastLoop", () => {
   });
 
   it("never acts on an element index that was not observed", async () => {
-    server.scriptedAnswers.op = {
+    server.scriptedAnswers.action = {
       type: "choice",
-      choice: "click",
+      choice: "click_999",
       confidence: 0.95,
-      probabilities: { click: 1 },
-    };
-    server.scriptedAnswers.target_index = {
-      type: "choice",
-      choice: "999",
-      confidence: 0.95,
-      probabilities: { "999": 1 },
+      probabilities: { click_999: 1 },
     };
 
     const provider = new FakeComputerProvider();
@@ -164,17 +163,11 @@ describe("runFastLoop", () => {
   });
 
   it("raises approval path for sensitive Pay targets", async () => {
-    server.scriptedAnswers.op = {
+    server.scriptedAnswers.action = {
       type: "choice",
-      choice: "click",
+      choice: "click_0",
       confidence: 0.95,
-      probabilities: { click: 1 },
-    };
-    server.scriptedAnswers.target_index = {
-      type: "choice",
-      choice: "0",
-      confidence: 0.95,
-      probabilities: { "0": 1 },
+      probabilities: { click_0: 1 },
     };
 
     const fixtures = {
@@ -209,12 +202,6 @@ describe("runFastLoop", () => {
 
   it("completes inbox fixture flow when Jev picks high-confidence steps", async () => {
     let step = 0;
-    server.scriptedAnswers.op = {
-      type: "choice",
-      choice: "click",
-      confidence: 0.95,
-      probabilities: { click: 1 },
-    };
 
     const provider = new FakeComputerProvider();
     await provider.ensureStarted();
@@ -230,11 +217,11 @@ describe("runFastLoop", () => {
           ...response,
           answers: {
             ...response.answers,
-            target_index: {
+            action: {
               type: "choice",
-              choice: "0",
+              choice: "click_0",
               confidence: 0.95,
-              probabilities: { "0": 1 },
+              probabilities: { click_0: 1 },
             },
             is_destructive: { type: "noul", noul: 0.1 },
           },
@@ -245,12 +232,11 @@ describe("runFastLoop", () => {
           ...response,
           answers: {
             ...response.answers,
-            op: { type: "choice", choice: "done", confidence: 0.99, probabilities: { done: 1 } },
-            target_index: {
+            action: {
               type: "choice",
-              choice: "none",
+              choice: "done",
               confidence: 0.99,
-              probabilities: { none: 1 },
+              probabilities: { done: 1 },
             },
           },
         };
@@ -290,13 +276,7 @@ class StubDecisionService implements DecisionService {
   async decide() {
     return {
       answers: {
-        op: { type: "choice" as const, choice: "done", confidence: 0.99, probabilities: {} },
-        target_index: {
-          type: "choice" as const,
-          choice: "none",
-          confidence: 0.99,
-          probabilities: {},
-        },
+        action: { type: "choice" as const, choice: "done", confidence: 0.99, probabilities: {} },
         is_destructive: { type: "noul" as const, noul: 0 },
       },
       provider: "heuristic" as const,

@@ -81,3 +81,28 @@ export function buildComputerQuestions(
     },
   };
 }
+
+/**
+ * One question per step: which of these described actions comes next. The
+ * options are built by the loop from what's on screen ("Click button “Search”"),
+ * so Jev never has to look indices up or pair an operation with a target.
+ */
+export function buildComputerActionQuestions(
+  candidates: ReadonlyArray<{ id: string; description: string }>,
+): Record<string, JevQuestion> {
+  const criteria: Record<string, string> = {};
+  for (const c of candidates) criteria[c.id] = c.description;
+  return {
+    action: {
+      type: "choice",
+      instructions:
+        "Given `goal`, the user's `instructions`, `recent_steps` and the page (`url`, `title`), which single action moves toward the goal next? Close popups that block the page first. Pick `done` only if the page already shows the goal achieved.",
+      criteria,
+    },
+    is_destructive: {
+      type: "noul",
+      instructions:
+        "Could that action delete data, send something to other people, spend money, or change settings in a way that is hard to undo?",
+    },
+  };
+}

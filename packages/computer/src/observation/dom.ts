@@ -20,7 +20,9 @@ const DOM_SCRIPT = `(() => {
   const seen = new Set();
   const nodes = pool.filter((el) => !seen.has(el) && seen.add(el) && visible(el));
   return nodes.slice(0, 80).map((el, index) => {
-    const role = el.getAttribute('role') || el.tagName.toLowerCase();
+    const type = el.tagName === 'INPUT' ? (el.getAttribute('type') || 'text').toLowerCase() : '';
+    const inputRole = { checkbox: 'checkbox', radio: 'radio', submit: 'button', button: 'button', reset: 'button', image: 'button', search: 'searchbox', range: 'slider' }[type] || (type ? 'textbox' : '');
+    const role = el.getAttribute('role') || inputRole || el.tagName.toLowerCase();
     const label = (el.getAttribute('aria-label')
       || el.getAttribute('placeholder')
       || el.getAttribute('title')

@@ -8,7 +8,8 @@ import type {
   Screen,
 } from "@openbot/contracts";
 import { bandForAnswer, UNCONFIGURED_MODEL } from "@openbot/decisions";
-import { buildComputerQuestions, COMPUTER_KEYS } from "@openbot/decisions";
+import { buildComputerActionQuestions } from "@openbot/decisions";
+import { buildCandidates, type Candidate } from "./candidates.js";
 import { buildDecisionState } from "@openbot/decisions";
 import type { ComputerActionBroker } from "./broker.js";
 import { DefaultComputerActionBroker } from "./broker.js";
@@ -65,6 +66,8 @@ export interface FastLoopOptions {
   timeouts?: Partial<Record<"observe" | "decide" | "act", number>>;
   /** Same observation hash repeated this many times triggers escalation. */
   stallThreshold?: number;
+  /** Pause after a click, key or typing so the next look sees the new page. */
+  settleMs?: number;
 }
 
 export interface FastLoopResult {
@@ -170,6 +173,8 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     onPhase,
     timeouts = {},
     stallThreshold = DEFAULT_STALL_THRESHOLD,
+    // The fake computer changes pages instantly; real browsers need a moment.
+    settleMs = options.providerId === "fake" ? 0 : 700,
   } = options;
   const limit = { observe: 15_000, decide: 20_000, act: 30_000, ...timeouts };
   const observe = async () => {
@@ -277,8 +282,11 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       })),
     });
 
-    const indices = observation.elements.map((el) => String(el.index));
-    const questions = buildComputerQuestions(indices);
+    const candidates = buildCandidates(observation, {
+      goal,
+      typedRecently: recent.length > 0 && recent[recent.length - 1]!.startsWith("typed into"),
+    });
+    const questions = buildComputerActionQuestions(candidates);
     onPhase?.("deciding");
     let decision: Awaited<ReturnType<DecisionService["decide"]>>;
     try {
@@ -302,14 +310,12 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       return { status: "cancelled", steps, lastObservation: observation, summary: "cancelled" };
     }
 
-    const opAnswer = decision.answers.op;
-    const targetAnswer = decision.answers.target_index;
+    const actionAnswer = decision.answers.action;
     const destructiveAnswer = decision.answers.is_destructive;
-
-    const opBand = bandForAnswer(opAnswer);
-    const targetBand = bandForAnswer(targetAnswer);
-    const op = parseChoice(opAnswer, "wait") as ActionOp;
-    const targetChoice = parseChoice(targetAnswer, "none");
+    const opBand = bandForAnswer(actionAnswer);
+    const targetBand = opBand;
+    const choiceId = parseChoice(actionAnswer, "");
+    const chosen = candidates.find((c) => c.id === choiceId);
 
     if (decision.provider !== "jev" && opBand === "human") {
       const event: ComputerStepEvent = {
@@ -326,6 +332,47 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
     }
 
+    // Confident enough? Reversible steps (a plain click, scrolling, Escape) may
+    // run when Jev clearly leans to one option; typing, submitting, "done" and
+    // "blocked" need the usual confidence.
+    const lead = clearLead(actionAnswer);
+    const sure =
+      opBand !== "human" ||
+      (chosen?.reversible === true &&
+        !(chosen.element && isSensitiveLabel(chosen.element.label)) &&
+        lead.top >= 0.3 &&
+        lead.top >= lead.second * 1.5);
+    if (!chosen && choiceId && opBand !== "human") {
+      // A target must be something that was actually observed on this page.
+      const event: ComputerStepEvent = {
+        step: steps,
+        observation,
+        decisionId: decision.decisionId,
+        outcome: "escalated",
+        reason: "The chosen element isn't on the page.",
+      };
+      onStep?.(event);
+      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+    }
+    if (!chosen || !sure) {
+      const likely = topChoices(actionAnswer, candidates, 3);
+      const reason = likely
+        ? `I wasn't sure what to do next on this page. Most likely: ${likely}.`
+        : "I wasn't sure what to do next on this page.";
+      const event: ComputerStepEvent = {
+        step: steps,
+        observation,
+        decisionId: decision.decisionId,
+        opBand,
+        targetBand,
+        outcome: "escalated",
+        reason,
+      };
+      onStep?.(event);
+      return { status: "escalated", steps, lastObservation: observation, summary: reason };
+    }
+
+    const op = chosen.action.op as ActionOp;
     if (op === "done") {
       onStep?.({
         step: steps,
@@ -358,64 +405,13 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       return { status: "takeover", steps, lastObservation: observation, summary: event.reason };
     }
 
-    if (opBand === "human" || (targetChoice !== "none" && targetBand === "human")) {
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
-        decisionId: decision.decisionId,
-        opBand,
-        targetBand,
-        outcome: "escalated",
-        reason: "I wasn't sure what to do next on this page.",
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
-    }
-
-    const targetIndex = targetChoice === "none" ? undefined : Number.parseInt(targetChoice, 10);
-    const targetElement =
-      targetIndex !== undefined && !Number.isNaN(targetIndex)
-        ? observation.elements.find((el) => el.index === targetIndex)
-        : undefined;
-
-    // A target must be something that was actually observed on this page.
-    if (targetIndex !== undefined && !targetElement) {
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
-        decisionId: decision.decisionId,
-        outcome: "escalated",
-        reason: "The chosen element isn't on the page.",
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
-    }
-
+    const targetElement = chosen.element;
     const sensitiveLabel = targetElement ? isSensitiveLabel(targetElement.label) : false;
     const isDestructive =
       destructiveAnswer?.type === "noul" ? destructiveAnswer.noul >= 0.5 : false;
 
-    let action: Action = { op, target: targetIndex };
-    if (op === "key") {
-      const key = parseChoice(decision.answers.key_name, "Enter");
-      action = { op, text: (COMPUTER_KEYS as readonly string[]).includes(key) ? key : "Enter" };
-    } else if (op === "scroll") {
-      action = {
-        op,
-        text: parseChoice(decision.answers.scroll_direction, "down") === "up" ? "up" : "down",
-      };
-    } else if (op === "type") {
-      if (!targetElement) {
-        const event: ComputerStepEvent = {
-          step: steps,
-          observation,
-          decisionId: decision.decisionId,
-          outcome: "escalated",
-          reason: "Jev chose to type, but didn't pick a field on this page.",
-        };
-        onStep?.(event);
-        return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
-      }
+    let action: Action = { ...chosen.action };
+    if (op === "type" && targetElement) {
       const text = textForType
         ? await textForType({ goal, observation, target: targetElement })
         : null;
@@ -512,6 +508,9 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     }
 
     remember(describeAction(action, targetElement));
+    if (settleMs > 0 && ["click", "key", "type", "select"].includes(action.op)) {
+      await new Promise((resolve) => setTimeout(resolve, settleMs));
+    }
     onStep?.({
       step: steps,
       observation,
@@ -575,6 +574,33 @@ function describeAction(action: Action, target?: ObservedElement): string {
       return `${action.op}${what}`;
   }
 }
+
+/** The top two probabilities of a choice answer. */
+function clearLead(answer: JevAnswerLike | undefined): { top: number; second: number } {
+  const values = Object.values(answer?.probabilities ?? {}).sort((a, b) => b - a);
+  return { top: values[0] ?? 0, second: values[1] ?? 0 };
+}
+
+/** "click “Search” (38%), type into “Search” (36%)": for the engine to steer with. */
+function topChoices(
+  answer: JevAnswerLike | undefined,
+  candidates: Candidate[],
+  count: number,
+): string | undefined {
+  const entries = Object.entries(answer?.probabilities ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, count)
+    .map(([id, p]) => {
+      const c = candidates.find((x) => x.id === id);
+      return c
+        ? `${c.description.charAt(0).toLowerCase()}${c.description.slice(1)} (${Math.round(p * 100)}%)`
+        : undefined;
+    })
+    .filter(Boolean);
+  return entries.length ? entries.join(", ") : undefined;
+}
+
+type JevAnswerLike = { type: string; choice?: string; probabilities?: Record<string, number> };
 
 function parseChoice(
   answer: { type: string; choice?: string } | undefined,
