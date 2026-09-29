@@ -159,7 +159,7 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
   {
     name: "computer_task",
     description:
-      "Operate this bot's computer (browser/desktop) toward a goal. Jev picks each click/type/key step from what's on screen; OpenBot checks and runs it, and risky steps ask the user. You author any text to type: pass it in `inputs` keyed by field label, or answer later with computer_steer when the result says needsText. Returns after `waitSeconds` (default 20) with progress; use computer_status to follow a running task.",
+      "Operate this bot's computer (browser/desktop) toward a goal. Jev picks each click/type/key step from what's on screen; OpenBot runs it. Ordinary steps (clicking, sending, connecting, posting, signing in) never ask the user; only spending money or deleting data does. The task recovers from setbacks on its own and pauses (status needs_user) only for a sign-in with no saved login, a code or a CAPTCHA, then continues by itself. You author any text to type: pass it in `inputs` keyed by field label, or answer later with computer_steer when the result says needsText. Returns after `waitSeconds` (default 20) with progress; every result has a `next` field saying what to do: follow it, and keep calling computer_status until the task is completed.",
     inputSchema: {
       type: "object",
       properties: {
@@ -212,7 +212,7 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
   {
     name: "computer_steer",
     description:
-      "Guide a running computer task: add an instruction for the next steps, and/or give the text it asked for (needsText).",
+      "Guide a computer task: add an instruction for the next steps, and/or give the text it asked for (needsText). Also the way to continue a task that is paused for the user (after saving a login) or that stopped short (escalated/failed): it resumes from the same page with the same history, so prefer this to starting over.",
     inputSchema: {
       type: "object",
       properties: {

@@ -45,7 +45,7 @@ function goalWords(goal: string | undefined): string[] {
 
 export function buildCandidates(
   observation: Observation,
-  options: { typedRecently?: boolean; goal?: string } = {},
+  options: { typedRecently?: boolean; goal?: string; allowBlocked?: boolean } = {},
 ): Candidate[] {
   const candidates: Candidate[] = [];
   const seen = new Set<string>();
@@ -151,18 +151,22 @@ export function buildCandidates(
       action: { op: "done" },
       reversible: false,
     },
-    {
-      id: "blocked",
-      description:
-        "Stop: only the user can continue (login, password, 2FA, CAPTCHA, payment, confirmation)",
-      action: { op: "blocked" },
-      reversible: false,
-    },
+    ...(options.allowBlocked === false
+      ? []
+      : [
+          {
+            id: "blocked",
+            description:
+              "Stop: only the user can continue (a login with no saved credentials, a 2FA or verification code, a CAPTCHA, a payment). Never for a confirmation dialog or a cookie notice: click those.",
+            action: { op: "blocked" } as Action,
+            reversible: false,
+          },
+        ]),
   );
   return candidates;
 }
 
-function hasPopup(observation: Observation): boolean {
+export function hasPopup(observation: Observation): boolean {
   return observation.elements.some(
     (el) =>
       /^(dialog|alertdialog|menu|listbox)$/i.test(el.role) ||

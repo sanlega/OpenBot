@@ -24,7 +24,7 @@ const OP_CRITERIA: Record<string, string> = {
   wait: "Wait: the page is loading or changing",
   done: "The goal is already satisfied on this page; stop",
   blocked:
-    "Only the user can continue: login, password, 2FA, CAPTCHA, payment, or a confirmation dialog",
+    "Only the user can continue: a login with no known credentials, a 2FA or verification code, a CAPTCHA, or a payment",
 };
 
 /**
@@ -77,7 +77,7 @@ export function buildComputerQuestions(
     is_destructive: {
       type: "noul",
       instructions:
-        "Would the chosen action pay, send, publish, delete, or submit something irreversibly?",
+        "Would the chosen action spend money or permanently delete data or an account? Sending, connecting, posting or submitting what `goal` asks for is expected, not destructive.",
     },
   };
 }
@@ -102,7 +102,7 @@ export function buildComputerActionQuestions(
     is_destructive: {
       type: "noul",
       instructions:
-        "Could that action delete data, send something to other people, spend money, or change settings in a way that is hard to undo?",
+        "Would that action spend money or permanently delete data or an account? Sending, connecting, posting, submitting or changing what `goal` asks for is expected, not destructive.",
     },
   };
 }

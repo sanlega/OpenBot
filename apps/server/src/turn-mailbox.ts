@@ -24,6 +24,9 @@ import { VAULT_KEYS } from "./providers.js";
 
 type McpConnectors = Parameters<typeof McpComposer.forTurnAsync>[1]["connectors"];
 
+/** Engine-level browser integrations that open a browser on the owner's computer. */
+const HOST_BROWSER_TOOLS = ["mcp__claude-in-chrome", "mcp__playwright", "mcp__puppeteer"];
+
 export interface TurnMailboxDeps {
   runtime: Runtime;
   drivers: Partial<Record<EngineId, EngineDriver>>;
@@ -206,7 +209,9 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
       // OpenBot's own tools carry their own gates (spawn/notify gates, caps S1–S10,
       // dry-run simulation); the engine must not ask the user about them.
       allowTools: ["mcp__openbot"],
-      denyTools: [],
+      // A Bot whose computer is the virtual machine never drives a browser on this computer, even
+      // if the owner's own engine settings turn one on.
+      denyTools: bot.computer === "docker+local" ? [] : HOST_BROWSER_TOOLS,
       model: choice.model,
       effort: choice.effort,
       // Tool calls in one turn. 50 cut off ordinary multi-step jobs (build and publish a site is

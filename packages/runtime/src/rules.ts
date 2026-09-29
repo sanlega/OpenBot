@@ -70,8 +70,15 @@ export function usesHostBrowser(req: BrokerRequest): boolean {
   );
 }
 
-/** plan §5 WS2: "sensitive computer targets" — matched against a computer action's observed element label. */
-export const SENSITIVE_COMPUTER_TARGET_RE = /pay|buy|send|delete|transfer|submit order|confirm/i;
+/**
+ * "Sensitive computer targets": what spends money or destroys data, matched against the observed
+ * element label as whole words. Sending or confirming what the request asked for is not sensitive.
+ * Keep in sync with `packages/computer/src/sensitive-target.ts`.
+ */
+export const SENSITIVE_COMPUTER_TARGET_RE = new RegExp(
+  String.raw`(^|[^\p{L}])(pay( now)?|payment|buy( now)?|purchase|checkout|place (your |my )?order|submit order|transfer( funds| money)?|wire|donate|delete( (my )?(account|forever|permanently|all))?|remove (my )?account|close (my )?account|deactivate|erase|pagar|pago|comprar|compra|eliminar( cuenta)?|borrar|transferir|donar|supprimer|acheter|payer|löschen|kaufen|bezahlen)([^\p{L}]|$)`,
+  "iu",
+);
 
 function haystackOf(req: BrokerRequest): string {
   return [req.action, req.target, req.detail, req.summary, JSON.stringify(req.args ?? {})].join(
@@ -120,7 +127,7 @@ export function builtinAskRules(
     );
   }
   // "Full" means the Bot doesn't ask: connector side effects and the Bot's own local-computer
-  // actions run without a card. Sensitive computer targets (Pay, Send, passwords) still ask.
+  // actions run without a card. Sensitive computer targets (paying, deleting) still ask.
   if (req.kind === "connector_action" && req.sideEffect && preset !== "full") {
     rules.push(
       builtinRule(

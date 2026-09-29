@@ -78,6 +78,7 @@ describe("runFastLoop", () => {
       chainId: "chain_1",
       providerId: "fake",
       maxSteps: 3,
+      maxRecoveries: 0,
     });
 
     expect(result.status).toBe("escalated");
@@ -156,6 +157,7 @@ describe("runFastLoop", () => {
       chainId: "chain_1",
       providerId: "fake",
       maxSteps: 2,
+      maxRecoveries: 0,
     });
 
     expect(result.status).toBe("escalated");

@@ -9,7 +9,7 @@ import type {
 } from "@openbot/contracts";
 import { bandForAnswer, UNCONFIGURED_MODEL } from "@openbot/decisions";
 import { buildComputerActionQuestions } from "@openbot/decisions";
-import { buildCandidates, type Candidate } from "./candidates.js";
+import { buildCandidates, hasPopup, type Candidate } from "./candidates.js";
 import { buildDecisionState } from "@openbot/decisions";
 import type { ComputerActionBroker } from "./broker.js";
 import { DefaultComputerActionBroker } from "./broker.js";
@@ -33,11 +33,26 @@ export interface ComputerStepEvent {
 
 export type ComputerPhase = "opening" | "looking" | "deciding" | "acting";
 
+/** Why only the user can continue. */
+export type BlockerKind = "login" | "code" | "captcha" | "payment" | "other";
+
+export interface BlockedContext {
+  kind: BlockerKind;
+  observation: Observation;
+  reason: string;
+}
+
 export interface TypeTextContext {
   goal: string;
   observation: Observation;
   target?: ObservedElement;
 }
+
+/**
+ * What `textForType` returns when the field no longer needs typing: the user filled it (they
+ * signed in themselves inside the virtual machine). The loop looks at the page again.
+ */
+export const SKIP_TYPING = "openbot:skip-typing:6f1c";
 
 export interface FastLoopOptions {
   screen: Screen;
@@ -70,6 +85,16 @@ export interface FastLoopOptions {
   stallThreshold?: number;
   /** Pause after a click, key or typing so the next look sees the new page. */
   settleMs?: number;
+  /**
+   * A step only the user can do (sign-in, a code, a CAPTCHA). Resolves "resume" when it is done
+   * (the loop carries on from the page as it is now) or "stop" to end the task there.
+   * Without it the loop stops with status `takeover`.
+   */
+  onBlocked?: (ctx: BlockedContext) => Promise<"resume" | "stop">;
+  /** True when the vault has a login for this page, so a sign-in form is not a blocker. */
+  hasSavedLogin?: (url: string | undefined) => Promise<boolean>;
+  /** Consecutive setbacks (unsure pick, failed action, stalled page) tried around before stopping. */
+  maxRecoveries?: number;
 }
 
 export interface FastLoopResult {
@@ -79,7 +104,10 @@ export interface FastLoopResult {
   summary?: string;
 }
 
-const DEFAULT_MAX_STEPS = 50;
+const DEFAULT_MAX_STEPS = 120;
+const DEFAULT_MAX_RECOVERIES = 4;
+/** Choices that leave the page as it is; not offered again on a page that stalled. */
+const IDLE_CHOICES = new Set(["wait", "scroll_down", "scroll_up"]);
 const DEFAULT_STALL_THRESHOLD = 3;
 const RECENT_STEPS_IN_STATE = 6;
 
@@ -224,8 +252,88 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
   }
 
   let steps = 0;
-  const observationHashes: string[] = [];
+  let observationHashes: string[] = [];
   const closedNotices = new Set<string>();
+  // Element actions that errored or changed nothing on a page: not offered again there.
+  const failed = new Set<string>();
+  const stalledPages = new Set<string>();
+  let lastExecuted: string | undefined;
+  // The page as it was when a real step ran; a different page next time counts as progress.
+  let actionHash: string | undefined;
+  let troubles = 0;
+  const maxRecoveries = options.maxRecoveries ?? DEFAULT_MAX_RECOVERIES;
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  const giveUp = (
+    observation: Observation | undefined,
+    reason: string,
+    extra: Partial<ComputerStepEvent> = {},
+  ): FastLoopResult => {
+    if (observation) {
+      onStep?.({ step: steps, observation, outcome: "escalated", reason, ...extra });
+    }
+    return { status: "escalated", steps, lastObservation: observation, summary: reason };
+  };
+
+  /**
+   * Something didn't work (unsure pick, failed action, stalled page). Try another way around it
+   * (wait for the page, close a popup, scroll) before giving up; false when the tries ran out.
+   */
+  const recover = async (observation: Observation, reason: string): Promise<boolean> => {
+    troubles += 1;
+    if (troubles > maxRecoveries) return false;
+    const action: Action =
+      troubles === 1
+        ? { op: "wait" }
+        : troubles === 2 && hasPopup(observation)
+          ? { op: "key", text: "Escape" }
+          : { op: "scroll", text: troubles % 2 === 0 ? "down" : "up" };
+    onPhase?.("acting");
+    await withDeadline(screen.act(action), limit.act, "timeout").catch(() => undefined);
+    await sleep(settleMs * 2);
+    remember(`${reason}; tried ${describeAction(action)}`);
+    onStep?.({
+      step: steps,
+      observation,
+      action,
+      outcome: "executed",
+      reason: `Trying another way: ${reason}`,
+    });
+    return true;
+  };
+
+  /** Hands the screen to the user for a step only they can do, and waits for them to finish. */
+  const pauseForUser = async (
+    kind: BlockerKind,
+    observation: Observation,
+    decisionId: string | undefined,
+    detail?: string,
+  ): Promise<FastLoopResult | undefined> => {
+    await screen.takeover(true);
+    const reason = detail ?? blockerReason(kind);
+    onStep?.({
+      step: steps,
+      observation,
+      action: { op: "blocked" },
+      decisionId,
+      outcome: "takeover",
+      reason,
+    });
+    const verdict = options.onBlocked
+      ? await options.onBlocked({ kind, observation, reason })
+      : "stop";
+    if (shouldStop?.()) {
+      return { status: "cancelled", steps, lastObservation: observation, summary: "cancelled" };
+    }
+    if (verdict === "stop") {
+      return { status: "takeover", steps, lastObservation: observation, summary: reason };
+    }
+    await screen.takeover(false);
+    observationHashes = [];
+    troubles = 0;
+    remember(`the user finished the ${kind} step; carry on from the page as it is now`);
+    return undefined;
+  };
 
   while (steps < maxSteps) {
     if (shouldStop?.()) {
@@ -236,20 +344,25 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     try {
       observation = await observe();
     } catch (error) {
-      return { status: "escalated", steps, summary: messageOf(error) };
+      // A page mid-navigation often can't be read for a moment.
+      troubles += 1;
+      if (troubles > maxRecoveries) return giveUp(undefined, messageOf(error));
+      await sleep(Math.max(settleMs, 500));
+      continue;
     }
     const hash = hashObservation(observation);
+    if (actionHash !== undefined && hash !== actionHash) troubles = 0;
+    actionHash = undefined;
     observationHashes.push(hash);
     const stallCount = countTrailingEqual(observationHashes, hash);
     if (stallCount >= stallThreshold) {
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
-        outcome: "escalated",
-        reason: "The page stopped changing, so I stopped to avoid repeating myself.",
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+      // Whatever ran last did nothing here: don't offer it again on this page.
+      if (lastExecuted) failed.add(lastExecuted);
+      // Waiting and scrolling did not change this page either: offer only its controls next time.
+      stalledPages.add(hash);
+      observationHashes = [];
+      if (await recover(observation, "the page stopped changing")) continue;
+      return giveUp(observation, "The page stopped changing and nothing I tried moved it.");
     }
 
     // Cookie notices block the page and aren't part of any goal: close them
@@ -288,11 +401,22 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       }
     }
 
+    // A sign-in form with a saved login is not a blocker: the host types it.
+    const savedLogin =
+      looksLikeSignIn(observation) && options.hasSavedLogin
+        ? await options.hasSavedLogin(observation.url).catch(() => false)
+        : false;
     const extra = instructions?.() ?? [];
     const state = buildDecisionState({
       goal,
       ...(extra.length > 0 ? { instructions: extra } : {}),
       ...(recent.length > 0 ? { recent_steps: [...recent] } : {}),
+      ...(savedLogin
+        ? {
+            saved_login_available:
+              "A saved username and password will be typed into the sign-in fields for you: fill them, do not stop.",
+          }
+        : {}),
       url: observation.url,
       title: observation.title,
       observed_elements: observation.elements.map((el) => ({
@@ -306,7 +430,10 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     const candidates = buildCandidates(observation, {
       goal,
       typedRecently: recent.length > 0 && recent[recent.length - 1]!.startsWith("typed into"),
-    });
+      allowBlocked: !savedLogin,
+    })
+      .filter((c) => !c.element || !failed.has(`${observation.url ?? ""}|${c.id}`))
+      .filter((c) => !stalledPages.has(hash) || !IDLE_CHOICES.has(c.id));
     const questions = buildComputerActionQuestions(candidates);
     onPhase?.("deciding");
     let decision: Awaited<ReturnType<DecisionService["decide"]>>;
@@ -317,14 +444,8 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
         "Jev didn't answer in time, so I stopped instead of guessing.",
       );
     } catch (error) {
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
-        outcome: "escalated",
-        reason: messageOf(error),
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+      if (await recover(observation, messageOf(error))) continue;
+      return giveUp(observation, messageOf(error));
     }
 
     if (shouldStop?.()) {
@@ -336,21 +457,16 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     const opBand = bandForAnswer(actionAnswer);
     const targetBand = opBand;
     const choiceId = parseChoice(actionAnswer, "");
-    const chosen = candidates.find((c) => c.id === choiceId);
+    let chosen = candidates.find((c) => c.id === choiceId);
 
     if (decision.provider !== "jev" && opBand === "human") {
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
-        decisionId: decision.decisionId,
-        outcome: "escalated",
-        reason:
-          decision.model === UNCONFIGURED_MODEL
-            ? "No Jev (TypeSafe) key is set, so I stopped instead of guessing. Add it in Settings → Jev."
-            : "Jev is unavailable, so I stopped instead of guessing.",
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+      const reason =
+        decision.model === UNCONFIGURED_MODEL
+          ? "No Jev (TypeSafe) key is set, so I stopped instead of guessing. Add it in Settings → Jev."
+          : "Jev is unavailable, so I stopped instead of guessing.";
+      // A missing key won't fix itself; an outage might.
+      if (decision.model !== UNCONFIGURED_MODEL && (await recover(observation, reason))) continue;
+      return giveUp(observation, reason, { decisionId: decision.decisionId });
     }
 
     // Confident enough? Reversible steps (a plain click, scrolling, Escape) may
@@ -365,33 +481,33 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
         lead.top >= lead.second * 1.5);
     if (!chosen && choiceId && opBand !== "human") {
       // A target must be something that was actually observed on this page.
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
-        decisionId: decision.decisionId,
-        outcome: "escalated",
-        reason: "The chosen element isn't on the page.",
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+      const reason = "The chosen element isn't on the page.";
+      if (await recover(observation, reason)) continue;
+      return giveUp(observation, reason, { decisionId: decision.decisionId });
     }
+    let forced = false;
     if (!chosen || !sure) {
-      const likely = topChoices(actionAnswer, candidates, 3);
-      const reason = likely
-        ? `I wasn't sure what to do next on this page. Most likely: ${likely}.`
-        : "I wasn't sure what to do next on this page.";
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
-        decisionId: decision.decisionId,
-        opBand,
-        targetBand,
-        outcome: "escalated",
-        reason,
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: reason };
+      // The first doubt gets a second look (the page may still be moving); after that, go with
+      // the most likely harmless option rather than stopping.
+      const guess = troubles >= 1 ? bestGuess(actionAnswer, candidates) : undefined;
+      if (guess) {
+        chosen = guess;
+        forced = true;
+        remember("not sure what comes next; going with the most likely option");
+      } else {
+        const likely = topChoices(actionAnswer, candidates, 3);
+        const reason = likely
+          ? `I wasn't sure what to do next on this page. Most likely: ${likely}.`
+          : "I wasn't sure what to do next on this page.";
+        if (await recover(observation, "not sure what to do next")) continue;
+        return giveUp(observation, reason, {
+          decisionId: decision.decisionId,
+          opBand,
+          targetBand,
+        });
+      }
     }
+    if (!chosen) return giveUp(observation, "I wasn't sure what to do next on this page.");
 
     const op = chosen.action.op as ActionOp;
     if (op === "done") {
@@ -413,17 +529,13 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     }
 
     if (op === "blocked") {
-      await screen.takeover(true);
-      const event: ComputerStepEvent = {
-        step: steps,
+      const ended = await pauseForUser(
+        classifyBlocker(observation),
         observation,
-        action: { op: "blocked" },
-        decisionId: decision.decisionId,
-        outcome: "takeover",
-        reason: "This step needs you (login, 2FA, CAPTCHA, or payment). Take over the screen.",
-      };
-      onStep?.(event);
-      return { status: "takeover", steps, lastObservation: observation, summary: event.reason };
+        decision.decisionId,
+      );
+      if (ended) return ended;
+      continue;
     }
 
     const targetElement = chosen.element;
@@ -439,19 +551,25 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       if (shouldStop?.()) {
         return { status: "cancelled", steps, lastObservation: observation, summary: "cancelled" };
       }
+      if (text === SKIP_TYPING) {
+        remember(
+          "the user took care of the sign-in themselves; carry on from the page as it is now",
+        );
+        observationHashes = [];
+        troubles = 0;
+        continue;
+      }
       if (!text) {
-        const event: ComputerStepEvent = {
-          step: steps,
+        return giveUp(
           observation,
-          targetLabel: targetElement.label,
-          decisionId: decision.decisionId,
-          opBand,
-          targetBand,
-          outcome: "escalated",
-          reason: `I needed text for "${targetElement.label}" and didn't get it.`,
-        };
-        onStep?.(event);
-        return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+          `I needed text for "${targetElement.label}" and didn't get it.`,
+          {
+            targetLabel: targetElement.label,
+            decisionId: decision.decisionId,
+            opBand,
+            targetBand,
+          },
+        );
       }
       action = { ...action, text };
     }
@@ -479,17 +597,12 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       return { status: "failed", steps, lastObservation: observation, summary: event.reason };
     }
     if (brokerDecision === "ask") {
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
+      return giveUp(observation, "This step needs your approval.", {
         action,
         targetLabel: targetElement?.label,
         decisionId: decision.decisionId,
         outcome: "blocked",
-        reason: "This step needs your approval.",
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+      });
     }
 
     onPhase?.("acting");
@@ -500,35 +613,32 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       result = { ok: false, reason: messageOf(error) };
     }
     if (result.blocked) {
-      await screen.takeover(true);
-      const event: ComputerStepEvent = {
-        step: steps,
+      const ended = await pauseForUser(
+        classifyBlocker(observation),
         observation,
-        action,
-        targetLabel: targetElement?.label,
-        decisionId: decision.decisionId,
-        outcome: "takeover",
-        reason: result.reason ?? "The computer needs you to take over.",
-      };
-      onStep?.(event);
-      return { status: "takeover", steps, lastObservation: observation, summary: event.reason };
+        decision.decisionId,
+        result.reason,
+      );
+      if (ended) return ended;
+      continue;
     }
 
     if (!result.ok) {
-      const event: ComputerStepEvent = {
-        step: steps,
-        observation,
+      if (chosen.element) failed.add(`${observation.url ?? ""}|${chosen.id}`);
+      remember(`${describeAction(action, targetElement)} failed`);
+      const reason = result.reason ?? "The action failed.";
+      if (await recover(observation, reason)) continue;
+      return giveUp(observation, reason, {
         action,
         targetLabel: targetElement?.label,
         decisionId: decision.decisionId,
-        outcome: "escalated",
-        reason: result.reason ?? "The action failed.",
-      };
-      onStep?.(event);
-      return { status: "escalated", steps, lastObservation: observation, summary: event.reason };
+      });
     }
 
     remember(describeAction(action, targetElement));
+    lastExecuted = chosen.element ? `${observation.url ?? ""}|${chosen.id}` : undefined;
+    // Only a real step that changes the page counts as getting somewhere, not a guess or a wait.
+    if (!forced && action.op !== "wait" && action.op !== "scroll") actionHash = hash;
     // Typing into a search box means searching: submit it in the same step, as
     // Jev rarely infers the Enter on its own.
     if (action.op === "type" && targetElement && isSearchField(targetElement)) {
@@ -561,6 +671,64 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     lastObservation,
     summary: `Stopped after ${steps} steps without finishing.`,
   };
+}
+
+const CAPTCHA_RE =
+  /captcha|i'?m not a robot|no soy un robot|verify (that )?you('re| are) (a )?human|are you (a )?human/i;
+const CODE_RE =
+  /verification code|security code|one[- ]time|\botp\b|2fa|two[- ]factor|authenticator|c[oó]digo de (verificaci[oó]n|seguridad)|enter the (6|six)[- ]digit|enter (the|your) code/i;
+const PAYMENT_RE = /card number|cvv|cvc|credit card|debit card|n[uú]mero de tarjeta/i;
+const SIGN_IN_RE =
+  /pass(word)?\b|contrase[nñ]a|sign[- ]?in|log[- ]?in|iniciar sesi[oó]n|e-?mail|username|usuario/i;
+
+/** What kind of step the page is asking a person for. */
+export function classifyBlocker(observation: Observation): BlockerKind {
+  const text = observation.elements.map((el) => `${el.role} ${el.label}`).join(" | ");
+  if (CAPTCHA_RE.test(text)) return "captcha";
+  if (CODE_RE.test(text)) return "code";
+  if (PAYMENT_RE.test(text)) return "payment";
+  if (looksLikeSignIn(observation)) return "login";
+  return "other";
+}
+
+/** A password field, or a text field that asks for an account name, is a sign-in form. */
+export function looksLikeSignIn(observation: Observation): boolean {
+  return observation.elements.some(
+    (el) =>
+      /^password$/i.test(el.role) ||
+      (/^(input|textbox|textarea|searchbox|combobox)$/i.test(el.role) && SIGN_IN_RE.test(el.label)),
+  );
+}
+
+function blockerReason(kind: BlockerKind): string {
+  switch (kind) {
+    case "login":
+      return "This page needs you to sign in (no saved login for this site).";
+    case "code":
+      return "This page is asking for a verification code only you have.";
+    case "captcha":
+      return "This page shows a CAPTCHA that only a person can solve.";
+    case "payment":
+      return "This step asks for payment details only you can give.";
+    default:
+      return "This step needs you (take over the screen).";
+  }
+}
+
+/** The most probable option that is harmless to try: a click, scroll, wait, Escape, or a choice. */
+function bestGuess(
+  answer: JevAnswerLike | undefined,
+  candidates: Candidate[],
+): Candidate | undefined {
+  const ranked = Object.entries(answer?.probabilities ?? {}).sort((a, b) => b[1] - a[1]);
+  for (const [id, probability] of ranked) {
+    if (probability < 0.12) break;
+    const c = candidates.find((x) => x.id === id);
+    if (!c || !c.reversible) continue;
+    if (c.element && isSensitiveLabel(c.element.label)) continue;
+    return c;
+  }
+  return undefined;
 }
 
 function isSearchField(el: ObservedElement): boolean {

@@ -219,24 +219,24 @@ describe("Mailbox basic turn lifecycle (against @openbot/engines-fake)", () => {
 });
 
 describe("Mailbox approvals (permission broker integration)", () => {
-  it("a sensitive computer click ('Send') asks, and the turn only proceeds after the approval is resolved", async () => {
+  it("a sensitive computer click ('Pay now') asks, and the turn only proceeds after the approval is resolved", async () => {
     const script = async (hooks: TurnHooks): Promise<TurnResult> => {
       const decision = await hooks.requestApproval({
         toolName: "computer_click",
-        input: { target: "Send" },
+        input: { target: "Pay now" },
         toolUseId: "t1",
       });
       hooks.emit({ type: "session_started", sessionId: "sess_1" });
       hooks.emit({
         type: "text_delta",
-        text: decision === "allow" ? "clicked Send" : "refused to click",
+        text: decision === "allow" ? "clicked Pay now" : "refused to click",
       });
       return turnResult();
     };
     const runtime = buildRuntime(new ScriptedEngineDriver(script));
 
     const input = makeInput(runtime, {
-      classifyApproval: () => ({ kind: "computer_action", action: "click", target: "Send" }),
+      classifyApproval: () => ({ kind: "computer_action", action: "click", target: "Pay now" }),
     });
     const outcomePromise = runtime.mailbox.submit(input);
 
@@ -248,7 +248,7 @@ describe("Mailbox approvals (permission broker integration)", () => {
 
     const outcome = await outcomePromise;
     expect(outcome.status).toBe("completed");
-    expect(outcome.text).toBe("clicked Send");
+    expect(outcome.text).toBe("clicked Pay now");
   });
 
   it("denies via a built-in deny rule without ever creating an approval card", async () => {
@@ -558,7 +558,11 @@ describe("Mailbox auto-allows OpenBot's own tools (allowTools), and only those",
       return turnResult();
     };
   // Anything that reaches the broker with this classification always raises a card.
-  const alwaysAsks = () => ({ kind: "computer_action" as const, action: "click", target: "Send" });
+  const alwaysAsks = () => ({
+    kind: "computer_action" as const,
+    action: "click",
+    target: "Pay now",
+  });
 
   it("lets an OpenBot MCP tool through without a card", async () => {
     const runtime = buildRuntime(new ScriptedEngineDriver(ask("mcp__openbot__create_bot")));

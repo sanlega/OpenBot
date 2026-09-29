@@ -38,10 +38,21 @@ describe("computer rules", () => {
   it("tell a Bot to use saved logins and ask for missing ones with a secret field", async () => {
     const { COMPUTER_RULE_BLOCK } = await import("./prompt.js");
     const flat = COMPUTER_RULE_BLOCK.replace(/\s+/g, " ");
-    expect(flat).toContain("call list_logins first");
+    expect(flat).toContain("list_logins shows which do");
     expect(flat).toContain('a "secret" field for the password');
     expect(flat).toContain("save_login");
     expect(flat).toContain("Never ask for a password in chat");
-    expect(flat).toContain("Only a 2FA code, a CAPTCHA or a payment goes to the user");
+    expect(flat).toContain(
+      "Only a code sent to the user, a CAPTCHA or payment details also need them",
+    );
+  });
+
+  it("never sends a Bot to the user for permission on ordinary steps", async () => {
+    const { COMPUTER_RULE_BLOCK, NON_COS_RULE_BLOCK } = await import("./prompt.js");
+    const flat = `${COMPUTER_RULE_BLOCK} ${NON_COS_RULE_BLOCK}`.replace(/\s+/g, " ");
+    expect(flat).toContain("never need the user's approval");
+    expect(flat).toContain("The request itself is your permission");
+    expect(flat).toContain("Try at least three genuinely different approaches");
+    expect(flat).not.toContain("asks the user before risky");
   });
 });

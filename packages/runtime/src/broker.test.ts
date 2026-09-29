@@ -158,10 +158,10 @@ describe("PermissionBroker live evaluation, E6 order", () => {
     expect(decision.outcome).toBe("allow");
   });
 
-  it("a sensitive computer target (e.g. clicking 'Pay'/'Send') always raises a card, even under 'full'", async () => {
+  it("a sensitive computer target (e.g. clicking 'Pay now') always raises a card, even under 'full'", async () => {
     const { broker } = setup(new StubRiskDecisionService(0, 0.99));
     const decision = await broker.evaluate(
-      req({ kind: "computer_action", action: "click", target: "Send" }),
+      req({ kind: "computer_action", action: "click", target: "Pay now" }),
       { mode: "live", preset: "full" },
     );
     expect(decision.outcome).toBe("ask");

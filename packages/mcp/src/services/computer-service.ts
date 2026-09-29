@@ -194,7 +194,9 @@ export class McpComputerServiceAdapter implements McpComputerService {
     const status =
       snapshot.status === "completed"
         ? "completed"
-        : snapshot.status === "running" || snapshot.status === "needs_input"
+        : snapshot.status === "running" ||
+            snapshot.status === "needs_input" ||
+            snapshot.status === "needs_user"
           ? "running"
           : snapshot.status === "failed" || snapshot.status === "cancelled"
             ? "failed"
@@ -212,7 +214,7 @@ export class McpComputerServiceAdapter implements McpComputerService {
         ? "computer.task_completed"
         : snapshot.status === "escalated"
           ? "computer.escalated"
-          : snapshot.status === "takeover"
+          : snapshot.status === "takeover" || snapshot.status === "needs_user"
             ? "computer.takeover_requested"
             : isStep
               ? "computer.step"
@@ -316,6 +318,35 @@ function waitMs(seconds: number | undefined, fallback = DEFAULT_WAIT_S): number 
   return Math.max(0, Math.min(60, seconds ?? fallback)) * 1000;
 }
 
+/** The harness's guidance for what to do with a task in this state (the engine may not remember). */
+function nextStep(snapshot: ComputerTaskSnapshot): string | undefined {
+  switch (snapshot.status) {
+    case "running":
+      return "Still working. Call computer_status with waitSeconds 60 until it finishes; do not end your turn while it runs.";
+    case "needs_input":
+      return `Answer with computer_steer({taskId, text}) for the field "${snapshot.pendingInput?.field ?? ""}". Write the text yourself; only ask the user for something you cannot know.`;
+    case "needs_user": {
+      const need = snapshot.need;
+      const site = need?.site ?? "this site";
+      if (need?.kind === "login") {
+        return `Needs a sign-in for ${site}. Call list_logins first (a saved login is typed automatically). If none, call ask_user with a text field for the username and a "secret" field for the password, then save_login, then computer_steer({taskId, instruction: "Signed in credentials are saved"}). The user may instead sign in themselves on the Computer tab: the task then continues by itself. Nothing else is needed from the user.`;
+      }
+      if (need?.kind === "code") {
+        return `Needs a verification code only the user has. Ask with ask_user (text field "code"), then computer_steer({taskId, instruction: "continue"}); when the task asks for the code field's text (needsText), answer with the code via computer_steer({taskId, text}).`;
+      }
+      return "Needs the user on this step (CAPTCHA, payment or similar). Tell them once, briefly, to finish it on the Computer tab; the task continues by itself when they are done.";
+    }
+    case "escalated":
+    case "takeover":
+    case "failed":
+      return "Not finished. Do not give up or hand this to the user: look at page.visible, then computer_steer({taskId, instruction}) with a different approach (another route to the same goal, a search, a direct URL). It resumes from the same page. Ask the user only for missing data.";
+    case "completed":
+      return "Jev says it is done. Verify against your definition of done using page.visible or computer_screenshot before you report; if it is not really done, computer_steer with what is missing.";
+    default:
+      return undefined;
+  }
+}
+
 function view(snapshot: ComputerTaskSnapshot): ComputerTaskView {
   return {
     taskId: snapshot.taskId,
@@ -323,6 +354,8 @@ function view(snapshot: ComputerTaskSnapshot): ComputerTaskView {
     steps: snapshot.steps.length,
     summary: snapshot.summary,
     needsText: snapshot.pendingInput?.field,
+    needs: snapshot.need ? { ...snapshot.need } : undefined,
+    next: nextStep(snapshot),
     recentSteps: snapshot.steps
       .slice(-5)
       .map((s) =>
