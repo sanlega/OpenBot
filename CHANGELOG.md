@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3 — 2026-09-29
+
+- Cloudflare Tunnel: real tunnel tokens are now accepted (they were rejected with
+  "token does not look like a Cloudflare tunnel token"). You can also paste
+  Cloudflare's whole `cloudflared service install <token>` command.
+
 ## 0.1.2 — 2026-09-29
 
 - Pairing with the native iPhone app now works with the desktop app: the host speaks
