@@ -74,6 +74,8 @@ export interface SpawnThresholds {
   routeConfidenceMin: number;
   existingCanDoMax: number;
   oneOffMax: number;
+  /** A one-off task that is substantial work still gets a bot: the Chief stays free for the user. */
+  substantialWorkMin: number;
   duplicatesExistingMax: number;
   recurringOwnershipMin: number;
   distinctBoundaryMin: number;

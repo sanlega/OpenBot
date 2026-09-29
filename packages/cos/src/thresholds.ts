@@ -6,6 +6,7 @@ export const DEFAULT_SPAWN_THRESHOLDS: SpawnThresholds = {
   routeConfidenceMin: 0.7,
   existingCanDoMax: 0.3,
   oneOffMax: 0.4,
+  substantialWorkMin: 0.6,
   duplicatesExistingMax: 0.3,
   recurringOwnershipMin: 0.7,
   distinctBoundaryMin: 0.7,
