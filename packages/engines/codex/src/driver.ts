@@ -73,19 +73,42 @@ export class CodexDriver implements EngineDriver {
     }
   }
 
+  /** Threads this app-server process knows about; a stored session id may predate it. */
+  private readonly liveThreads = new Set<string>();
+
+  private async startFreshThread(input: TurnInput): Promise<string> {
+    const id = await this.appServer.threadStart(input);
+    this.liveThreads.add(id);
+    return id;
+  }
+
+  /**
+   * The thread to run this turn on. A stored session id only exists in the app-server that
+   * created it, so after a restart it must be resumed (and if Codex no longer has it, replaced).
+   */
+  private async ensureThread(input: TurnInput): Promise<string> {
+    const wanted = input.sessionId ?? this.threadByBot.get(input.bot.id);
+    if (wanted && this.liveThreads.has(wanted)) return wanted;
+    if (wanted) {
+      try {
+        const id = await this.appServer.threadResume(wanted);
+        this.liveThreads.add(id);
+        return id;
+      } catch (error) {
+        if (!isThreadNotFound(error)) throw error;
+      }
+    }
+    return this.startFreshThread(input);
+  }
+
   startTurn(input: TurnInput, hooks: TurnHooks): TurnHandle {
     const botKey = input.bot.id;
     let interrupted = false;
     const state = createCodexParseState();
 
     const done = (async () => {
-      let threadId = input.sessionId ?? this.threadByBot.get(botKey);
-      if (!threadId) {
-        threadId = input.sessionId
-          ? await this.appServer.threadResume(input.sessionId)
-          : await this.appServer.threadStart(input);
-        this.threadByBot.set(botKey, threadId);
-      }
+      let threadId = await this.ensureThread(input);
+      this.threadByBot.set(botKey, threadId);
 
       state.threadId = threadId;
       state.sessionId = threadId;
@@ -99,7 +122,20 @@ export class CodexDriver implements EngineDriver {
           hooks.emit(event);
         },
       });
-      const turnId = await this.appServer.turnStart(threadId, input.text);
+      let turnId: string;
+      try {
+        turnId = await this.appServer.turnStart(threadId, input.text);
+      } catch (error) {
+        // The app-server forgot this thread (it restarted): start a fresh one and go on.
+        if (!isThreadNotFound(error)) throw error;
+        this.liveThreads.delete(threadId);
+        threadId = await this.startFreshThread(input);
+        this.threadByBot.set(botKey, threadId);
+        state.threadId = threadId;
+        state.sessionId = threadId;
+        hooks.emit({ type: "session_started", sessionId: threadId });
+        turnId = await this.appServer.turnStart(threadId, input.text);
+      }
       state.turnId = turnId;
 
       await waitForTurnComplete(
@@ -164,4 +200,10 @@ export function createFixtureCodexDriver(fixtureReplay: string): CodexDriver {
 
 export function resetSharedCodexAppServerForTests(): void {
   sharedAppServer = null;
+}
+
+function isThreadNotFound(error: unknown): boolean {
+  return /thread not found|no rollout found|unknown thread/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
 }
