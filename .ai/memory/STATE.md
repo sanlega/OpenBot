@@ -1,16 +1,18 @@
 # Project state
 
-_Last updated: 2026-09-28 by Claude_
+_Last updated: 2026-09-29 by Claude_
 
 ## In progress
-- Native iPhone to Windows pairing is blocked by a desktop protocol mismatch.
-  The phone reaches the Windows LAN endpoint, but a fresh QR returns
-  `Pairing failed: invalid_request`. This desktop tree's pairing route expects
-  clear legacy fields; the native phone sends a sealed payload and public-key
-  header. The E2E framing/session lifecycle also differs. The companion
-  checkout pairs successfully to its macOS host. Follow
-  `.ai/memory/plans/2026-09-29-native-iphone-protocol.md` before rebuilding the
-  Windows app. No desktop protocol changes have been made yet.
+- Native iPhone protocol is now implemented on the desktop host (plan T1-T3):
+  sealed QR pairing (`{sealed}` + `x-openbot-pair-pub`, sealed credential reply),
+  sealed per-request device proofs with replay protection, and scoped E2E
+  streams per `x-openbot-e2e-session` for HTTP and WS. Unencrypted pairing is
+  rejected (no client used it). The host files match the companion checkout
+  that already pairs with the physical iPhone. Lint, format, build, typecheck,
+  804 unit tests, and integration E2E 18/18 pass. Next (T4): rebuild and
+  install the Windows app from this commit, scan a fresh QR on the iPhone, and
+  verify connected HTTP/WS flows. Plan:
+  `.ai/memory/plans/2026-09-29-native-iphone-protocol.md`.
 - Prepare the first downloadable GitHub release (`v0.1.0`) and polish the public repository.
   Plan: `.ai/memory/plans/2026-09-27-github-release.md`.
 - Public-release README, contributor guide, issue/PR templates, changelog, and installer
