@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.8 — 2026-09-30
+
+- The Chief of Staff now hands real work to bots and creates the ones it needs, so it stays
+  free to talk to you. Default limits are looser (10 bots, 8 new per day, 2 min between);
+  limits you never changed are upgraded once.
+- The Full permission preset no longer asks: commands, connector side effects and the Bot's
+  own local-computer steps run without cards. Sensitive targets still ask.
+- Bots can sign in to websites on their own. Save a login in Settings > Computer > Saved
+  logins, or let a Bot ask you once with a secure field. OpenBot types it into the virtual
+  machine; the Bot and the AI models never see the password.
+- A Bot whose computer is the virtual machine only can no longer open browsers on your own
+  computer.
+- OpenBot starts Docker Desktop for you when it isn't running, and says plainly what to do
+  if it can't. The virtual desktop no longer crashes on a failed start and recovers after
+  an unclean stop (this needs the new desktop image, published with this release).
+- A turn that stops at its step limit now says so and how to continue (limit raised from 50
+  to 200 steps), and Codex conversations survive an app restart.
+
 ## 0.1.7 — 2026-09-29
 
 - iPhone push notifications: OpenBot sends approval requests, questions, replies and

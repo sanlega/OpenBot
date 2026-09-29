@@ -1,7 +1,7 @@
 {
   "name": "openbot",
   "private": true,
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "OpenBot: a self-hosted, messenger-style desktop app for managing a roster of AI Bots on Claude Code / Codex, led by a Chief of Staff and Jev.",
   "license": "MIT",
   "engines": {
