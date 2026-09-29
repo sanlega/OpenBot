@@ -132,6 +132,39 @@ describe("built-in denies for OpenBot's and the engines' own secrets", () => {
     expect(deny("cd ~/.openbot/workspace && git status")).toBeUndefined();
   });
 
+  // The engines' requests reach the broker as JSON, which doubles every backslash of a Windows path.
+  const inJson = (path: string) =>
+    builtinDenyReason({
+      botId: "b",
+      chainId: "c",
+      kind: "tool",
+      action: "shell",
+      summary: "",
+      detail: JSON.stringify({ cwd: path }),
+      args: { cwd: path, file_path: path, paths: [path] },
+    });
+
+  it("lets a Bot use its own workspace and uploads when the path is JSON-encoded on Windows", () => {
+    const home = String.raw`C:\Users\someone\.openbot`;
+    expect(inJson(String.raw`${home}\workspace`)).toBeUndefined();
+    expect(inJson(String.raw`${home}\workspace\site\index.html`)).toBeUndefined();
+    expect(inJson(String.raw`${home}\uploads\photo.png`)).toBeUndefined();
+  });
+
+  it("still denies OpenBot's own files when the path is JSON-encoded on Windows", () => {
+    const home = String.raw`C:\Users\someone\.openbot`;
+    for (const path of [
+      String.raw`${home}\openbot.db`,
+      String.raw`${home}\vault.bin`,
+      String.raw`${home}\sessions\bot_1.token`,
+      String.raw`${home}\codex-home\auth.json`,
+      String.raw`${home}\logs\threads\x.ndjson`,
+      String.raw`${home}\workspace-evil\x`,
+    ]) {
+      expect(inJson(path), path).toMatch(/credential path|database or vault/);
+    }
+  });
+
   it("does not deny ordinary commands", () => {
     expect(deny("git status && ls sessions")).toBeUndefined();
     expect(deny("cat notes/sessions.md")).toBeUndefined();
