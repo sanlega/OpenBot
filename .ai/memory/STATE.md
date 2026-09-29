@@ -9,20 +9,24 @@ _Last updated: 2026-09-29 by Claude_
   line and the engine-continuity routing hint. `main`'s CI had one red job
   (`test (ubuntu-latest)`) that was only the known flaky Unhandled Rejection with all
   843 tests passing (see LESSONS.md).
-- **v0.1.2 released and installed; iPhone pairing over LAN verified live (2026-09-29)**:
-  tag `v0.1.2` (release workflow green, checksum verified). It ports the native iPhone
-  protocol (sealed QR pairing, sealed device proofs, scoped E2E) from the
-  `sanlega/openbot-ios` checkout onto this host, plus the QR-link scheme fix (`http://`
-  when only LAN URLs exist). The owner scanned a fresh QR from the installed Windows
-  app with the iPhone app and connected. Root cause of the earlier `invalid_request`:
-  v0.1.0/0.1.1 only had the old clear pairing/unscoped framing. Plan handed to that
-  repo: `openbot-ios/.ai/memory/plans/2026-09-29-windows-host-native-pairing.md`.
-  Still open (not fixed): (a) any 401 on the browser UI over the LAN URL shows "Can't
-  reach OpenBot…Retrying" instead of an "unpaired device" screen (use
-  `http://127.0.0.1:4577/app` on the PC); (b) the harness sometimes logs a `127.0.0.1`
-  start ~5 s before the `0.0.0.0` one although `lanAccess` is true — suspect a torn
-  read of `network.json` (non-atomic write); (c) E2E streams are stateful: check they
-  recover after a harness restart while the phone stays connected.
+- **v0.1.5 released and installed; remote access verified live (2026-09-29)**: the owner
+  paired the iPhone app over LAN (v0.1.2 ported the native sealed pairing + scoped E2E
+  from `sanlega/openbot-ios`; plan there:
+  `openbot-ios/.ai/memory/plans/2026-09-29-windows-host-native-pairing.md`, T1-T4 done) and
+  then through a Cloudflare Tunnel. Releases this session: v0.1.1 (spawn-gate/routine budget
+  fixes), v0.1.2 (native pairing protocol + `http://` QR link on LAN), v0.1.3 (real
+  Cloudflare tunnel tokens are base64 JSON, not dotted JWTs), v0.1.4 (`cloudflared` is
+  downloaded on first use into `~/.openbot/bin`, pinned version + SHA-256, PATH copy
+  preferred), v0.1.5 (tunnel public hostname in the QR: parsed from cloudflared's
+  "Updated to new configuration" log, or entered in Devices > Remote access, stored in
+  `network.json`; `network.json` is now written atomically and merged).
+  Still open: (a) a 401 on the browser UI over the LAN URL shows "Can't reach
+  OpenBot…Retrying" instead of an "unpaired device" screen; (b) confirm E2E streams recover
+  after a harness restart while the phone stays connected; (c) the tunnel token is not
+  persisted, so the tunnel stops when the app restarts (re-paste it); (d) `cloudflared`
+  download is untested on macOS/Linux (hashes come from Cloudflare's release digests;
+  macOS uses `tar`); (e) a tag push sometimes fires two Release runs, the second fails with
+  "release already exists" (harmless).
 - **Round 2 of live testing (2026-09-29), fixed two more real bugs found this way**:
   - **Spawn gate near-miss**: asked the Chief of Staff to run two open-ended,
     recurring-sounding tasks without telling it to spawn bots. Jev answered
