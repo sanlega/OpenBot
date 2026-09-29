@@ -8,6 +8,7 @@ import type {
   Screen,
 } from "@openbot/contracts";
 import { type ControlDaemonClient, HttpControlDaemonClient } from "./control-daemon.js";
+import { type DockerLauncherDeps, ensureDockerEngine } from "./docker-launcher.js";
 import { ScreenManager } from "./screen-manager.js";
 
 export interface DockerEngine {
@@ -29,6 +30,8 @@ export interface DockerProviderOptions {
   liveViewBaseUrl?: string;
   controlClient?: ControlDaemonClient;
   idleStopMs?: number;
+  /** How Docker Desktop is started when it isn't running; tests replace it. */
+  launcher?: DockerLauncherDeps;
 }
 
 /** D-020: distributed via GHCR; local `docker build` is a dev-checkout-only fallback (see `image-manager.ts`). */
@@ -72,7 +75,8 @@ export class DockerProvider implements ComputerProvider {
     }
 
     const docker = await this.resolveDocker();
-    await docker.ping();
+    // Starts Docker Desktop if it isn't running, or throws a message a person can act on.
+    await ensureDockerEngine(() => docker.ping(), this.options.launcher);
 
     const name = this.options.containerName ?? DEFAULT_CONTAINER;
     const existing = await docker.listContainers({ all: true });

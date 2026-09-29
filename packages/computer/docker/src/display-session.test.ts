@@ -102,3 +102,23 @@ describe("DisplaySessionManager", () => {
     expect(navigations).toEqual(["https://www.youtube.com/results?search_query=sanlega"]);
   });
 });
+
+describe("DisplaySessionManager when a display fails to start", () => {
+  it("forgets the failed display so the next request starts a fresh one", async () => {
+    let starts = 0;
+    const sessions = new DisplaySessionManager({
+      shell: { run: async () => ({ code: 0, stdout: "", stderr: "" }) },
+      startDisplay: async () => {
+        starts += 1;
+        if (starts === 1) throw new Error("VNC server on port 5901 did not become ready");
+      },
+      observePage: async () => searchPage,
+    });
+
+    await expect(sessions.observe("bot_1")).rejects.toThrow(/VNC server/);
+    // The same rejected start must not be served again: a second call retries.
+    const observation = await sessions.observe("bot_1");
+    expect(observation.title).toBe("YouTube");
+    expect(starts).toBe(2);
+  });
+});

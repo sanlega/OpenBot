@@ -58,6 +58,11 @@ function parseBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   });
 }
 
+// Nothing an individual request does may crash the desktop for every Bot.
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandled rejection:", reason);
+});
+
 createServer(async (req, res) => {
   const auth = req.headers.authorization ?? "";
   if (auth !== `Bearer ${TOKEN}`) return unauthorized(res);
@@ -106,7 +111,16 @@ createServer(async (req, res) => {
       res.end("botId is required");
       return;
     }
-    const { display, vncPort } = await sessions.ensureReady(botId);
+    let ready: { display: number; vncPort: number };
+    try {
+      ready = await sessions.ensureReady(botId);
+    } catch (error) {
+      // A failed display start must answer this request, not take the whole daemon down.
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, reason: String(error) }));
+      return;
+    }
+    const { display, vncPort } = ready;
     const liveToken = randomBytes(24).toString("hex");
     const expires = Date.now() + 15 * 60_000;
     for (const [token, entry] of liveTokens) {

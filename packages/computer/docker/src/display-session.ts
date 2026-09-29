@@ -155,6 +155,10 @@ export class DisplaySessionManager {
       session.ready = this.options.startDisplay
         ? this.options.startDisplay(session.display, session.debugPort, session.vncPort)
         : this.ensureDisplayRunning(session);
+      // A display that failed to start must not stay "assigned but broken": drop it so the next
+      // request starts a fresh one instead of failing on the same rejected promise forever.
+      const failed = session;
+      failed.ready.catch(() => this.discard(botId, failed));
     }
     session.lastUsed = Date.now();
     return session;
@@ -297,9 +301,26 @@ export class DisplaySessionManager {
     return { ok: true };
   }
 
+  private discard(botId: string, session: SessionState): void {
+    if (this.sessions.get(botId) !== session) return;
+    for (const child of session.processes) {
+      if (child.pid) {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          // Already gone.
+        }
+      }
+    }
+    this.sessions.delete(botId);
+  }
+
   private async ensureDisplayRunning(session: SessionState): Promise<void> {
     const displayStr = `:${session.display}`;
     const env = { ...process.env, DISPLAY: displayStr };
+    // A container that was stopped or crashed keeps its old X lock and browser profile lock,
+    // which make Xvfb and Chromium refuse to start (and VNC never comes up).
+    await removeStaleDesktopLocks(session.display);
     session.processes.push(
       spawn("Xvfb", [displayStr, "-screen", "0", "1600x1000x24"], {
         detached: true,
@@ -353,6 +374,19 @@ function center(bounds: { x: number; y: number; width: number; height: number })
     x: bounds.x + Math.floor(bounds.width / 2),
     y: bounds.y + Math.floor(bounds.height / 2),
   };
+}
+
+async function removeStaleDesktopLocks(display: number): Promise<void> {
+  const { rm } = await import("node:fs/promises");
+  for (const path of [
+    `/tmp/.X${display}-lock`,
+    `/tmp/.X11-unix/X${display}`,
+    `/tmp/openbot-chrome-${display}/SingletonLock`,
+    `/tmp/openbot-chrome-${display}/SingletonSocket`,
+    `/tmp/openbot-chrome-${display}/SingletonCookie`,
+  ]) {
+    await rm(path, { force: true }).catch(() => undefined);
+  }
 }
 
 async function waitForDisplay(display: number, timeoutMs = 15_000): Promise<void> {
