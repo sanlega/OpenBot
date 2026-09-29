@@ -14,20 +14,21 @@ _Last updated: 2026-09-29 by Claude_
      `https://<host>/app#pair=…` even for a LAN-only harness that serves plain HTTP, so
      Safari got "invalid request". `PairingService.buildQrUrl` now takes a scheme and
      `/api/devices/pair/qr` passes `http` unless a URL is `https://` (test added).
-  2. **Not implemented — the real blocker**: the UI never reads `#pair=…`; there is no
-     phone-side flow (device X25519 key, `POST /api/devices/pair/complete`, store the
-     token, E2E framing). Only the QR-display screen exists (`DevicesRemoteView`/
-     `PairingQr`). Server routes exist in `packages/remote/src/integration.ts`. Also
-     unverified: over plain-HTTP LAN `crypto.subtle` is unavailable in Safari (insecure
-     context), which may block key generation — decide how (WebCrypto vs a JS X25519).
+  2. **CORRECTION**: the phone-side flow is NOT missing overall — the native iPhone app
+     lives in the separate public repo `sanlega/openbot-ios` (sealed QR pairing, scoped
+     E2E). The real blocker is that this repo's host (v0.1.1) still has the OLD clear
+     pairing/unscoped framing (hence `invalid_request` from the app). The ported host
+     commit exists only in a sibling checkout, unpushed. Handoff plan written there:
+     `openbot-ios/.ai/memory/plans/2026-09-29-windows-host-native-pairing.md`. Do not
+     build a PWA phone flow here.
   3. UX bug: any 401 from the API (e.g. opening `http://<lan-ip>:4577/app` even on the
      same PC — non-loopback requests need a device token) renders "Can't reach
      OpenBot…Retrying" instead of an "unpaired device, scan the QR" screen.
   4. Startup oddity: the harness sometimes logs a `127.0.0.1` start ~5 s before the
      `0.0.0.0` one although `network.json` has `lanAccess: true`; suspect a torn read of
      `network.json` (non-atomic write + `readNetworkPrefs` falling back to `false`).
-  Next: `plan-feature` for the phone pairing flow + unpaired-device screen; the owner
-  has not yet approved cutting a v0.1.2. Workaround on the PC: use
+  Next: the other agent ports the host protocol (see plan above); owner has not yet
+  approved cutting a v0.1.2. Workaround on the PC: use
   `http://127.0.0.1:4577/app` or the desktop window.
 - **Round 2 of live testing (2026-09-29), fixed two more real bugs found this way**:
   - **Spawn gate near-miss**: asked the Chief of Staff to run two open-ended,
