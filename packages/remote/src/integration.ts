@@ -214,8 +214,10 @@ function registerPairingRoutes(app: FastifyInstance, ctx: RemoteCoreContext): vo
     for (const ip of lan.slice(1)) urls.splice(1, 0, `http://${ip}:${ctx.config.port}`);
     const session = ctx.remote!.pairing.createSession(urls);
     const host = primaryPairingHost(urls);
+    // A LAN-only harness serves plain HTTP; an https:// link makes the phone's TLS hello hit it ("invalid request").
+    const scheme = urls.some((url) => url.startsWith("https://")) ? "https" : "http";
     return {
-      qrUrl: ctx.remote!.pairing.buildQrUrl(host, session),
+      qrUrl: ctx.remote!.pairing.buildQrUrl(host, session, scheme),
       hostPub: session.hostPub,
       pairSecret: session.pairSecret,
       urls: session.urls,

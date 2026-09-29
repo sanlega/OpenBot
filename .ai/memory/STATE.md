@@ -3,6 +3,32 @@
 _Last updated: 2026-09-29 by Claude_
 
 ## In progress
+- **v0.1.1 released and installed on the Windows dev machine (2026-09-29)**: tag `v0.1.1`
+  (release workflow green, all installers + `SHA256SUMS` published) — carries the
+  spawn-gate near-miss fix, the opt-in routine budget switch, the silent-turn fallback
+  line and the engine-continuity routing hint. `main`'s CI had one red job
+  (`test (ubuntu-latest)`) that was only the known flaky Unhandled Rejection with all
+  843 tests passing (see LESSONS.md).
+- **Phone pairing over LAN does not work yet (found 2026-09-29, live)**:
+  1. **Fixed locally, uncommitted-to-remote/unreleased**: the pairing QR link was always
+     `https://<host>/app#pair=…` even for a LAN-only harness that serves plain HTTP, so
+     Safari got "invalid request". `PairingService.buildQrUrl` now takes a scheme and
+     `/api/devices/pair/qr` passes `http` unless a URL is `https://` (test added).
+  2. **Not implemented — the real blocker**: the UI never reads `#pair=…`; there is no
+     phone-side flow (device X25519 key, `POST /api/devices/pair/complete`, store the
+     token, E2E framing). Only the QR-display screen exists (`DevicesRemoteView`/
+     `PairingQr`). Server routes exist in `packages/remote/src/integration.ts`. Also
+     unverified: over plain-HTTP LAN `crypto.subtle` is unavailable in Safari (insecure
+     context), which may block key generation — decide how (WebCrypto vs a JS X25519).
+  3. UX bug: any 401 from the API (e.g. opening `http://<lan-ip>:4577/app` even on the
+     same PC — non-loopback requests need a device token) renders "Can't reach
+     OpenBot…Retrying" instead of an "unpaired device, scan the QR" screen.
+  4. Startup oddity: the harness sometimes logs a `127.0.0.1` start ~5 s before the
+     `0.0.0.0` one although `network.json` has `lanAccess: true`; suspect a torn read of
+     `network.json` (non-atomic write + `readNetworkPrefs` falling back to `false`).
+  Next: `plan-feature` for the phone pairing flow + unpaired-device screen; the owner
+  has not yet approved cutting a v0.1.2. Workaround on the PC: use
+  `http://127.0.0.1:4577/app` or the desktop window.
 - **Round 2 of live testing (2026-09-29), fixed two more real bugs found this way**:
   - **Spawn gate near-miss**: asked the Chief of Staff to run two open-ended,
     recurring-sounding tasks without telling it to spawn bots. Jev answered
