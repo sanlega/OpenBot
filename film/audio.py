@@ -12,7 +12,8 @@ from scipy.io import wavfile
 import librosa
 
 SR = 48000
-BPM = 120.0
+K = float(os.environ.get('FILM_SLOW', '1.5'))   # global slow-down vs the 120 BPM design grid
+BPM = 120.0 / K
 BEAT = 60.0 / BPM          # 0.5 s
 BAR = 4 * BEAT             # 2.0 s
 DUR = 16 * BAR             # 32.0 s

@@ -5,7 +5,7 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 
 const FPS = 60, SUB = 4, SHUTTER = 0.5;               // shutter = fraction of a frame the "camera" is open
-const DUR = 32.0;
+const DUR = JSON.parse(fs.readFileSync('build/cues.json')).duration;
 const total = Math.round(DUR * FPS);
 const [a0, a1] = [Number(process.argv[2] ?? 0), Number(process.argv[3] ?? total)];
 const workers = Number(process.env.WORKERS ?? 4);

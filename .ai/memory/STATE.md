@@ -348,7 +348,7 @@ _Last updated: 2026-09-29 by Claude_
   routine editing and remote pairing.
 
 ## Product film (Claude, 2026-09-29)
-- `film/` holds a deterministic 32 s, 1920x1080@60 product film (HTML `window.seek(t)` scene built from the real
-  UI tokens + Python-synthesized 120 BPM track with measured cue peaks). Rebuild: `python3 audio.py && node gen-assets.mjs
+- `film/` holds a deterministic 48 s (design timeline 32 s, slowed 1.5x via `FILM_SLOW`, audio at 80 BPM), 1920x1080@60 product film (HTML `window.seek(t)` scene built from the real
+  UI tokens + Python-synthesized track (design grid 120 BPM) with measured cue peaks). Rebuild: `python3 audio.py && node gen-assets.mjs
   && node build.mjs && FFMPEG=<ffmpeg> node render.mjs` then mux `build/track.wav`. Output `film/openbot-film.mp4` is untracked.
 - Real accent is periwinkle `#6e8bff` (not purple); competitor pages in the film are fictional.

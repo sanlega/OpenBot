@@ -531,5 +531,6 @@ function caption(t) {
   ], { bl: 4, ex: .07, en: .12 });
 }
 
-window.seek = t => { render(t); return t; };
+window.seek = t => { render(t / K); return t; };
+window.__duration = CD.duration;
 document.fonts.ready.then(() => { render(0); window.__ready = true; });

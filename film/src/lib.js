@@ -2,7 +2,8 @@
 const AS = window.__ASSETS, CD = window.__CUES;
 const BEAT = 0.5, BAR = 2.0;
 const Bt = (bar, beat = 1) => (bar - 1) * BAR + (beat - 1) * BEAT;
-const CUE = {}; for (const c of CD.cues) CUE[c.name] = c.peak;   // measured transient peaks (s)
+const K = CD.duration / 32;                                        // slow-down factor vs the design timeline
+const CUE = {}; for (const c of CD.cues) CUE[c.name] = c.peak / K;   // measured transient peaks (s)
 const Q = n => { if (!(n in CUE)) throw new Error('cue ' + n); return CUE[n]; };
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
 const lerp = (a, b, k) => a + (b - a) * k;
