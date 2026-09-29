@@ -2,7 +2,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { newId } from "@openbot/contracts";
-import { lanAddresses, readNetworkPrefs, writeNetworkPrefs } from "./network-prefs.js";
+import {
+  lanAddresses,
+  normalizeHostname,
+  readNetworkPrefs,
+  writeNetworkPrefs,
+} from "./network-prefs.js";
 import type { DeviceRole } from "@openbot/contracts";
 import { E2E_CONTENT_TYPE } from "./framing.js";
 import { computeSharedSecret, deriveFramingKey, openSecret, sealSecret } from "./crypto.js";
@@ -84,6 +89,7 @@ export async function attachRemoteServices(
       openbotHome: ctx.config.openbotHome,
     }));
   ctx.remote = remote;
+  remote.cloudflare.setManualHostname(readNetworkPrefs(ctx.config.openbotHome).cloudflareHostname);
   ctx.validators.tailscale = (value) => remote.tailscale.validateKey(value);
   ctx.validators.cloudflare = (value) => remote.cloudflare.validateToken(value);
   return remote;
@@ -213,6 +219,25 @@ function registerPairingRoutes(app: FastifyInstance, ctx: RemoteCoreContext): vo
   app.get("/api/remote/lan", async (request, reply) => {
     if (!requireOwnerDevice(request, reply)) return;
     return lanState();
+  });
+
+  // The tunnel's public hostname: cloudflared doesn't reliably print it, and the pairing QR
+  // needs it. Empty clears it.
+  app.put("/api/remote/cloudflare/hostname", async (request, reply) => {
+    if (!requireOwnerDevice(request, reply)) return;
+    const raw = (request.body as { hostname?: unknown } | undefined)?.hostname;
+    if (typeof raw !== "string") return reply.code(400).send({ error: "hostname_required" });
+    const hostname = raw.trim() ? normalizeHostname(raw) : undefined;
+    if (raw.trim() && !hostname) {
+      return reply.code(400).send({
+        error: "invalid_hostname",
+        reason: "enter the tunnel's public hostname, like openbot.example.com",
+      });
+    }
+    await writeNetworkPrefs(ctx.config.openbotHome, { cloudflareHostname: hostname });
+    ctx.remote!.cloudflare.setManualHostname(hostname);
+    await ctx.eventBus.publish({ type: "remote.status", payload: { cloudflare: { hostname } } });
+    return { hostname: hostname ?? null };
   });
 
   app.put("/api/remote/lan", async (request, reply) => {

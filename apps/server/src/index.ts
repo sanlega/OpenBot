@@ -6,7 +6,7 @@ import {
   type CreateCoreContextOptions,
 } from "@openbot/core";
 
-export const SERVER_VERSION = "0.1.4";
+export const SERVER_VERSION = "0.1.5";
 
 /**
  * Boots one Client API server backed by a fresh `CoreContext` (plan §5 WS1:

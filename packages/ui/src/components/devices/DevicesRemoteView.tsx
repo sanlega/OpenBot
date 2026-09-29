@@ -361,7 +361,22 @@ function RemoteAccess({
   const tsMissing = ts?.installed === false;
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState("");
+  const [hostnameDraft, setHostnameDraft] = useState<string | null>(null);
   const [error, setError] = useState<{ which: "ts" | "cf"; text: string } | null>(null);
+
+  const saveHostname = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await transport.put("/api/remote/cloudflare/hostname", { hostname: hostnameDraft ?? "" });
+      setHostnameDraft(null);
+      onChanged();
+    } catch (err) {
+      setError({ which: "cf", text: errorText(err, "Couldn't save the hostname.") });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const toggleTailscale = async () => {
     setBusy(true);
@@ -471,6 +486,40 @@ function RemoteAccess({
               : "A public URL through your own Cloudflare account. Paste a tunnel token to start it."
           }
         />
+        {cfOn ? (
+          <form
+            className="set-row set-key-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (hostnameDraft !== null && !busy) void saveHostname();
+            }}
+          >
+            <div className="set-secret">
+              <input
+                type="text"
+                placeholder="Public hostname, e.g. openbot.example.com"
+                aria-label="Tunnel public hostname"
+                autoComplete="off"
+                spellCheck={false}
+                value={hostnameDraft ?? cf?.hostname ?? ""}
+                onChange={(e) => setHostnameDraft(e.target.value)}
+              />
+            </div>
+            <button
+              type="submit"
+              className="btn btn-secondary"
+              disabled={busy || hostnameDraft === null}
+            >
+              Save
+            </button>
+          </form>
+        ) : null}
+        {cfOn && !cf?.hostname ? (
+          <div className="set-row-note">
+            OpenBot couldn't tell which address your tunnel serves. Enter it above so the phone QR
+            includes it.
+          </div>
+        ) : null}
         {cfOn && cf?.warning ? <div className="set-row-note">{cf.warning}</div> : null}
         {!cfOn ? (
           <form

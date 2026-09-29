@@ -42,10 +42,28 @@ export function normalizeTunnelToken(input: string): string | undefined {
   return candidate.split(".").length >= 3 ? candidate : undefined;
 }
 
+/**
+ * cloudflared logs a remotely-managed tunnel's routes as
+ * `Updated to new configuration config="{\"ingress\":[{\"hostname\":\"x.example.com\",...`
+ * and prints `https://<random>.trycloudflare.com` for quick tunnels.
+ */
+export function hostnameFromTunnelLog(text: string): string | undefined {
+  const quick = /https:\/\/([a-z0-9-]+\.trycloudflare\.com)/i.exec(text);
+  if (quick) return quick[1];
+  if (!/configuration/i.test(text)) return undefined;
+  return /"hostname\\*":\\*"([^"\\]+)/.exec(text)?.[1];
+}
+
 export class CloudflareManager {
   private child: ChildProcess | undefined;
-  private lastHostname: string | undefined;
+  private detectedHostname: string | undefined;
+  /** Entered by the owner; wins over whatever the logs revealed. */
+  private manualHostname: string | undefined;
   private accessConfigured = false;
+
+  private get lastHostname(): string | undefined {
+    return this.manualHostname ?? this.detectedHostname;
+  }
 
   constructor(
     private readonly spawnFn: SpawnFn = defaultSpawn,
@@ -93,10 +111,7 @@ export class CloudflareManager {
 
       child.stdout?.on("data", (chunk: Buffer) => {
         const text = chunk.toString("utf8");
-        const hostnameMatch = /https:\/\/([^\s]+)/.exec(text);
-        if (hostnameMatch) {
-          this.lastHostname = hostnameMatch[1];
-        }
+        this.detectedHostname = hostnameFromTunnelLog(text) ?? this.detectedHostname;
         if (/access/i.test(text) && /policy|jwt|authenticated/i.test(text)) {
           this.accessConfigured = true;
         }
@@ -117,9 +132,7 @@ export class CloudflareManager {
         if (/ERR/i.test(text) && !settled) {
           finish({ ok: false, reason: text.trim() });
         }
-        if (/https:\/\/[^\s]+/.test(text)) {
-          this.lastHostname = /https:\/\/([^\s]+)/.exec(text)?.[1];
-        }
+        this.detectedHostname = hostnameFromTunnelLog(text) ?? this.detectedHostname;
       });
 
       child.on("error", (error) => {
@@ -152,8 +165,13 @@ export class CloudflareManager {
     this.accessConfigured = configured;
   }
 
-  /** Test hook: inject hostname without running cloudflared. */
+  /** The owner-entered public hostname (kept in network prefs); `undefined` clears it. */
+  setManualHostname(hostname: string | undefined): void {
+    this.manualHostname = hostname;
+  }
+
+  /** Test hook: inject a detected hostname without running cloudflared. */
   setHostname(hostname: string): void {
-    this.lastHostname = hostname;
+    this.detectedHostname = hostname;
   }
 }

@@ -40,6 +40,7 @@ export {
 export {
   isPrivateIPv4,
   lanAddresses,
+  normalizeHostname,
   readNetworkPrefs,
   writeNetworkPrefs,
   type NetworkPrefs,

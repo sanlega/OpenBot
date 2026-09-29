@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5 — 2026-09-29
+
+- Cloudflare Tunnel: the phone pairing QR now includes your tunnel's public address.
+  OpenBot reads it from the tunnel's configuration when it can, and Devices > Remote
+  access has a "Public hostname" field to enter it yourself (saved across restarts).
+- Fixed a rare startup race where OpenBot could read a half-written network settings
+  file and briefly listen on this computer only.
+
 ## 0.1.4 — 2026-09-29
 
 - Cloudflare Tunnel now works out of the box: if `cloudflared` isn't installed,
