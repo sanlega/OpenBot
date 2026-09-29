@@ -9,27 +9,20 @@ _Last updated: 2026-09-29 by Claude_
   line and the engine-continuity routing hint. `main`'s CI had one red job
   (`test (ubuntu-latest)`) that was only the known flaky Unhandled Rejection with all
   843 tests passing (see LESSONS.md).
-- **Phone pairing over LAN does not work yet (found 2026-09-29, live)**:
-  1. **Fixed locally, uncommitted-to-remote/unreleased**: the pairing QR link was always
-     `https://<host>/app#pair=…` even for a LAN-only harness that serves plain HTTP, so
-     Safari got "invalid request". `PairingService.buildQrUrl` now takes a scheme and
-     `/api/devices/pair/qr` passes `http` unless a URL is `https://` (test added).
-  2. **CORRECTION**: the phone-side flow is NOT missing overall — the native iPhone app
-     lives in the separate public repo `sanlega/openbot-ios` (sealed QR pairing, scoped
-     E2E). The real blocker is that this repo's host (v0.1.1) still has the OLD clear
-     pairing/unscoped framing (hence `invalid_request` from the app). The ported host
-     commit exists only in a sibling checkout, unpushed. Handoff plan written there:
-     `openbot-ios/.ai/memory/plans/2026-09-29-windows-host-native-pairing.md`. Do not
-     build a PWA phone flow here.
-  3. UX bug: any 401 from the API (e.g. opening `http://<lan-ip>:4577/app` even on the
-     same PC — non-loopback requests need a device token) renders "Can't reach
-     OpenBot…Retrying" instead of an "unpaired device, scan the QR" screen.
-  4. Startup oddity: the harness sometimes logs a `127.0.0.1` start ~5 s before the
-     `0.0.0.0` one although `network.json` has `lanAccess: true`; suspect a torn read of
-     `network.json` (non-atomic write + `readNetworkPrefs` falling back to `false`).
-  Next: the other agent ports the host protocol (see plan above); owner has not yet
-  approved cutting a v0.1.2. Workaround on the PC: use
-  `http://127.0.0.1:4577/app` or the desktop window.
+- **v0.1.2 released and installed; iPhone pairing over LAN verified live (2026-09-29)**:
+  tag `v0.1.2` (release workflow green, checksum verified). It ports the native iPhone
+  protocol (sealed QR pairing, sealed device proofs, scoped E2E) from the
+  `sanlega/openbot-ios` checkout onto this host, plus the QR-link scheme fix (`http://`
+  when only LAN URLs exist). The owner scanned a fresh QR from the installed Windows
+  app with the iPhone app and connected. Root cause of the earlier `invalid_request`:
+  v0.1.0/0.1.1 only had the old clear pairing/unscoped framing. Plan handed to that
+  repo: `openbot-ios/.ai/memory/plans/2026-09-29-windows-host-native-pairing.md`.
+  Still open (not fixed): (a) any 401 on the browser UI over the LAN URL shows "Can't
+  reach OpenBot…Retrying" instead of an "unpaired device" screen (use
+  `http://127.0.0.1:4577/app` on the PC); (b) the harness sometimes logs a `127.0.0.1`
+  start ~5 s before the `0.0.0.0` one although `lanAccess` is true — suspect a torn
+  read of `network.json` (non-atomic write); (c) E2E streams are stateful: check they
+  recover after a harness restart while the phone stays connected.
 - **Round 2 of live testing (2026-09-29), fixed two more real bugs found this way**:
   - **Spawn gate near-miss**: asked the Chief of Staff to run two open-ended,
     recurring-sounding tasks without telling it to spawn bots. Jev answered
