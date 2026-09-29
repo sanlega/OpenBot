@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 — 2026-09-29
+
+- Pairing with the native iPhone app now works with the desktop app: the host speaks
+  the sealed QR pairing and per-device end-to-end streams the iPhone app uses (0.1.1
+  and earlier only understood the old format, so the app failed with
+  `invalid_request`).
+- The pairing link for a Wi-Fi-only setup now uses `http://` instead of `https://`.
+
 ## 0.1.1 — 2026-09-29
 
 - Chief of Staff spawn decisions: when Jev is very confident a task needs a new Bot,
