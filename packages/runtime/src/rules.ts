@@ -24,6 +24,19 @@ const DB_OR_VAULT_RE = /(openbot\.db|vault\.bin|\.openbot[/\\](db|vault))/i;
 const SUDO_RE = /\bsudo\b/i;
 const RM_RF_RE = /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\b/i;
 
+/** Browser-automation tools (Playwright/Puppeteer MCP servers, `browser_*` tools) run a browser on the host. */
+const HOST_BROWSER_TOOL_RE = /playwright|puppeteer|(^|[^a-z])browser_[a-z_]+/i;
+/** A shell command that opens a browser on the host: `start https://…`, `open -a`, `chrome.exe …`. */
+const OPEN_BROWSER_CMD_RE =
+  /(^|[;&|]\s*)(start|open|xdg-open|start-process|explorer(\.exe)?)\s+["']?(https?:|chrome|msedge|firefox|brave)|(^|[;&|]\s*)"[^"]*[\\/](chrome|msedge|firefox|brave)(\.exe)?"|(^|[;&|]\s*)([^\s"]*[\\/])?(chrome|msedge|firefox|brave)(\.exe)?(\s|$)/i;
+
+/** True when the action would drive a browser on the user's own computer instead of the VM. */
+export function usesHostBrowser(req: BrokerRequest): boolean {
+  if (HOST_BROWSER_TOOL_RE.test(`${req.action} ${req.summary}`)) return true;
+  const command = (req.args as { command?: unknown } | undefined)?.command;
+  return typeof command === "string" && OPEN_BROWSER_CMD_RE.test(command);
+}
+
 /** plan §5 WS2: "sensitive computer targets" — matched against a computer action's observed element label. */
 export const SENSITIVE_COMPUTER_TARGET_RE = /pay|buy|send|delete|transfer|submit order|confirm/i;
 
@@ -40,6 +53,9 @@ function haystackOf(req: BrokerRequest): string {
  */
 export function builtinDenyReason(req: BrokerRequest): string | undefined {
   const haystack = haystackOf(req);
+  if (req.computerAccess && req.computerAccess !== "docker+local" && usesHostBrowser(req)) {
+    return "uses this computer's browser; this Bot's computer is the virtual machine (use computer_task)";
+  }
   if (CREDENTIAL_PATH_RE.test(haystack)) return "targets a credential path";
   if (DB_OR_VAULT_RE.test(haystack)) return "targets the OpenBot database or vault";
   if (SUDO_RE.test(haystack)) return "invokes sudo";
@@ -55,7 +71,10 @@ export function builtinDenyReason(req: BrokerRequest): string | undefined {
  * `Rule`s so they participate in the same deny>ask>allow merge as user/preset
  * rules, but nothing outranks `ask` except an explicit `deny` — never `allow`.
  */
-export function builtinAskRules(req: BrokerRequest): Rule[] {
+export function builtinAskRules(
+  req: BrokerRequest,
+  preset?: "read_only" | "workspace_write" | "full",
+): Rule[] {
   const now = new Date().toISOString();
   const rules: Rule[] = [];
   if (
@@ -67,7 +86,9 @@ export function builtinAskRules(req: BrokerRequest): Rule[] {
       builtinRule("ask", `sensitive computer target: "${req.target}"`, { computerOp: "*" }, now),
     );
   }
-  if (req.kind === "connector_action" && req.sideEffect) {
+  // "Full" means the Bot doesn't ask: connector side effects and the Bot's own local-computer
+  // actions run without a card. Sensitive computer targets (Pay, Send, passwords) still ask.
+  if (req.kind === "connector_action" && req.sideEffect && preset !== "full") {
     rules.push(
       builtinRule(
         "ask",
@@ -79,7 +100,7 @@ export function builtinAskRules(req: BrokerRequest): Rule[] {
       ),
     );
   }
-  if (req.kind === "local_computer") {
+  if (req.kind === "local_computer" && preset !== "full") {
     rules.push(builtinRule("ask", "local-machine action (ask every time by default)", {}, now));
   }
   return rules;

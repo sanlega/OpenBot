@@ -103,7 +103,7 @@ export class PermissionBroker {
     }
 
     const rules = [
-      ...builtinAskRules(req),
+      ...builtinAskRules(req, preset),
       ...presetRules(preset),
       ...this.opts.ruleStore.list(req.botId),
     ];

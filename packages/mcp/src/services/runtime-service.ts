@@ -104,13 +104,21 @@ export class McpRuntimeServiceAdapter implements McpRuntimeService {
         kind: "tool",
         action: input.tool_name,
         args: (input.input ?? {}) as Record<string, unknown>,
+        computerAccess:
+          this.ctx.repos.bots.getById(session.botId)?.computer ?? session.bot.computer,
         ...classifyToolCall(input.tool_name, input.input, this.ctx.config.workspaceDir),
         summary: `Permission prompt: ${input.tool_name}`,
         detail: JSON.stringify(input.input ?? {}),
         // A connector tool: writes the catalogue marks (or does not know) need a card.
         ...this.ctx.connectorService?.classifyTool(session.botId, input.tool_name, input.input),
       },
-      { mode: session.mode, preset: session.bot.permissionPreset },
+      {
+        mode: session.mode,
+        // The Bot as it is now: a preset changed mid-turn applies to the very next action.
+        preset:
+          this.ctx.repos.bots.getById(session.botId)?.permissionPreset ??
+          session.bot.permissionPreset,
+      },
     );
     if (decision.outcome === "allow") {
       return allowed({ behavior: "allow" as const });

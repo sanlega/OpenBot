@@ -189,6 +189,40 @@ describe("PermissionBroker live evaluation, E6 order", () => {
     expect(decision.outcome).toBe("deny");
   });
 
+  it("under 'full', a shell command Jev rates minor but not none runs without a card", async () => {
+    // The real-world case: Jev band=auto, external_side_effect 0.35 for `git clone`.
+    const { broker, approvalStore } = setup(new StubRiskDecisionService(1.05, 0.95));
+    const decision = await broker.evaluate(
+      req({ action: "Bash", detail: '{"command":"git clone https://example.com/x.git"}' }),
+      { mode: "live", preset: "full" },
+    );
+    expect(decision.outcome).toBe("allow");
+    expect(approvalStore.listPending()).toHaveLength(0);
+  });
+
+  it("under 'full', connector side effects and local-computer actions do not raise a card", async () => {
+    const { broker } = setup(new StubRiskDecisionService(1.05, 0.95));
+    const connector = await broker.evaluate(
+      req({ kind: "connector_action", action: "browser_resize", sideEffect: true }),
+      { mode: "live", preset: "full" },
+    );
+    const local = await broker.evaluate(req({ kind: "local_computer", action: "click" }), {
+      mode: "live",
+      preset: "full",
+    });
+    expect(connector.outcome).toBe("allow");
+    expect(local.outcome).toBe("allow");
+  });
+
+  it("under 'workspace_write' those same actions still ask", async () => {
+    const { broker } = setup(new StubRiskDecisionService(1.05, 0.95));
+    const connector = await broker.evaluate(
+      req({ kind: "connector_action", action: "browser_resize", sideEffect: true }),
+      { mode: "live", preset: "workspace_write" },
+    );
+    expect(connector.outcome).toBe("ask");
+  });
+
   it("read_only preset denies a non-read action via its blanket rule", async () => {
     const { broker } = setup(new StubRiskDecisionService(0, 0.99));
     const decision = await broker.evaluate(req({ action: "write_file" }), {

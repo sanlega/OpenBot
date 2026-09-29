@@ -14,6 +14,8 @@ const READ_ONLY_TOOLS = new Set([
   "ToolSearch",
   "BashOutput",
   "ExitPlanMode",
+  // Asking the user is not an action: the question itself is the interaction.
+  "AskUserQuestion",
 ]);
 
 /** Engine tools that write one file, named by `file_path`/`notebook_path`/`path`. */

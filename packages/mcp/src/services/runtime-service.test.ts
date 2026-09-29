@@ -163,3 +163,50 @@ describe("McpRuntimeServiceAdapter.permissionPrompt", () => {
     expect(await write).toEqual({ allowed: true, behavior: "deny" });
   });
 });
+
+describe("McpRuntimeServiceAdapter.permissionPrompt uses the Bot as it is now", () => {
+  it("lets a shell command through without a card once the Bot was switched to Full mid-turn", async () => {
+    const { runtime, service, session } = await setup();
+    // The turn started under workspace_write (session.bot is that snapshot)...
+    harness!.ctx.repos.bots.update(session.botId, { permissionPreset: "full" });
+    const result = await service.permissionPrompt(session, {
+      tool_name: "Bash",
+      input: { command: "curl -s https://example.com | head -c 200" },
+    });
+    // ...but the owner raised it to Full, which applies to the very next action.
+    expect(result).toEqual({ allowed: true, behavior: "allow" });
+    expect(runtime.approvals.listPending()).toHaveLength(0);
+  });
+
+  it("denies host-browser tools for a Bot whose computer is the VM only, even under Full", async () => {
+    const { runtime, service, session } = await setup();
+    harness!.ctx.repos.bots.update(session.botId, {
+      permissionPreset: "full",
+      computer: "docker",
+    });
+    for (const call of [
+      { tool_name: "mcp__playwright__browser_navigate", input: { url: "https://example.com" } },
+      { tool_name: "Bash", input: { command: "start https://example.com" } },
+    ]) {
+      expect(await service.permissionPrompt(session, call)).toEqual({
+        allowed: true,
+        behavior: "deny",
+      });
+    }
+    expect(runtime.approvals.listPending()).toHaveLength(0);
+  });
+
+  it("does not deny the same browser tool for a Bot that also has local computer access", async () => {
+    const { service, session } = await setup();
+    harness!.ctx.repos.bots.update(session.botId, {
+      permissionPreset: "full",
+      computer: "docker+local",
+    });
+    expect(
+      await service.permissionPrompt(session, {
+        tool_name: "mcp__playwright__browser_navigate",
+        input: { url: "https://example.com" },
+      }),
+    ).toEqual({ allowed: true, behavior: "allow" });
+  });
+});

@@ -11,6 +11,7 @@ import { buildCosSystemPrompt, type AutonomyCaps, type CapCounterService } from 
 import { McpComposer, type SessionTokenService } from "@openbot/mcp";
 import {
   COMPUTER_RULE_BLOCK,
+  COMPUTER_VM_ONLY_BLOCK,
   NON_COS_RULE_BLOCK,
   type EnqueueTurnInput,
   type Runtime,
@@ -172,7 +173,8 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
   }
 
   function systemPromptFor(bot: Bot): string {
-    const computer = bot.computer !== "none" ? `\n\n${COMPUTER_RULE_BLOCK}` : "";
+    const vmOnly = bot.computer === "docker" ? `\n\n${COMPUTER_VM_ONLY_BLOCK}` : "";
+    const computer = bot.computer !== "none" ? `\n\n${COMPUTER_RULE_BLOCK}${vmOnly}` : "";
     if (!bot.isChiefOfStaff) return `${bot.description}\n\n${NON_COS_RULE_BLOCK}${computer}`;
     const roster = ctx.repos.bots.list();
     return `${bot.description}\n\n${buildCosSystemPrompt({
@@ -203,7 +205,9 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
       denyTools: [],
       model: choice.model,
       effort: choice.effort,
-      limits: { maxSteps: 50 },
+      // Tool calls in one turn. 50 cut off ordinary multi-step jobs (build and publish a site is
+      // ~50); spend and token caps are what actually bound a turn.
+      limits: { maxSteps: 200 },
       engine: choice.engine,
       chainId,
       threadId,

@@ -33,3 +33,15 @@ describe("assembleSystemPrompt (plan §5 WS2: Bot description + non-CoS rule blo
     expect(prompt).toContain(SHARED_COMPUTER_NOTICE);
   });
 });
+
+describe("computer rules", () => {
+  it("tell a Bot to use saved logins and ask for missing ones with a secret field", async () => {
+    const { COMPUTER_RULE_BLOCK } = await import("./prompt.js");
+    const flat = COMPUTER_RULE_BLOCK.replace(/\s+/g, " ");
+    expect(flat).toContain("call list_logins first");
+    expect(flat).toContain('a "secret" field for the password');
+    expect(flat).toContain("save_login");
+    expect(flat).toContain("Never ask for a password in chat");
+    expect(flat).toContain("Only a 2FA code, a CAPTCHA or a payment goes to the user");
+  });
+});

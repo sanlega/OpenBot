@@ -41,3 +41,9 @@ describe("classifyToolCall", () => {
     );
   });
 });
+
+describe("classifyToolCall for asking the user", () => {
+  it("treats AskUserQuestion as read-only: the question is the interaction, not an action", () => {
+    expect(classifyToolCall("AskUserQuestion", { questions: [] }).readOnly).toBe(true);
+  });
+});
