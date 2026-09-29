@@ -71,6 +71,8 @@ export async function bootstrapHarness(
 
   // One shared object: the gates and prompts read it on every call, and it is
   // refreshed in place when the user changes settings, so no restart is needed.
+  // Once, at start-up: not on every settings change, or the owner could never pick 6 / 2 / 30.
+  upgradeUntouchedSpawnCaps(ctx);
   const autonomyCaps = loadAutonomyCaps(ctx);
   ctx.eventBus.subscribe((event) => {
     if (event.type !== "setup.changed") return;
@@ -198,7 +200,6 @@ export function upgradeUntouchedSpawnCaps(ctx: CoreContext): void {
 }
 
 function loadAutonomyCaps(ctx: CoreContext): AutonomyCaps {
-  upgradeUntouchedSpawnCaps(ctx);
   const settings = ctx.repos.settings.get();
   if (!settings) return DEFAULT_AUTONOMY_CAPS;
   const caps = settings.caps;

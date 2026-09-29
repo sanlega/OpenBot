@@ -40,6 +40,10 @@ const BROWSER_BINARY_RE = new RegExp(
   String.raw`(^|[;&|(]\s*)("[^"]*[\\/](${BROWSER_NAMES})(\.exe)?"|([^\s"]*[\\/])?(${BROWSER_NAMES})(\.exe)?(\s|$))`,
   "i",
 );
+/** A quoted command handed to a shell: `sh -c "..."`, `powershell -Command '...'`, `cmd /c "..."`. */
+const WRAPPED_COMMAND_RE = /(?:-c|-command|\/c)\s+(["'])(.*?)\1/gi;
+/** Dev servers and opener tools that pop the host's browser open. */
+const OPEN_FLAG_RE = /\s--open(\s|=|$)|\bwslview\b|\binvoke-item\b|\bsensible-browser\b/i;
 /** Scripts that start a browser or an automation library from code. */
 const BROWSER_SCRIPT_RE =
   /webbrowser\.open|python3?\s+-m\s+webbrowser|\b(npx|pnpm\s+(exec|dlx)|yarn|bunx|node|python3?)\s+[^;&|]*\b(playwright|puppeteer|selenium)\b|\bplaywright\s+(test|codegen|install|open|screenshot|show-report)\b/i;
@@ -49,10 +53,14 @@ export function usesHostBrowser(req: BrokerRequest): boolean {
   if (HOST_BROWSER_TOOL_RE.test(`${req.action} ${req.summary}`)) return true;
   const command = (req.args as { command?: unknown } | undefined)?.command;
   if (typeof command !== "string") return false;
-  return (
-    OPEN_IN_BROWSER_RE.test(command) ||
-    BROWSER_BINARY_RE.test(command) ||
-    BROWSER_SCRIPT_RE.test(command)
+  // The command itself, and whatever a shell wrapper runs: `sh -c "open https://x"`.
+  const inner = [...command.matchAll(WRAPPED_COMMAND_RE)].map((m) => m[2] ?? "");
+  return [command, ...inner].some(
+    (text) =>
+      OPEN_IN_BROWSER_RE.test(text) ||
+      BROWSER_BINARY_RE.test(text) ||
+      BROWSER_SCRIPT_RE.test(text) ||
+      OPEN_FLAG_RE.test(text),
   );
 }
 

@@ -26,8 +26,19 @@ _Last updated: 2026-09-29 by Claude_
   without a card (control bot under workspace_write got one); real Chief created a bot,
   sent it the job and ended its turn. Full pipeline: 934 unit tests, 18 E2E, lint 0
   errors. **Deferred on purpose**: the engine's shell still runs on the host (issue #8).
-  Not yet done: an independent agent's review (in progress), release (owner approval),
-  and the desktop image must be republished to GHCR for other users (`v*` tag does it).
+  **Independent review done** (a verifier agent, twice): its first pass FAILED on two
+  high findings (a typed password could reach Jev via the next observation; `secret:`
+  refs could read any vault key) plus medium ones; all fixed and re-verified (PASS WITH
+  FINDINGS, then the rest fixed): password fields masked at the source and typed secrets
+  masked in every observation, `secret:` only resolves `input.*`, Bots can add but never
+  overwrite/remove a login (no `forget_login`), logins match the exact host (plus sign-in
+  subdomains), https only, wider host-browser fence (also inside `sh -c`), the new caps
+  actually apply (defaults 10/8/2 plus a one-time upgrade of untouched 6/2/30). Known
+  residuals (low, accepted): masking is by substring; a secret typed into an unrelated
+  field is not hidden on an approval card; ports are ignored when matching a login; the
+  host shell fence is best-effort until #8.
+  Not yet done: release (owner approval) and the desktop image must be republished to
+  GHCR for other users (`v*` tag does it; the daemon and DOM-reader fixes live in it).
 - **v0.1.5 released and installed; remote access verified live (2026-09-29)**: the owner
   paired the iPhone app over LAN (v0.1.2 ported the native sealed pairing + scoped E2E
   from `sanlega/openbot-ios`; plan there:

@@ -52,6 +52,16 @@ describe("a Bot whose computer is the virtual machine stays off the host's brows
     ],
     ["python webbrowser", { args: { command: "python -m webbrowser https://example.com" } }],
     ["npx playwright", { args: { command: "npx playwright test" } }],
+    ["a shell wrapper", { args: { command: 'sh -c "open https://example.com"' } }],
+    ["bash -c xdg-open", { args: { command: 'bash -c "xdg-open https://example.com"' } }],
+    [
+      "powershell -Command",
+      { args: { command: 'powershell -NoProfile -Command "Start-Process chrome"' } },
+    ],
+    ["wslview", { args: { command: "wslview https://example.com" } }],
+    ["Invoke-Item", { args: { command: "Invoke-Item index.html" } }],
+    ["vite --open", { args: { command: "vite --open" } }],
+    ["a dev server that opens the browser", { args: { command: "npm run dev -- --open" } }],
     ["a script running puppeteer", { args: { command: "node scrape-puppeteer.js" } }],
   ])("denies %s", (_name, overrides) => {
     const reason = builtinDenyReason(req(overrides));
@@ -80,6 +90,9 @@ describe("a Bot whose computer is the virtual machine stays off the host's brows
     "start-server --port 3000",
     "npm install left-pad",
     "git log --oneline -5",
+    'git commit -m "open https://example.com in the docs"',
+    "npm run dev -- --host 0.0.0.0",
+    'sh -c "ls -la && git status"',
   ])("does not mistake %s for a browser launch", (command) => {
     expect(usesHostBrowser(req({ args: { command } }))).toBe(false);
   });

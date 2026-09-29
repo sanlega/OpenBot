@@ -143,12 +143,15 @@ export class CodexDriver implements EngineDriver {
       }
       state.turnId = turnId;
 
-      await waitForTurnComplete(
-        state,
-        () => interrupted,
-        () => lastActivityAt,
-      );
-      unsubscribe();
+      try {
+        await waitForTurnComplete(
+          state,
+          () => interrupted,
+          () => lastActivityAt,
+        );
+      } finally {
+        unsubscribe();
+      }
 
       if (interrupted) {
         await this.appServer.turnInterrupt(threadId, turnId);
