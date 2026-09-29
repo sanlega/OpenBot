@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.7 — 2026-09-29
+
+- iPhone push notifications: OpenBot sends approval requests, questions, replies and
+  pushed updates straight from your computer to Apple's push service. Add your Apple
+  push key (.p8) in Devices > Phone notifications and use "Send a test". The key is
+  stored in the vault only. Message text is included by default and passes through
+  Apple; turn previews off to send generic text instead.
+- Fixed the phone's live connection: encrypted WebSocket frames are now sent in the
+  format the iPhone app can read, and in order, so sent messages no longer look stuck.
+
 ## 0.1.6 — 2026-09-29
 
 - Cloudflare Tunnel is now set up once: the tunnel token is saved encrypted in the
