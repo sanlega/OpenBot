@@ -13,6 +13,7 @@ interface SecretVault {
   get(key: string): Promise<string | undefined>;
   set(key: string, value: string): Promise<void>;
 }
+import type { PushService } from "./push/service.js";
 
 export interface RemoteServicesOptions {
   clock: Clock;
@@ -31,6 +32,8 @@ export interface RemoteServices {
   tailscale: TailscaleManager;
   cloudflare: CloudflareManager;
   hostKeys: X25519KeyPair;
+  /** APNs notifications to paired iPhones; attached with the core context. */
+  push?: PushService;
 }
 
 export async function createRemoteServices(
