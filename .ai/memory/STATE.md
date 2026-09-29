@@ -3,7 +3,8 @@
 _Last updated: 2026-09-29 by Claude_
 
 ## In progress
-- **Bidirectional CoS<->worker delegation (2026-09-30): implemented and verified, NOT released**
+- **v0.1.11 RELEASED and installed on the Windows dev machine (2026-09-30)**: tag `v0.1.11`, release workflow green, all installers + SHA256SUMS published, installer hash verified, migration 0003 applied. Its `/api/harness/status` still says 0.1.10 (constants fixed on main for the next release).
+- **Bidirectional CoS<->worker delegation (2026-09-30): shipped in v0.1.11**
   (D-029; plan `.ai/memory/plans/2026-09-29-bidirectional-delegation.md`). A worker's outcome
   now always reaches the Chief: a `delegations` table (migration 0003) + `DelegationTracker`
   (`packages/core/src/delegations.ts`); the harness settles the task when the worker's turn
@@ -27,8 +28,7 @@ _Last updated: 2026-09-29 by Claude_
   not marked blocked while the Chief waits on the user (low). Re-verified: 1105 unit, 23 E2E,
   live Codex and mixed Codex/Claude form flows.
   Not built: cancel tool/cascade, UI task board, depth limit. Known: Codex gives no shell
-  output for `unifiedExecStartup` commands (Activity shows none). Release needs the owner's OK
-  (v0.1.11). `OPENBOT_CODEX_TRACE_FILE` dumps raw Codex app-server lines.
+  output for `unifiedExecStartup` commands (Activity shows none). `OPENBOT_CODEX_TRACE_FILE` dumps raw Codex app-server lines.
 - **v0.1.1 released and installed on the Windows dev machine (2026-09-29)**: tag `v0.1.1`
   (release workflow green, all installers + `SHA256SUMS` published) — carries the
   spawn-gate near-miss fix, the opt-in routine budget switch, the silent-turn fallback
