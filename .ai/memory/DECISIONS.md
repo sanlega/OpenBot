@@ -187,3 +187,38 @@ Formato: fecha, contexto, decisión, consecuencias.
 - **Decisión**: rather than hardcoding a sticky-engine rule that bypasses Jev (against this project's "let Jev make the fuzzy call" philosophy), extended `RouteContext` (packages/contracts) with optional `currentEngine`/`currentEngineIdleMinutes`, computed in `apps/server/src/turn-mailbox.ts`'s `chooseEngine()` from whichever available engine has the most recent `engine_sessions` row for this Bot. The `route` Jev question's instructions (packages/decisions/src/questions/route.ts) now explicitly weigh this: strongly prefer `state.currentEngine` unless `state.task` is clearly a new, unrelated request, calling out that switching loses that engine's own conversation memory even for a short "continue".
 - **Alternativas descartadas**: a hardcoded sticky-engine rule in code (always keep the same engine for the whole thread) -- simpler, but removes Jev's ability to route a genuinely different follow-up request to a better-suited engine, and doesn't match how every other nuanced call in this codebase already goes through Jev.
 - **Consecuencias**: this only changes what Jev is told, not a hard rule, so its effectiveness depends on Jev actually weighing it (real Jev only -- FakeDecisionService/tests can't verify Jev's judgment, only that the signal reaches `state`). The deeper "shared context" idea the user also raised (injecting a recent-conversation summary into a fresh session regardless of which engine runs it) is not implemented -- flagged as a possible follow-up if engine switches still lose too much context in practice.
+
+## D-023 · The Chief of Staff delegates by default and may create one-off bots
+
+- **Fecha**: 2026-09-30
+
+- **Contexto**: live use showed the Chief doing whole multi-step jobs itself (research, build, publish), so the owner could not reach it while it worked. The old prompt and `SpawnGate` said the opposite: fewest bots, one-off tasks NEVER get a bot, do it yourself first.
+- **Decisión**: the Chief is a dispatcher. It answers only quick things; anything with real work goes to a bot (existing first, else a new one, one-off allowed). `SpawnGate` gained a `substantial_work` Jev question and `substantialWorkMin` threshold so a one-off that is real work passes; a quick one-off is still denied. Default caps loosened (10 Chief-made bots, 8 per day, 2 min cooldown).
+- **Alternativas descartadas**: denying the Chief its own shell/file tools to force delegation (too brittle: a refused spawn would leave it stuck).
+- **Consecuencias**: more bots on the roster; the caps and `archive_bot` keep it bounded. Verified live with real Jev and Claude: the Chief created a bot, handed it the task, and ended its turn. Tests that are about the S1-S3 mechanics pin their own strict caps.
+
+## D-024 · Website logins live in the vault and are typed by the host
+
+- **Fecha**: 2026-09-30
+
+- **Contexto**: a task needed a signed-in site; the Chief asked the owner to paste the content instead of asking for credentials.
+- **Decisión**: `login.<site>` in the vault (packages/core `logins.ts`) holds username and password. Bots use `list_logins` / `save_login` / `forget_login` (MCP) and `ask_user` secret fields (`secret:` refs). `ComputerTaskManager` resolves `secret:` inputs and the saved login for the page being typed into (by observation URL, host then parent domains) at the moment of typing; a password typed on an approval card is shown as "(hidden)". Owner routes `GET/PUT/DELETE /api/logins` and Settings > Computer > Saved logins; no route returns a password.
+- **Alternativas descartadas**: passing passwords to the engine as tool arguments (the model would see them).
+- **Consecuencias**: 2FA/CAPTCHA still go to the owner. Verified live in the real VM with real Jev: a login page on the host was signed in with the saved login and the task snapshot never contained the password.
+
+## D-025 · A VM-only Bot stays off the host's browser
+
+- **Fecha**: 2026-09-30
+
+- **Contexto**: a Bot with only the virtual machine enabled drove a Playwright browser and opened URLs on the owner's own computer.
+- **Decisión**: `BrokerRequest.computerAccess`; a built-in deny (wins over every preset, including Full) for browser-automation tools (`playwright`, `puppeteer`, `browser_*`) and shell commands that open a browser, for Bots whose computer is not `docker+local`. The prompt adds a VM-only block. Also: the Full preset now really means no cards (connector side effects and local-computer asks skipped; sensitive computer targets still ask), the live preset is read at decision time, and `AskUserQuestion` is read-only.
+- **Alternativas descartadas**: running the whole engine inside the VM (real isolation, but a much larger change; tracked as a follow-up issue).
+- **Consecuencias**: the shell still runs in the Bot's workspace on the host; only browser/desktop control is fenced.
+
+## D-026 · Docker Desktop is started for the owner, and a failed display no longer kills the daemon
+
+- **Fecha**: 2026-09-30
+
+- **Contexto**: a computer task failed with a raw `ENOENT //./pipe/docker_engine`; separately the desktop container had exited after a VNC start-up error thrown outside any handler, then failed again on stale X/Chromium locks.
+- **Decisión**: `ensureDockerEngine` starts Docker Desktop (Windows/macOS) and waits, or says plainly what to do. In the image: `/live` catches display errors, `unhandledRejection` is logged, a failed display start is forgotten so the next call retries, and stale X and Chromium profile locks are removed before start.
+- **Consecuencias**: the local image was rebuilt and tested (crash with `docker kill`, restart, task still works). Per-turn step limit raised 50 to 200 and Claude's `error_max_turns` is reported in plain words.
