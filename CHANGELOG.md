@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.10 — 2026-09-30
+
+- Codex bots (the Chief included) now work properly. They receive their instructions, can use
+  OpenBot's tools (creating bots, messaging, computer tasks, saved logins), and their commands
+  go through OpenBot's permission checks like Claude's do. Before, OpenBot's tools were being
+  refused, bots never got their instructions, and the network was blocked.
+- Bots run Codex from a private folder with only your login, so your own Codex plugins, MCP
+  servers, skills and connected ChatGPT apps no longer leak into them. If your Codex login is
+  kept in the system keyring, OpenBot tells you to run `codex login`.
+- New bots default to Full permissions and the virtual machine, unless you configure
+  otherwise. Existing bots keep their settings.
+- Safer read-only detection for shell commands (PowerShell grouping and write-capable flags),
+  wider protection for OpenBot's and Codex's own secret files, and bots' session tokens are
+  deleted when their turn ends.
+- Codex token usage is now counted, so spending limits apply to Codex bots.
+- The first message to each Codex bot after updating starts a fresh Codex conversation.
+
 ## 0.1.9 — 2026-09-30
 
 - Fixed Codex bots (the Chief included) answering "Finished without returning any text": a
