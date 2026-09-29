@@ -58,6 +58,7 @@ function jev(
   options: {
     unsure?: (descriptions: Record<string, string>) => boolean;
     offered?: string[][];
+    destructive?: number;
   } = {},
 ): DecisionService {
   return {
@@ -78,7 +79,7 @@ function jev(
             confidence: unsure ? 0.2 : 0.95,
             probabilities,
           },
-          is_destructive: { type: "noul", noul: 0.02 },
+          is_destructive: { type: "noul", noul: options.destructive ?? 0.02 },
         },
         provider: "jev",
         model: "test",
@@ -302,5 +303,60 @@ describe("steps only a person can do", () => {
     [page("https://x.test/", "Home", [["a", "About"]]), "other"],
   ] as const)("classifies the blocker on %#", (observation, kind) => {
     expect(classifyBlocker(observation)).toBe(kind);
+  });
+});
+
+describe("asking before destructive steps", () => {
+  it("asks only at the control that deletes, not on the links that lead there", async () => {
+    const site = siteStub(
+      {
+        home: {
+          observation: page("https://x.test/", "Home", [["a", "Settings"]]),
+          leadsTo: { Settings: "settings" },
+        },
+        settings: {
+          observation: page("https://x.test/settings", "Settings", [["a", "Close account"]]),
+          leadsTo: { "Close account": "close" },
+        },
+        close: {
+          observation: page("https://x.test/close", "Close account", [
+            ["button", "Delete account permanently"],
+          ]),
+        },
+      },
+      "home",
+    );
+    const checked: Array<{ label?: string; risky: boolean }> = [];
+    const result = await runFastLoop({
+      ...base,
+      screen: site.screen,
+      goal: "Delete my account",
+      decisionService: jev(
+        (_offered, d) =>
+          findByLabel(d, "Delete account permanently") ??
+          findByLabel(d, "Close account") ??
+          findByLabel(d, "Settings") ??
+          "done",
+        // Jev leans to "destructive" on every step of a deletion goal.
+        { destructive: 0.9 },
+      ),
+      broker: {
+        checkAction: async (input) => {
+          const label =
+            input.action.target !== undefined
+              ? input.observation.elements[input.action.target]?.label
+              : undefined;
+          const risky = Boolean(input.isDestructive || input.sensitiveLabel);
+          checked.push({ label, risky });
+          return risky ? "ask" : "allow";
+        },
+      },
+    });
+    expect(checked).toEqual([
+      { label: "Settings", risky: false },
+      { label: "Close account", risky: false },
+      { label: "Delete account permanently", risky: true },
+    ]);
+    expect(result.status).toBe("escalated");
   });
 });

@@ -102,7 +102,7 @@ export function buildComputerActionQuestions(
     is_destructive: {
       type: "noul",
       instructions:
-        "Would that action spend money or permanently delete data or an account? Sending, connecting, posting, submitting or changing what `goal` asks for is expected, not destructive.",
+        "Does that single action, by itself and right now, spend money or permanently delete data or an account (e.g. the final Delete/Pay button)? Judge only this click or keystroke, not the goal: opening pages, menus or settings on the way is not destructive, and neither is sending, connecting, posting or submitting what `goal` asks for.",
     },
   };
 }

@@ -539,9 +539,16 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     }
 
     const targetElement = chosen.element;
-    const sensitiveLabel = targetElement ? isSensitiveLabel(targetElement.label) : false;
+    // Opening a link, scrolling or waiting only moves around; the risk is in the control that
+    // commits (a button, a submit). A goal like "delete my account" must not make every step on
+    // the way there ask.
+    const navigates = targetElement
+      ? /^(a|link|tab|menuitem)$/i.test(targetElement.role)
+      : op !== "key";
+    const sensitiveLabel =
+      targetElement && !navigates ? isSensitiveLabel(targetElement.label) : false;
     const isDestructive =
-      destructiveAnswer?.type === "noul" ? destructiveAnswer.noul >= 0.5 : false;
+      !navigates && destructiveAnswer?.type === "noul" ? destructiveAnswer.noul >= 0.5 : false;
 
     let action: Action = { ...chosen.action };
     if (op === "type" && targetElement) {
