@@ -23,6 +23,25 @@ const defaultSpawn: SpawnFn = (command, args) =>
  * Cloudflare Tunnel manager (plan §5 WS11 / O2): supervises `cloudflared tunnel
  * run --token` as a child process and warns when Cloudflare Access is missing.
  */
+/**
+ * A Cloudflare tunnel token is base64 of `{"a": account, "t": tunnel id, "s": secret}`.
+ * Also accepts the token pasted inside Cloudflare's install command
+ * (`cloudflared service install <token>`); returns the bare token, or undefined.
+ */
+export function normalizeTunnelToken(input: string): string | undefined {
+  const candidate = input.trim().split(/\s+/).pop() ?? "";
+  try {
+    const parsed = JSON.parse(Buffer.from(candidate, "base64").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+    if ([parsed.a, parsed.t, parsed.s].every((v) => typeof v === "string" && v)) return candidate;
+  } catch {
+    // not base64 JSON; fall through to the legacy shape
+  }
+  return candidate.split(".").length >= 3 ? candidate : undefined;
+}
+
 export class CloudflareManager {
   private child: ChildProcess | undefined;
   private lastHostname: string | undefined;
@@ -39,7 +58,7 @@ export class CloudflareManager {
 
   async validateToken(token?: string): Promise<{ ok: boolean; reason?: string }> {
     if (!token?.trim()) return { ok: false, reason: "tunnel token required" };
-    if (token.split(".").length < 3) {
+    if (!normalizeTunnelToken(token)) {
       return { ok: false, reason: "token does not look like a Cloudflare tunnel token" };
     }
     return { ok: true };
@@ -48,6 +67,7 @@ export class CloudflareManager {
   async start(token: string): Promise<CloudflareStartResult> {
     const valid = await this.validateToken(token);
     if (!valid.ok) return { ok: false, reason: valid.reason };
+    token = normalizeTunnelToken(token) ?? token;
 
     await this.stop();
     return new Promise((resolve) => {

@@ -11,6 +11,14 @@ describe("CloudflareManager", () => {
       reason: "tunnel token required",
     });
     await expect(manager.validateToken("a.b.c")).resolves.toEqual({ ok: true });
+    const real = Buffer.from(JSON.stringify({ a: "acct", t: "tunnel", s: "secret" })).toString(
+      "base64",
+    );
+    await expect(manager.validateToken(real)).resolves.toEqual({ ok: true });
+    await expect(manager.validateToken(`cloudflared service install ${real}`)).resolves.toEqual({
+      ok: true,
+    });
+    await expect(manager.validateToken("not-a-token")).resolves.toMatchObject({ ok: false });
   });
 
   it("supervises a faked cloudflared child process", async () => {
