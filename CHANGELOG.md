@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.11 — 2026-09-30
+
+- Work handed from the Chief of Staff to another bot now comes back. When the bot finishes,
+  fails, is stopped or gets blocked, you see a card in your chat with the Chief and the Chief
+  takes a turn about it. Before, the bot could stop and nothing reached the Chief or you.
+- A bot's questions stay in your conversation with the Chief: its forms, approval requests and
+  permission cards appear there, the task shows as waiting for you, and your answer resumes the
+  same bot on the same engine.
+- Fixed `request_approval` failing with a duplicate-row error and leaving approval cards behind.
+- A task nobody finishes can no longer bounce between the Chief and a bot forever: there are
+  limits on messages per task and tasks per hour to the same bot. A task you stop is not restarted.
+- After a restart, tasks that were running are marked interrupted and the Chief is told.
+- Bot status no longer shares other bots' replies with every bot.
+
 ## 0.1.10 — 2026-09-30
 
 - Codex bots (the Chief included) now work properly. They receive their instructions, can use
