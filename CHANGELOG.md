@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.13 — 2026-09-30
+
+- Bots finish what you ask without babysitting. A computer task no longer stops at the first
+  doubt, failed click or page that doesn't change: it tries other ways first (waiting, closing a
+  pop-up, scrolling, another link) and resumes from the same page when steered.
+- Bots only interrupt you for data. A sign-in with no saved login, a verification code or a
+  CAPTCHA pauses the task: give the username and password in the secure form (they are saved, so
+  you're not asked again) or sign in yourself on the Computer tab, and the task carries on by
+  itself.
+- No more permission cards for ordinary steps: sending, connecting, posting, confirming and
+  opening pages just happen. Only the button that actually pays or deletes something asks.
+- The Chief and every bot share one way of working: the request is the permission, try other
+  routes before giving up, check the result, ask only for what they can't get themselves.
+- Fixed a bot opening Chrome on your computer instead of in the virtual machine (the Playwright
+  connector is no longer given to bots whose computer is the virtual machine).
+- A bot runs one computer task at a time on its screen; a new one replaces the unfinished one.
+
 ## 0.1.12 — 2026-09-30
 
 - Fixed every command and file edit of your bots being rejected ("rejected by user", with no
