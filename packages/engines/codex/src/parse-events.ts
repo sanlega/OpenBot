@@ -11,6 +11,8 @@ export interface CodexParseState {
   errorMessage?: string;
   authFailure: boolean;
   turnComplete: boolean;
+  /** Agent-message items whose text already arrived as deltas (so `item/completed` doesn't repeat it). */
+  streamedItems?: Set<string>;
 }
 
 export function createCodexParseState(): CodexParseState {
@@ -20,6 +22,7 @@ export function createCodexParseState(): CodexParseState {
     isError: false,
     authFailure: false,
     turnComplete: false,
+    streamedItems: new Set(),
   };
 }
 
@@ -70,9 +73,20 @@ export function handleCodexNotification(
   const method = notification.method;
   const params = notification.params ?? {};
 
-  if (method === "agent/message/delta" || method === "turn/agentMessage/delta") {
-    const delta = params.delta as { text?: string } | undefined;
-    const text = delta?.text ?? "";
+  // One app-server serves every Bot's thread: only this turn's thread counts.
+  if (!isOwnThread(params, state)) return;
+
+  // Codex 0.155+ streams `item/agentMessage/delta` with a plain string; older CLIs sent an
+  // object with `text` under other method names.
+  if (
+    method === "item/agentMessage/delta" ||
+    method === "agent/message/delta" ||
+    method === "turn/agentMessage/delta"
+  ) {
+    const delta = params.delta as string | { text?: string } | undefined;
+    const text = typeof delta === "string" ? delta : (delta?.text ?? "");
+    const itemId = typeof params.itemId === "string" ? params.itemId : undefined;
+    if (itemId) (state.streamedItems ??= new Set()).add(itemId);
     if (text) {
       state.text += text;
       hooks.emit({ type: "text_delta", text });
@@ -80,9 +94,26 @@ export function handleCodexNotification(
     return;
   }
 
+  if (method === "item/started" || method === "item/completed") {
+    handleItem(method === "item/completed", params.item as CodexItem | undefined, state, hooks);
+    return;
+  }
+
   if (method === "turn/completed") {
     state.turnComplete = true;
-    const turn = params.turn as { status?: string; error?: unknown } | undefined;
+    const turn = params.turn as
+      { status?: string; error?: unknown; items?: CodexItem[] } | undefined;
+    // A turn whose text never streamed still carries its final messages.
+    if (!state.text) {
+      const finals = (turn?.items ?? []).filter(
+        (item) => item.type === "agentMessage" && typeof item.text === "string" && item.text,
+      );
+      const text = finals.map((item) => item.text as string).join("\n");
+      if (text) {
+        state.text = text;
+        hooks.emit({ type: "text_delta", text });
+      }
+    }
     if (turn?.status === "failed" || turn?.error) {
       state.isError = true;
       state.errorMessage = state.errorMessage ?? errorText(turn.error) ?? "turn failed";
@@ -114,6 +145,88 @@ export function handleCodexNotification(
           : (errorText(error) ?? "Codex stopped with an error");
     }
   }
+}
+
+interface CodexItem {
+  type?: string;
+  id?: string;
+  text?: string;
+  command?: string;
+  status?: string;
+  aggregatedOutput?: string | null;
+  exitCode?: number | null;
+  server?: string;
+  tool?: string;
+  namespace?: string | null;
+  arguments?: unknown;
+  result?: unknown;
+  error?: unknown;
+  changes?: unknown;
+  query?: string;
+}
+
+function isOwnThread(params: Record<string, unknown>, state: CodexParseState): boolean {
+  const threadId = params.threadId;
+  return typeof threadId !== "string" || !state.threadId || threadId === state.threadId;
+}
+
+/** The tool-like items of a Codex turn, as the tool events every other engine emits. */
+function toolOf(item: CodexItem): { name: string; input: unknown } | undefined {
+  switch (item.type) {
+    case "commandExecution":
+      return { name: "shell", input: { command: item.command } };
+    case "mcpToolCall":
+      return { name: `mcp__${item.server}__${item.tool}`, input: item.arguments ?? {} };
+    case "dynamicToolCall":
+      return {
+        name: item.namespace ? `${item.namespace}__${item.tool}` : String(item.tool),
+        input: item.arguments ?? {},
+      };
+    case "fileChange":
+      return { name: "apply_patch", input: { changes: item.changes } };
+    case "webSearch":
+      return { name: "web_search", input: { query: item.query } };
+    default:
+      return undefined;
+  }
+}
+
+function handleItem(
+  completed: boolean,
+  item: CodexItem | undefined,
+  state: CodexParseState,
+  hooks: Pick<TurnHooks, "emit">,
+): void {
+  if (!item?.type || !item.id) return;
+  if (item.type === "agentMessage") {
+    // Text that never streamed as deltas (or arrived only in the completed item).
+    if (completed && item.text && !state.streamedItems?.has(item.id)) {
+      state.text += item.text;
+      hooks.emit({ type: "text_delta", text: item.text });
+    }
+    return;
+  }
+  const tool = toolOf(item);
+  if (!tool) return;
+  if (!completed) {
+    hooks.emit({
+      type: "tool_started",
+      toolName: tool.name,
+      input: tool.input,
+      toolUseId: item.id,
+    });
+    return;
+  }
+  const failed =
+    item.status === "failed" ||
+    item.status === "declined" ||
+    (typeof item.exitCode === "number" && item.exitCode !== 0);
+  hooks.emit({
+    type: "tool_completed",
+    toolUseId: item.id,
+    output: item.aggregatedOutput ?? item.result ?? item.error ?? null,
+    isError: failed,
+  });
 }
 
 /** Codex errors arrive as strings, objects with `message`, or JSON text of an API error. */

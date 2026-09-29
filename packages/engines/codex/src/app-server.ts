@@ -164,8 +164,15 @@ export class CodexAppServer {
     hooks: Pick<TurnHooks, "emit" | "requestApproval">,
   ): () => void {
     return this.onNotification(async (notification) => {
+      // Server requests (approvals) name their thread: answer only our own turn's.
+      const owner = (notification.params as { threadId?: unknown } | undefined)?.threadId;
+      const foreign =
+        typeof owner === "string" && state.threadId !== undefined && owner !== state.threadId;
+
       if (notification.id != null && typeof notification.id === "number") {
-        await this.handleApprovalRequest(notification, hooks.requestApproval, notification.id);
+        if (!foreign) {
+          await this.handleApprovalRequest(notification, hooks.requestApproval, notification.id);
+        }
         return;
       }
 
@@ -175,7 +182,7 @@ export class CodexAppServer {
         notification.method === "item/permissions/requestApproval"
       ) {
         const reqId = (notification as unknown as { id?: number }).id;
-        if (reqId != null) {
+        if (reqId != null && !foreign) {
           await this.handleApprovalRequest(notification, hooks.requestApproval, reqId);
         }
         return;

@@ -9,6 +9,16 @@ _Last updated: 2026-09-29 by Claude_
   line and the engine-continuity routing hint. `main`'s CI had one red job
   (`test (ubuntu-latest)`) that was only the known flaky Unhandled Rejection with all
   843 tests passing (see LESSONS.md).
+- **Codex protocol drift fixed (2026-09-30, after v0.1.8)**: the owner's Chief returned
+  "Finished without returning any text" on a real request. Cause: Codex CLI 0.155 streams
+  `item/agentMessage/delta` (string) and `item/started|completed` items; the parser only knew
+  the old names, so every Codex turn had no text and no tool events (an 8-minute turn shown as
+  empty). `parse-events.ts` now reads the new shapes (agent text, commandExecution,
+  mcpToolCall, fileChange, webSearch, final messages from `turn/completed`) and ignores other
+  threads' notifications/approvals (the shared app-server serves every Bot). Verified live
+  with the real CLI: text + tool events, two Bots at once without mixing, resume after an
+  app-server restart. Opt-in `codex.live.test.ts` (OPENBOT_E2E_REAL=1) guards future drift.
+  Needs a release (v0.1.9) to reach the installed app.
 - **Autonomy backlog #1-#7 fixed in code, unreleased (2026-09-30)** (commits 22667ca..45c804e
   on `main`; decisions D-023..D-026). #6 turn failures are explained (Claude
   `error_max_turns` wording, Codex thread resume/replace, step limit 50 to 200); #2 Full
