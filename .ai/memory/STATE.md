@@ -3,6 +3,12 @@
 _Last updated: 2026-09-29 by Claude_
 
 ## In progress
+- **Session pointer (2026-09-30)**: everything is committed and pushed (`main`, tag v0.1.12,
+  installed on the dev machine). Research summary: `.ai/resources/2026-09-30-multi-agent-delegation-research.md`.
+  Open backlog: #8 engine shell inside the VM (bots' shell still runs on the host), #9 Settings-level
+  defaults, #10 red reset button; delegation leftovers (cascade cancel, UI task board, depth limit);
+  a repo script that replays a scenario on a copy of the real `~/.openbot` before each release
+  (see LESSONS). The owner said the next step is very important and will start a new session.
 - **v0.1.12 RELEASED and installed on the Windows dev machine (2026-09-30)**: fixes every Bot
   command/patch being rejected in v0.1.11 ("rejected by user", no card): `DB_OR_VAULT_RE` in
   `packages/runtime/src/rules.ts` matched JSON-encoded Windows paths under
