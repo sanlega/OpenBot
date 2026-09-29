@@ -9,6 +9,12 @@ _Last updated: 2026-09-29 by Claude_
   line and the engine-continuity routing hint. `main`'s CI had one red job
   (`test (ubuntu-latest)`) that was only the known flaky Unhandled Rejection with all
   843 tests passing (see LESSONS.md).
+- **Autonomy backlog (2026-09-29), tracked as GitHub issues #1-#7** (#7 is the tracking
+  issue with the suggested order: #6 turn failed with no reason, #2 Full preset still
+  prompts, #4 Docker not running, #3 VM-only still uses the host, #1 Chief should
+  delegate/spawn by default, #5 ask for credentials + vault + VM login). Found in live
+  use; each issue records the evidence and acceptance. v0.1.7 (push notifications to
+  iPhone via APNs, WS frame fix) is released and installed.
 - **v0.1.5 released and installed; remote access verified live (2026-09-29)**: the owner
   paired the iPhone app over LAN (v0.1.2 ported the native sealed pairing + scoped E2E
   from `sanlega/openbot-ios`; plan there:
