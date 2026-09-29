@@ -3,7 +3,13 @@
 _Last updated: 2026-09-29 by Claude_
 
 ## In progress
-- **Fixed on main, NOT released (2026-09-30): every command/patch of the owner's Bots was rejected in v0.1.11** ("rejected by user", no card): `DB_OR_VAULT_RE` in `packages/runtime/src/rules.ts` matched JSON-encoded Windows paths under `C:\Users\<u>\.openbot\workspace` (regex backtracking dropped the workspace exception). Regression tests in `host-browser.test.ts`. Verified on a copy of the owner's real `~/.openbot` (real Bot, Jev, Codex): shell + apply_patch worked, `index.html` created, local server URL returned. Needs v0.1.12 (the owner must approve the release) to reach the installed app.
+- **v0.1.12 RELEASED and installed on the Windows dev machine (2026-09-30)**: fixes every Bot
+  command/patch being rejected in v0.1.11 ("rejected by user", no card): `DB_OR_VAULT_RE` in
+  `packages/runtime/src/rules.ts` matched JSON-encoded Windows paths under
+  `C:\Users\<u>\.openbot\workspace` (regex backtracking dropped the workspace exception).
+  Tests in `host-browser.test.ts`. Verified on a copy of the owner's real `~/.openbot` and then
+  live in the installed app (Chief -> Bot de despliegue web: shell listing and `apply_patch` worked,
+  result card returned in 18 s). Release workflow green, hash verified, version constants bumped.
 - **v0.1.11 RELEASED and installed on the Windows dev machine (2026-09-30)**: tag `v0.1.11`, release workflow green, all installers + SHA256SUMS published, installer hash verified, migration 0003 applied. Its `/api/harness/status` still says 0.1.10 (constants fixed on main for the next release).
 - **Bidirectional CoS<->worker delegation (2026-09-30): shipped in v0.1.11**
   (D-029; plan `.ai/memory/plans/2026-09-29-bidirectional-delegation.md`). A worker's outcome
