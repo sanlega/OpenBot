@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.12 — 2026-09-30
+
+- Fixed every command and file edit of your bots being rejected ("rejected by user", with no
+  approval card): OpenBot's protection for its own `.openbot` folder also blocked the bots' own
+  workspace on Windows. Bots can work in their workspace again; the database, vault, session
+  tokens and Codex login stay protected.
+- The reported server version is correct again.
+
 ## 0.1.11 — 2026-09-30
 
 - Work handed from the Chief of Staff to another bot now comes back. When the bot finishes,
