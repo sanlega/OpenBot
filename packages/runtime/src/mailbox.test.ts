@@ -548,3 +548,81 @@ describe("Mailbox in a dry_run chain", () => {
     expect(simulated.map((e) => e.payload.action)).toEqual(["Write"]);
   });
 });
+
+describe("Mailbox auto-allows OpenBot's own tools (allowTools), and only those", () => {
+  const ask =
+    (toolName: string) =>
+    async (hooks: TurnHooks): Promise<TurnResult> => {
+      const decision = await hooks.requestApproval({ toolName, input: {}, toolUseId: "t" });
+      hooks.emit({ type: "text_delta", text: decision });
+      return turnResult();
+    };
+  // Anything that reaches the broker with this classification always raises a card.
+  const alwaysAsks = () => ({ kind: "computer_action" as const, action: "click", target: "Send" });
+
+  it("lets an OpenBot MCP tool through without a card", async () => {
+    const runtime = buildRuntime(new ScriptedEngineDriver(ask("mcp__openbot__create_bot")));
+    const outcome = await runtime.mailbox.submit(
+      makeInput(runtime, { allowTools: ["mcp__openbot"], classifyApproval: alwaysAsks }),
+    );
+    expect(outcome.status).toBe("completed");
+    expect(runtime.approvals.listPending()).toHaveLength(0);
+  });
+
+  it.each(["mcp__openbot-evil__create_bot", "mcp__openbotx__anything", "shell"])(
+    "still puts %s through the broker",
+    async (toolName) => {
+      const runtime = buildRuntime(new ScriptedEngineDriver(ask(toolName)));
+      const outcomePromise = runtime.mailbox.submit(
+        makeInput(runtime, { allowTools: ["mcp__openbot"], classifyApproval: alwaysAsks }),
+      );
+      await new Promise((r) => setTimeout(r, 0));
+      const pending = runtime.approvals.listPending();
+      expect(pending).toHaveLength(1);
+      runtime.broker.resolveApproval(pending[0]!.id, "deny");
+      await outcomePromise;
+    },
+  );
+});
+
+describe("Mailbox finishTurn", () => {
+  it("runs once per turn, after it, however the turn ended", async () => {
+    const finished: string[] = [];
+    const ok = buildRuntime(new ScriptedEngineDriver(async () => turnResult()));
+    await ok.mailbox.submit(makeInput(ok, { finishTurn: (id) => void finished.push(id) }));
+
+    const boom = buildRuntime(
+      new ScriptedEngineDriver(async () => {
+        throw new Error("engine crashed");
+      }),
+    );
+    const failed = await boom.mailbox.submit(
+      makeInput(boom, { finishTurn: (id) => void finished.push(id) }),
+    );
+    expect(failed.status).toBe("failed");
+
+    const noTools = buildRuntime(new ScriptedEngineDriver(async () => turnResult()));
+    const refused = await noTools.mailbox.submit(
+      makeInput(noTools, {
+        prepareTurn: async () => {
+          throw new Error("tools not ready");
+        },
+        finishTurn: (id) => void finished.push(id),
+      }),
+    );
+    expect(refused.status).toBe("failed");
+    expect(finished).toHaveLength(3);
+  });
+
+  it("a finishTurn that throws does not stall the Bot's queue", async () => {
+    const runtime = buildRuntime(new ScriptedEngineDriver(async () => turnResult()));
+    const outcome = await runtime.mailbox.submit(
+      makeInput(runtime, {
+        finishTurn: () => {
+          throw new Error("cleanup failed");
+        },
+      }),
+    );
+    expect(outcome.status).toBe("completed");
+  });
+});

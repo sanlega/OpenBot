@@ -34,6 +34,8 @@ export interface EnqueueTurnInput extends TurnInput {
    * depend on it — e.g. the OpenBot MCP server, whose session token names the turn.
    */
   prepareTurn?: (turnId: string) => Promise<Partial<Pick<TurnInput, "mcpServers">>>;
+  /** Called when the turn is over, however it ended: clean up whatever `prepareTurn` set up. */
+  finishTurn?: (turnId: string) => void | Promise<void>;
   /** Per-run cap (routine runs): the turn is interrupted once its chain's usage exceeds it. */
   runBudget?: { usd?: number; tokens?: number };
 }
@@ -211,6 +213,7 @@ export class Mailbox {
           turnId,
           payload: { errorMessage: reason },
         });
+        await this.finish(input, turnId);
         resolve({ status: "failed", turnId, reason });
         this.pump(botId);
         return;
@@ -248,6 +251,7 @@ export class Mailbox {
     } finally {
       this.active.delete(botId);
     }
+    await this.finish(input, turnId);
     await Promise.all(pendingToolEffects);
 
     const status = result.isError
@@ -437,11 +441,25 @@ export class Mailbox {
     });
   }
 
+  /** Runs the caller's cleanup; whatever it does, it must never stall the Bot's queue. */
+  private async finish(input: EnqueueTurnInput, turnId: string): Promise<void> {
+    try {
+      await input.finishTurn?.(turnId);
+    } catch {
+      // Cleanup only.
+    }
+  }
+
   private async handleApprovalRequest(
     botId: string,
     input: EnqueueTurnInput,
     r: ToolApprovalRequest,
   ): Promise<"allow" | "deny"> {
+    // OpenBot's own tools carry their own gates (spawn/notify gates, caps, dry-run simulation); the
+    // engine must not put a card in front of the user for them (Claude gets the same via allowTools).
+    if (input.allowTools.some((p) => r.toolName === p || r.toolName.startsWith(`${p}__`))) {
+      return "allow";
+    }
     const classified = {
       ...defaultClassify(r, input.cwd),
       ...(input.classifyApproval?.(r) ?? {}),

@@ -11,6 +11,10 @@ export interface CodexParseState {
   errorMessage?: string;
   authFailure: boolean;
   turnComplete: boolean;
+  /** Thread token totals before this turn's first model call, to report this turn's own usage. */
+  usageBaseline?: { input: number; output: number };
+  /** What has already been reported as `usage` events (the runtime adds each event up). */
+  usageReported?: { input: number; output: number };
   /** Agent-message items whose text already arrived as deltas (so `item/completed` doesn't repeat it). */
   streamedItems?: Set<string>;
 }
@@ -73,8 +77,14 @@ export function handleCodexNotification(
   const method = notification.method;
   const params = notification.params ?? {};
 
-  // One app-server serves every Bot's thread: only this turn's thread counts.
-  if (!isOwnThread(params, state)) return;
+  // One app-server serves every Bot's thread: only this turn's thread counts, and within it only this
+  // turn (an interrupted turn's late `turn/completed` must not end the next one).
+  if (!isOwnThread(params, state) || !isOwnTurn(params, state)) return;
+
+  if (method === "thread/tokenUsage/updated") {
+    recordUsage(params.tokenUsage as CodexTokenUsage | undefined, state, hooks);
+    return;
+  }
 
   // Codex 0.155+ streams `item/agentMessage/delta` with a plain string; older CLIs sent an
   // object with `text` under other method names.
@@ -163,6 +173,47 @@ interface CodexItem {
   error?: unknown;
   changes?: unknown;
   query?: string;
+}
+
+interface CodexTokenUsage {
+  total?: { inputTokens?: number; outputTokens?: number };
+  last?: { inputTokens?: number; outputTokens?: number };
+}
+
+/** This turn's tokens: the thread's running total minus what it had before the turn's first call. */
+function recordUsage(
+  usage: CodexTokenUsage | undefined,
+  state: CodexParseState,
+  hooks: Pick<TurnHooks, "emit">,
+): void {
+  const input = usage?.total?.inputTokens;
+  const output = usage?.total?.outputTokens;
+  if (typeof input !== "number" || typeof output !== "number") return;
+  state.usageBaseline ??= {
+    input: Math.max(0, input - (usage?.last?.inputTokens ?? 0)),
+    output: Math.max(0, output - (usage?.last?.outputTokens ?? 0)),
+  };
+  state.usage = {
+    ...state.usage,
+    inputTokens: input - state.usageBaseline.input,
+    outputTokens: output - state.usageBaseline.output,
+  };
+  // The runtime adds up every `usage` event, so report only what is new since the last one.
+  const reported = (state.usageReported ??= { input: 0, output: 0 });
+  const deltaInput = state.usage.inputTokens - reported.input;
+  const deltaOutput = state.usage.outputTokens - reported.output;
+  if (deltaInput <= 0 && deltaOutput <= 0) return;
+  reported.input = state.usage.inputTokens;
+  reported.output = state.usage.outputTokens;
+  hooks.emit({ type: "usage", inputTokens: deltaInput, outputTokens: deltaOutput });
+}
+
+function isOwnTurn(params: Record<string, unknown>, state: CodexParseState): boolean {
+  const turnId =
+    typeof params.turnId === "string"
+      ? params.turnId
+      : (params.turn as { id?: string } | undefined)?.id;
+  return typeof turnId !== "string" || !state.turnId || turnId === state.turnId;
 }
 
 function isOwnThread(params: Record<string, unknown>, state: CodexParseState): boolean {

@@ -19,8 +19,10 @@ import type { BrokerRequest } from "./broker-types.js";
  */
 
 const CREDENTIAL_PATH_RE =
-  /(\.ssh\/|\.aws[/\\]credentials|\.npmrc|id_rsa|\.pem(\s|$)|credentials\.json|\bkeychain\b|secrets?\.json|\.git-credentials)/i;
-const DB_OR_VAULT_RE = /(openbot\.db|vault\.bin|\.openbot[/\\](db|vault))/i;
+  /(\.ssh[/\\]+|\.aws[/\\]+credentials|\.npmrc|id_rsa|id_ed25519|\.pem(\s|$)|credentials\.json|\bkeychain\b|secrets?\.json|\.git-credentials|\.codex[/\\]+auth\.json|codex-home[/\\]+auth\.json)/i;
+/** OpenBot's own secrets: the database, the vault, and the per-turn session tokens engines are given. */
+const DB_OR_VAULT_RE =
+  /(openbot\.db|vault\.bin|vault\.key|\.openbot[/\\]+(?!(?:workspace|uploads)(?:[/\\"'\s]|$))|(?:^|[\s"'/\\])sessions[/\\]+[^\s"'/\\]*\.token)/i;
 const SUDO_RE = /\bsudo\b/i;
 const RM_RF_RE = /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\b/i;
 

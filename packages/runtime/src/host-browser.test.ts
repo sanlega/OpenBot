@@ -97,3 +97,43 @@ describe("a Bot whose computer is the virtual machine stays off the host's brows
     expect(usesHostBrowser(req({ args: { command } }))).toBe(false);
   });
 });
+
+describe("built-in denies for OpenBot's and the engines' own secrets", () => {
+  const deny = (command: string) =>
+    builtinDenyReason({
+      botId: "b",
+      chainId: "c",
+      kind: "tool",
+      action: "shell",
+      summary: "",
+      detail: "",
+      args: { command },
+    });
+
+  it.each([
+    "cat C:/Users/x/.openbot/sessions/bot_123.token",
+    String.raw`type C:\Users\x\.openbot\sessions\bot_123.token`,
+    "cat ~/.codex/auth.json",
+    String.raw`type C:\Users\x\.openbot\codex-home\auth.json`,
+    String.raw`cat C:\Users\x\.ssh\id_ed25519`,
+    "cat ~/.openbot/vault.key",
+    "cat ~/.openbot/logs/threads/2026-09-30.ndjson",
+    "ls ~/.openbot/sess*",
+    "cat ~/.openbot/codex-home/config.toml",
+    "cd ~/.openbot && cat sessions/bot_1.token",
+    String.raw`Get-Content $env:USERPROFILE\.openbot\sessionsot_1.token`,
+  ])("denies %s", (command) => {
+    expect(deny(command)).toMatch(/credential path|database or vault/);
+  });
+
+  it("still lets a Bot use its own workspace and uploads under .openbot", () => {
+    expect(deny("cat ~/.openbot/workspace/notes.md")).toBeUndefined();
+    expect(deny("ls ~/.openbot/uploads")).toBeUndefined();
+    expect(deny("cd ~/.openbot/workspace && git status")).toBeUndefined();
+  });
+
+  it("does not deny ordinary commands", () => {
+    expect(deny("git status && ls sessions")).toBeUndefined();
+    expect(deny("cat notes/sessions.md")).toBeUndefined();
+  });
+});

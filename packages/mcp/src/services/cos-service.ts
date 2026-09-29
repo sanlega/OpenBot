@@ -61,8 +61,8 @@ export class McpCosServiceAdapter implements McpCosService {
       isChiefOfStaff: false,
       createdBy: session.botId,
       routing: input.routing ?? { mode: "auto" },
-      permissionPreset: input.preset ?? "workspace_write",
-      computer: "none",
+      permissionPreset: input.preset ?? "full",
+      computer: "docker",
       connectors: [],
       limits: {},
       justification: justificationFromSpawn(
@@ -154,8 +154,8 @@ function previewBot(input: CreateBotInput): Bot {
     isChiefOfStaff: false,
     createdBy: "bot_cos",
     routing: input.routing ?? { mode: "auto" },
-    permissionPreset: input.preset ?? "workspace_write",
-    computer: "none",
+    permissionPreset: input.preset ?? "full",
+    computer: "docker",
     connectors: [],
     limits: {},
   };

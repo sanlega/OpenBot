@@ -197,4 +197,75 @@ describe("handleCodexNotification with the current Codex CLI", () => {
     expect(state.isError).toBe(true);
     expect(state.errorMessage).toBe("model not supported");
   });
+
+  it("ignores an interrupted turn's late events, so they can't end or fill the next turn", () => {
+    const state = createCodexParseState();
+    state.threadId = THREAD;
+    state.turnId = "turn-new";
+    const events: EngineEvent[] = [];
+    const hooks = { emit: (e: EngineEvent) => events.push(e) };
+    handleCodexNotification(
+      note("item/agentMessage/delta", {
+        threadId: THREAD,
+        turnId: "turn-old",
+        itemId: "x",
+        delta: "old",
+      }),
+      state,
+      hooks,
+    );
+    handleCodexNotification(
+      note("turn/completed", {
+        threadId: THREAD,
+        turn: {
+          id: "turn-old",
+          status: "completed",
+          items: [{ type: "agentMessage", id: "m", text: "old reply" }],
+        },
+      }),
+      state,
+      hooks,
+    );
+    expect(state.turnComplete).toBe(false);
+    expect(state.text).toBe("");
+    handleCodexNotification(
+      note("turn/completed", {
+        threadId: THREAD,
+        turn: { id: "turn-new", status: "completed", items: [] },
+      }),
+      state,
+      hooks,
+    );
+    expect(state.turnComplete).toBe(true);
+  });
+
+  it("reports this turn's own token usage (the thread's total minus what it had before)", () => {
+    const state = createCodexParseState();
+    state.threadId = THREAD;
+    const events: EngineEvent[] = [];
+    const hooks = { emit: (e: EngineEvent) => events.push(e) };
+    const usage = (total: [number, number], last: [number, number]) =>
+      note("thread/tokenUsage/updated", {
+        threadId: THREAD,
+        turnId: "t1",
+        tokenUsage: {
+          total: { inputTokens: total[0], outputTokens: total[1] },
+          last: { inputTokens: last[0], outputTokens: last[1] },
+        },
+      });
+    // The thread already used 1000/100 in earlier turns; this turn makes two model calls.
+    handleCodexNotification(usage([1500, 120], [500, 20]), state, hooks);
+    handleCodexNotification(usage([2100, 150], [600, 30]), state, hooks);
+    expect(state.usage).toMatchObject({ inputTokens: 1100, outputTokens: 50 });
+    // The runtime adds up every usage event, so each carries only what is new: they sum to the turn.
+    const reported = events.filter(
+      (e): e is Extract<EngineEvent, { type: "usage" }> => e.type === "usage",
+    );
+    expect(reported.map((e) => [e.inputTokens, e.outputTokens])).toEqual([
+      [500, 20],
+      [600, 30],
+    ]);
+    expect(reported.reduce((sum, e) => sum + e.inputTokens, 0)).toBe(1100);
+    expect(reported.reduce((sum, e) => sum + e.outputTokens, 0)).toBe(50);
+  });
 });

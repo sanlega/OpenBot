@@ -21,8 +21,9 @@ export const CreateBotBody = z.object({
   isChiefOfStaff: z.boolean().default(false),
   routing: EngineRouting.default({ mode: "auto" }),
   auth: EngineAuthOverride.optional(),
-  permissionPreset: PermissionPreset.default("workspace_write"),
-  computer: ComputerAccess.default("none"),
+  // Bots run with full permissions inside the virtual machine unless configured otherwise (#9).
+  permissionPreset: PermissionPreset.default("full"),
+  computer: ComputerAccess.default("docker"),
   connectors: z.array(z.string()).default([]),
   limits: z
     .object({

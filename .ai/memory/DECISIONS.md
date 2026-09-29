@@ -222,3 +222,20 @@ Formato: fecha, contexto, decisión, consecuencias.
 - **Contexto**: a computer task failed with a raw `ENOENT //./pipe/docker_engine`; separately the desktop container had exited after a VNC start-up error thrown outside any handler, then failed again on stale X/Chromium locks.
 - **Decisión**: `ensureDockerEngine` starts Docker Desktop (Windows/macOS) and waits, or says plainly what to do. In the image: `/live` catches display errors, `unhandledRejection` is logged, a failed display start is forgotten so the next call retries, and stale X and Chromium profile locks are removed before start.
 - **Consecuencias**: the local image was rebuilt and tested (crash with `docker kill`, restart, task still works). Per-turn step limit raised 50 to 200 and Claude's `error_max_turns` is reported in plain words.
+
+## D-027 · Codex Bots run from a private CODEX_HOME with OpenBot's own thread parameters
+
+- **Fecha**: 2026-09-30
+
+- **Contexto**: on the owner's machine every Codex Bot (the Chief included) was useless. Root causes found with the real CLI (0.155): the parser only knew old notification names (every reply empty); `thread/start` sent no instructions (the Bot never heard of OpenBot); MCP tool calls arrive as `mcpServer/elicitation/request` and were answered in the command shape, so Codex read them as rejected (OpenBot's tools never worked); the owner's `~/.codex` leaked in (a personal "Sites" plugin, MCP servers that drive their screen, global instructions, `approval_policy = never`), and Codex's default sandbox blocked the network.
+- **Decisión**: (1) a private `<OPENBOT_HOME>/codex-home` with only the login (kept in step with the owner's by newest mtime, both ways) and a minimal config; (2) `thread/start` gets `developerInstructions` = the Bot's prompt, `approvalPolicy: "untrusted"`, sandbox `danger-full-access` (`read-only` for read-only Bots), and OpenBot's MCP server, so OpenBot's broker is the policy exactly as with Claude; (3) `mapApprovalRequest` names commands `shell` (wrapper unwrapped), patches `apply_patch` with paths, MCP calls `mcp__<server>__<tool>`, and answers each in its own shape; OpenBot's own tools are auto-allowed in the mailbox; (4) notifications and approvals are filtered by thread (one app-server serves every Bot); (5) a `ThreadIndex` records what each thread was created with, and a thread is reused only if its MCP servers/sandbox match (Codex fixes them at creation: resume changes nothing), while changed instructions ride in front of the message; (6) the MCP shim reads the per-turn token from a file because a Codex thread keeps its MCP process across turns.
+- **Alternativas descartadas**: overriding the owner's config per thread (plugins/MCP cannot be listed reliably); Codex's own workspace-write sandbox (blocks the network and needs a Windows setup a private home lacks); a fresh thread every turn (loses Codex-side memory).
+- **Consecuencias**: existing Codex threads (made without instructions or tools) are not reused: one fresh thread per Bot after upgrading. Verified live with the real CLI: text and tool events, instructions, MCP call, approval routing, resume, two Bots at once, and a Codex Chief delegating through OpenBot's tools over two turns. `codex.live.test.ts` (OPENBOT_E2E_REAL=1) guards the next Codex update.
+
+## D-028 · New Bots default to Full permissions and the virtual machine
+
+- **Fecha**: 2026-09-30
+
+- **Contexto**: the owner's rule: unless configured otherwise, every Bot has full permissions and works inside the virtual machine.
+- **Decisión**: the Client API and the Chief's `create_bot` default to `permissionPreset: full` and `computer: docker`; the Chief itself is created that way. Existing Bots are untouched. Built-in denies, sensitive targets and the VM-only host-browser fence (D-025) still apply. Shell execution inside the VM is issue #8; a Settings-level default and the reset button are #9 and #10.
+- **Consecuencias**: the permission-flow E2E scenarios now create their Bots with `workspace_write` explicitly.

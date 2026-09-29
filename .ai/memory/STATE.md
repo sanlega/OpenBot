@@ -9,6 +9,35 @@ _Last updated: 2026-09-29 by Claude_
   line and the engine-continuity routing hint. `main`'s CI had one red job
   (`test (ubuntu-latest)`) that was only the known flaky Unhandled Rejection with all
   843 tests passing (see LESSONS.md).
+- **Codex Bots made to work (2026-09-30, uncommitted at the time of writing; released v0.1.9
+  only had the parser fix)**: on the owner's machine every Codex Bot was useless. Root causes
+  and fix are in D-027: private CODEX_HOME (login only), `thread/start` with instructions,
+  `approvalPolicy: untrusted`, sandbox full-access (broker is the policy), OpenBot MCP server;
+  approval mapping per request kind (MCP calls need `{action, content}`), thread filtering,
+  a ThreadIndex (thread reused only if created with the same MCP servers/sandbox; changed
+  instructions ride in front of the message), per-turn MCP token file, `mcp__openbot` auto-allow.
+  New defaults (D-028): Bots default to Full + computer docker (Client API, Chief's
+  `create_bot`, the Chief itself); existing Bots untouched. Verified live with the real CLI
+  (opt-in `codex.live.test.ts`, 6 tests) and with a real harness: a Codex Chief delegated
+  through OpenBot's tools in 30 s and a second turn resumed and used them; Full ran a network
+  command with no card, workspace_write raised one. Pipeline: 1006 unit tests, 18 E2E, lint 0
+  errors (then 1082 tests after the review fixes below). **Independent review (Opus 5.5) done
+  twice**: first FAIL, then PASS WITH FINDINGS, all fixed: PowerShell/grouping bypass of the
+  read-only classifier and flag-level gaps (sort -o, sed w/e, git branch -D, rg --pre...);
+  the per-turn token file is now deleted when the turn ends (`finishTurn` hook) and
+  `.openbot/*` (except workspace and uploads), sessions tokens, `.codex/auth.json` are
+  built-in denies (haystack has JSON-doubled backslashes); owner skills, plugin skills, the
+  owner's `~/.codex` project config (found via `project_root_markers`) and the ChatGPT
+  account's 223 connected-app tools (`features.apps=false`) no longer reach Bots; login sync
+  by `last_refresh`; Codex usage reported as deltas; thread schema v3. Live: 8 tests against
+  the real Codex CLI plus a real harness (Codex Chief delegating over two turns, token file
+  lifecycle). **Pending**: commit/push done in the same session; release needs the owner's OK
+  (v0.1.10). The first turn after upgrading starts one fresh Codex thread per Bot (old
+  threads had no instructions/tools). Known residual (accepted): the token is a bearer file
+  readable by the same OS user during its turn; obfuscated reads can still slip past the
+  literal deny patterns under Full.
+  Backlog filed: #8 shell inside the VM, #9 defaults/Settings, #10 red reset button (with
+  confirmation); tracking issue #7 updated.
 - **Codex protocol drift fixed (2026-09-30, after v0.1.8)**: the owner's Chief returned
   "Finished without returning any text" on a real request. Cause: Codex CLI 0.155 streams
   `item/agentMessage/delta` (string) and `item/started|completed` items; the parser only knew

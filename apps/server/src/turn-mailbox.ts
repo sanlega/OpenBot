@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
   newId,
   type Bot,
@@ -8,7 +9,7 @@ import {
 } from "@openbot/contracts";
 import type { CoreContext, TurnMailbox } from "@openbot/core";
 import { buildCosSystemPrompt, type AutonomyCaps, type CapCounterService } from "@openbot/cos";
-import { McpComposer, type SessionTokenService } from "@openbot/mcp";
+import { McpComposer, removeTokenFileIfUnchanged, type SessionTokenService } from "@openbot/mcp";
 import {
   COMPUTER_RULE_BLOCK,
   COMPUTER_VM_ONLY_BLOCK,
@@ -159,6 +160,8 @@ export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): En
 }
 
 export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): TurnBuilder {
+  /** Token files written for turns that are still running. */
+  const tokenFiles = new Map<string, { file: string; token: string }>();
   const chooseEngine = createEngineChooser(ctx, deps);
 
   async function authFor(bot: Bot, engine: EngineId): Promise<TurnInput["auth"]> {
@@ -218,19 +221,28 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
         const mcp = deps.mcp();
         if (!mcp) throw new Error("OpenBot MCP tools are not ready yet");
         // Composing tools must never hold the Bot's queue: give up after 30 s.
-        const { servers } = await withTimeout(
+        const { servers, token } = await withTimeout(
           McpComposer.forTurnAsync(mcp.tokens, {
             bot,
             turnId,
             chainId,
             mode,
             harnessUrl: `http://127.0.0.1:${ctx.config.port}`,
+            sessionDir: join(ctx.config.openbotHome, "sessions"),
             connectors: mcp.connectors,
           }),
           30_000,
           "preparing this bot's tools took too long",
         );
+        const file = servers[0]?.env?.OPENBOT_SESSION_TOKEN_FILE;
+        if (file) tokenFiles.set(turnId, { file, token });
         return { mcpServers: servers };
+      },
+      // The token file exists only while the turn runs (it is a bearer credential on disk).
+      finishTurn: (turnId) => {
+        const written = tokenFiles.get(turnId);
+        tokenFiles.delete(turnId);
+        if (written) removeTokenFileIfUnchanged(written.file, written.token);
       },
     };
   };

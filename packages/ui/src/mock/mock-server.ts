@@ -347,8 +347,8 @@ export class MockClientApiServer {
         isChiefOfStaff: false,
         createdBy: "user",
         routing: { mode: "auto" },
-        permissionPreset: "workspace_write",
-        computer: "none",
+        permissionPreset: "full",
+        computer: "docker",
         connectors: [],
         limits: {},
       };
