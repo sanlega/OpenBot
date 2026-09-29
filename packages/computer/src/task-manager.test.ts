@@ -93,6 +93,87 @@ describe("ComputerTaskManager", () => {
     expect(snapshot?.status).toBe("completed");
   });
 
+  describe("secrets typed from the vault", () => {
+    const script: Array<[string, string]> = [
+      ["click", "0"],
+      ["type", "1"],
+      ["done", "none"],
+    ];
+
+    async function finish(tasks: ComputerTaskManager) {
+      let snapshot = await tasks.wait("ctask_1", 2_000);
+      while (snapshot?.status === "running") snapshot = await tasks.wait("ctask_1", 2_000);
+      return snapshot;
+    }
+
+    it("types a secret: reference from the vault without the engine ever seeing it", async () => {
+      const provider = new FakeComputerProvider();
+      const tasks = new ComputerTaskManager({
+        decisionService: scriptedJev(script),
+        provider,
+        inputTimeoutMs: 5_000,
+        secrets: {
+          resolveRef: async (ref) =>
+            ref === "secret:input.x.subject" ? "Vault value 42" : undefined,
+          loginFor: async () => undefined,
+          fieldKind: () => undefined,
+        },
+      });
+      start(tasks, { inputs: { subject: "secret:input.x.subject" } });
+      const snapshot = await finish(tasks);
+      expect(snapshot?.status).toBe("completed");
+      const screen = await provider.screen("bot_1");
+      const subject = (await screen.observe()).elements.find((e) => e.label === "Subject");
+      expect(subject?.value).toBe("Vault value 42");
+      expect(JSON.stringify(snapshot)).not.toContain("Vault value 42");
+    });
+
+    it("types the saved login for the page when the field asks for it, without pausing", async () => {
+      const provider = new FakeComputerProvider();
+      const seenUrls: Array<string | undefined> = [];
+      const tasks = new ComputerTaskManager({
+        decisionService: scriptedJev(script),
+        provider,
+        inputTimeoutMs: 5_000,
+        secrets: {
+          resolveRef: async () => undefined,
+          loginFor: async (url) => {
+            seenUrls.push(url);
+            return { username: "me@example.com", password: "pw" };
+          },
+          // Pretend this page's "Subject" box is the sign-in name field.
+          fieldKind: (label) => (label === "Subject" ? "username" : undefined),
+        },
+      });
+      start(tasks);
+      const snapshot = await finish(tasks);
+      expect(snapshot?.status).toBe("completed");
+      const screen = await provider.screen("bot_1");
+      const page = await screen.observe();
+      const subject = page.elements.find((e) => e.label === "Subject");
+      expect(subject?.value).toBe("me@example.com");
+      // The login is looked up for the page being typed into, not the page of the previous step
+      // (regression: a live run found the saved login for the wrong, earlier page).
+      expect(seenUrls[0]).toBe(page.url);
+    });
+
+    it("asks the engine when the referenced secret is gone", async () => {
+      const tasks = new ComputerTaskManager({
+        decisionService: scriptedJev(script),
+        provider: new FakeComputerProvider(),
+        inputTimeoutMs: 5_000,
+        secrets: {
+          resolveRef: async () => undefined,
+          loginFor: async () => undefined,
+          fieldKind: () => undefined,
+        },
+      });
+      start(tasks, { inputs: { subject: "secret:input.gone.subject" } });
+      const waiting = await tasks.wait("ctask_1", 2_000);
+      expect(waiting).toMatchObject({ status: "needs_input", pendingInput: { field: "Subject" } });
+    });
+  });
+
   it("cancels a task that is waiting for text", async () => {
     const { tasks } = manager(
       scriptedJev([

@@ -49,7 +49,20 @@ export interface StartComputerTask {
   inputs?: Record<string, string>;
 }
 
+/**
+ * Where the host looks up secrets at the moment of typing, so the engine never holds a value:
+ * `secret:` references it was given, and the saved login for the page the task is on.
+ */
+export interface TaskSecrets {
+  resolveRef(ref: string): Promise<string | undefined>;
+  loginFor(url: string | undefined): Promise<{ username?: string; password?: string } | undefined>;
+  /** "password" or "username" when the field asks for one of them. */
+  fieldKind(label: string, role?: string): "password" | "username" | undefined;
+}
+
 export interface ComputerTaskManagerOptions {
+  /** Resolves `secret:` inputs and typed logins from the vault. */
+  secrets?: TaskSecrets;
   decisionService: DecisionService;
   provider: ComputerProvider;
   broker?: ComputerActionBroker;
@@ -191,7 +204,7 @@ export class ComputerTaskManager {
         runtime.snapshot.phase = phase;
         this.emit(runtime);
       },
-      textForType: (ctx) => this.textFor(runtime, ctx.target),
+      textForType: (ctx) => this.textFor(runtime, ctx.target, ctx.observation.url),
       onStep: (event) => {
         runtime.snapshot.steps.push({
           step: event.step,
@@ -219,10 +232,33 @@ export class ComputerTaskManager {
   }
 
   /** Text for a field: from the engine's `inputs`, else ask the engine and wait. */
-  private textFor(runtime: TaskRuntime, target?: ObservedElement): Promise<string | null> {
+  private textFor(
+    runtime: TaskRuntime,
+    target?: ObservedElement,
+    pageUrl?: string,
+  ): Promise<string | null> {
     const label = target?.label ?? "the field";
     const known = matchInput(runtime.inputs, label);
-    if (known !== undefined) return Promise.resolve(known);
+    if (known !== undefined) {
+      if (!known.startsWith("secret:") || !this.opts.secrets) return Promise.resolve(known);
+      return this.opts.secrets
+        .resolveRef(known)
+        .then((value) => value ?? this.askEngine(runtime, label));
+    }
+    const kind = this.opts.secrets?.fieldKind(label, target?.role);
+    if (kind && this.opts.secrets) {
+      const secrets = this.opts.secrets;
+      // The page being typed into right now (the task's last step may be on another page).
+      return secrets.loginFor(pageUrl ?? runtime.snapshot.url).then((login) => {
+        const value = login?.[kind];
+        return value ? value : this.askEngine(runtime, label);
+      });
+    }
+    return this.askEngine(runtime, label);
+  }
+
+  /** No known text: ask the engine and wait (or time out). */
+  private askEngine(runtime: TaskRuntime, label: string): Promise<string | null> {
     return new Promise<string | null>((resolve) => {
       const timer = setTimeout(() => {
         if (runtime.pendingText) {

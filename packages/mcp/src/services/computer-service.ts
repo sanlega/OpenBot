@@ -1,5 +1,5 @@
 import { newId, type Approval } from "@openbot/contracts";
-import type { CoreContext } from "@openbot/core";
+import { loginFieldKind, loginForUrl, resolveSecretRef, type CoreContext } from "@openbot/core";
 import {
   ComputerTaskManager,
   DefaultComputerActionBroker,
@@ -167,7 +167,16 @@ export class McpComputerServiceAdapter implements McpComputerService {
       this.manager = new ComputerTaskManager({
         decisionService: this.ctx.decisionService,
         provider: this.ctx.computerProvider,
-        broker: new ApprovalComputerBroker(this.runtime),
+        broker: new ApprovalComputerBroker(
+          this.runtime,
+          (botId) => this.ctx.repos.bots.getById(botId)?.permissionPreset ?? "workspace_write",
+        ),
+        // Typed from the vault at the moment of typing; the engine never holds the value.
+        secrets: {
+          resolveRef: (ref) => resolveSecretRef(this.ctx.vault, ref),
+          loginFor: (url) => loginForUrl(this.ctx.vault, url),
+          fieldKind: loginFieldKind,
+        },
         now: () => this.ctx.clock.now(),
         onUpdate: (snapshot, event) => void this.record(snapshot, event !== undefined),
       });
@@ -234,7 +243,11 @@ export class McpComputerServiceAdapter implements McpComputerService {
 class ApprovalComputerBroker implements ComputerActionBroker {
   private readonly rules = new DefaultComputerActionBroker();
 
-  constructor(private readonly runtime?: Runtime) {}
+  constructor(
+    private readonly runtime?: Runtime,
+    private readonly presetFor: (botId: string) => "read_only" | "workspace_write" | "full" = () =>
+      "workspace_write",
+  ) {}
 
   async checkAction(
     input: Parameters<ComputerActionBroker["checkAction"]>[0],
@@ -262,12 +275,20 @@ class ApprovalComputerBroker implements ComputerActionBroker {
         op: input.action.op,
         target,
         page: input.observation.url,
-        ...(input.action.op === "type" ? { text: input.action.text } : {}),
+        // A typed password (or any secret) must never be printed on an approval card.
+        ...(input.action.op === "type"
+          ? {
+              text:
+                loginFieldKind(target ?? "", targetRole(input)) === "password"
+                  ? "(hidden)"
+                  : input.action.text,
+            }
+          : {}),
       }),
     };
     const evaluated = await this.runtime.broker.evaluate(request, {
       mode: "live",
-      preset: "workspace_write",
+      preset: this.presetFor(input.botId),
     });
     if (evaluated.outcome === "deny" || evaluated.outcome === "simulate") return "deny";
     // Our rules said the user must confirm (destructive, sensitive, or this
@@ -307,4 +328,10 @@ function view(snapshot: ComputerTaskSnapshot): ComputerTaskView {
         ? { url: snapshot.url, title: snapshot.title, visible: snapshot.visible }
         : undefined,
   };
+}
+
+function targetRole(input: Parameters<ComputerActionBroker["checkAction"]>[0]): string | undefined {
+  return input.action.target !== undefined
+    ? input.observation.elements.find((el) => el.index === input.action.target)?.role
+    : undefined;
 }

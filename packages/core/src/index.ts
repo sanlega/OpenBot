@@ -30,6 +30,20 @@ export { EventBus, type PublishInput } from "./event-bus.js";
 export { NdjsonWriter, NullNdjsonWriter } from "./ndjson-writer.js";
 export { FileVault, InMemoryVault, type Vault } from "./vault.js";
 export {
+  LOGIN_VAULT_PREFIX,
+  getLogin,
+  listLogins,
+  loginFieldKind,
+  loginForUrl,
+  removeLogin,
+  resolveSecretRef,
+  saveLogin,
+  siteCandidates,
+  siteKey,
+  type LoginSummary,
+  type StoredLogin,
+} from "./logins.js";
+export {
   DeviceAuth,
   generateDeviceSecret,
   requireOwner as isOwnerIdentity,

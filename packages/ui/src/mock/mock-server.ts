@@ -161,6 +161,10 @@ export class MockClientApiServer {
     localBuildAvailable: true,
   };
   private connections: ConnectionView[] = [];
+  private logins = new Map<
+    string,
+    { site: string; username?: string; hasPassword: boolean; updatedAt: string }
+  >();
   private push: {
     configured: boolean;
     keyId?: string;
@@ -561,6 +565,35 @@ export class MockClientApiServer {
     if (method === "POST" && path === "/api/remote/tailscale/disable") {
       this.remote = { enabled: false, via: undefined, urls: [] };
       return sendJson(res, 200, { ok: true });
+    }
+    if (path === "/api/logins" && method === "GET") {
+      return sendJson(res, 200, { logins: [...this.logins.values()] });
+    }
+    const loginRoute = /^\/api\/logins\/([^/]+)$/.exec(path);
+    if (loginRoute && method === "PUT") {
+      const site = decodeURIComponent(loginRoute[1] ?? "")
+        .toLowerCase()
+        .replace(/^www\./, "");
+      if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(site)) {
+        return sendJson(res, 400, {
+          error: "invalid_login",
+          reason: `"${site}" isn't a website address like example.com`,
+        });
+      }
+      const body = await readJson<{ username?: string; password?: string }>(req);
+      this.logins.set(site, {
+        site,
+        username: body.username,
+        hasPassword: Boolean(body.password),
+        updatedAt: new Date().toISOString(),
+      });
+      return sendJson(res, 200, { login: this.logins.get(site) });
+    }
+    if (loginRoute && method === "DELETE") {
+      const site = decodeURIComponent(loginRoute[1] ?? "");
+      return this.logins.delete(site)
+        ? sendJson(res, 200, { ok: true })
+        : sendJson(res, 404, { error: "not_found" });
     }
     if (method === "GET" && path === "/api/remote/push") {
       return sendJson(res, 200, this.push);

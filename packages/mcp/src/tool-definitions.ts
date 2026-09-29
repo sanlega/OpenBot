@@ -169,11 +169,43 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
         inputs: {
           type: "object",
           additionalProperties: { type: "string" },
-          description: 'Text for fields by label, e.g. {"Search": "openbot", "Subject": "Q3"}',
+          description:
+            'Text for fields by label, e.g. {"Search": "openbot"}. A value may be a `secret:` reference from ask_user; the host types the real value. Saved logins are typed automatically at sign-in forms.',
         },
         waitSeconds: { type: "number", description: "0–60; default 20" },
       },
       required: ["goal"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_logins",
+    description:
+      "Websites the user has saved a login for (site and username only; you never see passwords). Check this before asking the user for a password: a saved login is typed into the virtual machine automatically when a computer_task reaches that site's sign-in form.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "save_login",
+    description:
+      "Save a website login so computer_task can sign in on its own from now on. Ask the user with ask_user first: a text field for the username and a 'secret' field for the password, then pass the username and the password's `secret:` reference here. The password goes to the vault; you never see it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        site: { type: "string", description: "The website, e.g. example.com" },
+        username: { type: "string", description: "The username, or a secret: reference" },
+        password: { type: "string", description: "A secret: reference from ask_user" },
+      },
+      required: ["site"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "forget_login",
+    description: "Remove a saved login for a website (only when the user asks).",
+    inputSchema: {
+      type: "object",
+      properties: { site: { type: "string" } },
+      required: ["site"],
       additionalProperties: false,
     },
   },

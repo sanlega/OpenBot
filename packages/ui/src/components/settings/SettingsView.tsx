@@ -6,6 +6,7 @@ import { useOpenBot } from "../../state/context.js";
 import { getStoredTheme, setTheme, type ThemePreference } from "../../state/theme.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
 import { ComputerImageCard } from "./ComputerImageCard.js";
+import { SavedLogins } from "./SavedLogins.js";
 import { SpendingToday } from "./SpendingToday.js";
 import {
   BUDGET_META,
@@ -297,6 +298,7 @@ export function SettingsView() {
               description="The shared virtual desktop bots use for Computer tasks."
             >
               <ComputerImageCard />
+              <SavedLogins />
             </SettingsSection>
 
             <SettingsSection id="notifications" title="Notifications">
