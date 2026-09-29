@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.9 — 2026-09-30
+
+- Fixed Codex bots (the Chief included) answering "Finished without returning any text": a
+  recent Codex update changed how it reports replies and tool calls, and OpenBot now reads the
+  new format. Replies and the commands a bot ran show up again.
+- With several Codex bots working at once, each one now only sees its own conversation, so
+  their replies can't mix.
+
 ## 0.1.8 — 2026-09-30
 
 - The Chief of Staff now hands real work to bots and creates the ones it needs, so it stays
