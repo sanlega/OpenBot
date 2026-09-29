@@ -26,15 +26,34 @@ const RM_RF_RE = /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\b/i;
 
 /** Browser-automation tools (Playwright/Puppeteer MCP servers, `browser_*` tools) run a browser on the host. */
 const HOST_BROWSER_TOOL_RE = /playwright|puppeteer|(^|[^a-z])browser_[a-z_]+/i;
-/** A shell command that opens a browser on the host: `start https://…`, `open -a`, `chrome.exe …`. */
-const OPEN_BROWSER_CMD_RE =
-  /(^|[;&|]\s*)(start|open|xdg-open|start-process|explorer(\.exe)?)\s+["']?(https?:|chrome|msedge|firefox|brave)|(^|[;&|]\s*)"[^"]*[\\/](chrome|msedge|firefox|brave)(\.exe)?"|(^|[;&|]\s*)([^\s"]*[\\/])?(chrome|msedge|firefox|brave)(\.exe)?(\s|$)/i;
+const BROWSER_NAMES =
+  "google[- ]?chrome|chromium|chrome|msedge|microsoft[- ]edge|edge|firefox|brave|opera|vivaldi|safari";
+/** Commands that open something with the desktop's default handler, pointed at a page or a browser. */
+const OPEN_IN_BROWSER_RE = new RegExp(
+  String.raw`(^|[;&|(]\s*|\bcmd(\.exe)?\s+/c\s+|\bpowershell(\.exe)?\s+(-\w+\s+)*)` +
+    String.raw`(start|start-process|open|xdg-open|gio\s+open|explorer(\.exe)?|sensible-browser|x-www-browser)\b` +
+    String.raw`[^;&|]*?(https?:|file:|\.html?\b|${BROWSER_NAMES})`,
+  "i",
+);
+/** A browser program itself started as the command, plain or by a quoted path with spaces. */
+const BROWSER_BINARY_RE = new RegExp(
+  String.raw`(^|[;&|(]\s*)("[^"]*[\\/](${BROWSER_NAMES})(\.exe)?"|([^\s"]*[\\/])?(${BROWSER_NAMES})(\.exe)?(\s|$))`,
+  "i",
+);
+/** Scripts that start a browser or an automation library from code. */
+const BROWSER_SCRIPT_RE =
+  /webbrowser\.open|python3?\s+-m\s+webbrowser|\b(npx|pnpm\s+(exec|dlx)|yarn|bunx|node|python3?)\s+[^;&|]*\b(playwright|puppeteer|selenium)\b|\bplaywright\s+(test|codegen|install|open|screenshot|show-report)\b/i;
 
 /** True when the action would drive a browser on the user's own computer instead of the VM. */
 export function usesHostBrowser(req: BrokerRequest): boolean {
   if (HOST_BROWSER_TOOL_RE.test(`${req.action} ${req.summary}`)) return true;
   const command = (req.args as { command?: unknown } | undefined)?.command;
-  return typeof command === "string" && OPEN_BROWSER_CMD_RE.test(command);
+  if (typeof command !== "string") return false;
+  return (
+    OPEN_IN_BROWSER_RE.test(command) ||
+    BROWSER_BINARY_RE.test(command) ||
+    BROWSER_SCRIPT_RE.test(command)
+  );
 }
 
 /** plan §5 WS2: "sensitive computer targets" — matched against a computer action's observed element label. */

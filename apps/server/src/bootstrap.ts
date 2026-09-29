@@ -174,7 +174,31 @@ function cosSpawnTimes(ctx: CoreContext): Date[] {
     .sort((a, b) => a.getTime() - b.getTime());
 }
 
+/**
+ * Installs that never touched the spawn limits hold the old defaults (6 bots, 2 per day, 30 min
+ * cooldown) in their settings row, which would keep the Chief from delegating (D-023). Move
+ * exactly that untouched triple to the new defaults; anything the owner changed is kept.
+ */
+export function upgradeUntouchedSpawnCaps(ctx: CoreContext): void {
+  const settings = ctx.repos.settings.get();
+  const caps = settings?.caps;
+  if (!settings || !caps) return;
+  if (caps.s1_cosBotsCap === 6 && caps.s2_newBotsPer24h === 2 && caps.s3_spawnCooldownMin === 30) {
+    ctx.repos.settings.upsert({
+      ...settings,
+      caps: {
+        ...caps,
+        s1_cosBotsCap: DEFAULT_AUTONOMY_CAPS.cosCreatedBotsMax,
+        s2_newBotsPer24h: DEFAULT_AUTONOMY_CAPS.newBotsPerDay,
+        s3_spawnCooldownMin: DEFAULT_AUTONOMY_CAPS.spawnCooldownMin,
+      },
+      updatedAt: ctx.clock.now().toISOString(),
+    });
+  }
+}
+
 function loadAutonomyCaps(ctx: CoreContext): AutonomyCaps {
+  upgradeUntouchedSpawnCaps(ctx);
   const settings = ctx.repos.settings.get();
   if (!settings) return DEFAULT_AUTONOMY_CAPS;
   const caps = settings.caps;

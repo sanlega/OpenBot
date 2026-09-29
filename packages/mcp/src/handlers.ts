@@ -5,7 +5,7 @@ import {
   type InputRequest,
   type Message,
 } from "@openbot/contracts";
-import { listLogins, removeLogin, saveLogin, type CoreContext } from "@openbot/core";
+import { getLogin, listLogins, saveLogin, type CoreContext } from "@openbot/core";
 import type { McpToolServices } from "./services/interfaces.js";
 import { TOOL_INPUT_SCHEMAS } from "./tool-schemas.js";
 import { COS_ONLY_TOOLS } from "./tool-definitions.js";
@@ -21,7 +21,6 @@ const SIDE_EFFECT_TOOLS = new Set([
   "ask_user",
   "cancel_input",
   "save_login",
-  "forget_login",
   "request_approval",
   "computer_task",
   "computer_steer",
@@ -90,13 +89,16 @@ export class ToolRouter {
         return allowed({ logins: await listLogins(this.ctx.vault) });
       case "save_login": {
         const login = parsed.data as { site: string; username?: string; password?: string };
+        // A Bot may add a login, never overwrite one: only the owner changes or removes them.
+        if (await getLogin(this.ctx.vault, login.site)) {
+          return refused(
+            `a login for ${login.site} is already saved`,
+            "ask the owner to change it in Settings > Computer > Saved logins",
+          );
+        }
         const saved = await saveLogin(this.ctx.vault, login.site, login, this.ctx.clock.now());
         return saved.ok ? allowed({ saved: true, site: saved.site }) : refused(saved.reason);
       }
-      case "forget_login":
-        return (await removeLogin(this.ctx.vault, (parsed.data as { site: string }).site))
-          ? allowed({ removed: true })
-          : refused("no saved login for that site");
       case "cancel_input":
         return this.cancelInput(session, (parsed.data as { request_id: string }).request_id);
       case "archive_bot":

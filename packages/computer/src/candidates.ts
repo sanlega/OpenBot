@@ -16,7 +16,7 @@ export interface Candidate {
   reversible: boolean;
 }
 
-const TEXT_ROLES = /^(input|textarea|textbox|searchbox|combobox)$/i;
+const TEXT_ROLES = /^(input|textarea|textbox|searchbox|combobox|password)$/i;
 const SELECT_ROLES = /^(select|listbox)$/i;
 const CLICK_ROLES =
   /^(a|link|button|checkbox|radio|switch|tab|menuitem|menuitemcheckbox|menuitemradio|option|treeitem|summary|input)$/i;

@@ -157,6 +157,69 @@ describe("ComputerTaskManager", () => {
       expect(seenUrls[0]).toBe(page.url);
     });
 
+    it("masks a typed secret in every later observation, so Jev never sees it", async () => {
+      const provider = new FakeComputerProvider();
+      const states: string[] = [];
+      const recording = {
+        decide: async (req: { state: unknown }) => {
+          states.push(JSON.stringify(req.state));
+          const [op, target] = script[Math.min(states.length - 1, script.length - 1)]!;
+          return {
+            answers: { action: choice(candidateId(op, target)), is_destructive: safe },
+            provider: "jev",
+            model: "scripted",
+            latencyMs: 1,
+            decisionId: `dec_${states.length}`,
+          } satisfies DecideResult;
+        },
+      } as unknown as DecisionService;
+      const tasks = new ComputerTaskManager({
+        decisionService: recording,
+        provider,
+        inputTimeoutMs: 5_000,
+        secrets: {
+          resolveRef: async () => "Vault value 42",
+          loginFor: async () => undefined,
+          fieldKind: () => undefined,
+        },
+      });
+      start(tasks, { inputs: { subject: "secret:input.x.subject" } });
+      await finish(tasks);
+      // The fake page did hold the secret after typing...
+      const screen = await provider.screen("bot_1");
+      expect((await screen.observe()).elements.find((e) => e.label === "Subject")?.value).toBe(
+        "Vault value 42",
+      );
+      // ...but nothing Jev was asked afterwards contains it.
+      expect(states.length).toBeGreaterThan(2);
+      expect(states.join("|")).not.toContain("Vault value 42");
+    });
+
+    it("does not let an empty or very short input key match every field", async () => {
+      const secrets = {
+        resolveRef: async () => "leaked",
+        loginFor: async () => undefined,
+        fieldKind: () => undefined,
+      };
+      for (const inputs of [{ "": "secret:input.x.a" }, { Su: "secret:input.x.a" }] as Array<
+        Record<string, string>
+      >) {
+        const tasks = new ComputerTaskManager({
+          decisionService: scriptedJev(script),
+          provider: new FakeComputerProvider(),
+          inputTimeoutMs: 5_000,
+          secrets,
+        });
+        start(tasks, { inputs });
+        const waiting = await tasks.wait("ctask_1", 2_000);
+        expect(waiting).toMatchObject({
+          status: "needs_input",
+          pendingInput: { field: "Subject" },
+        });
+        tasks.cancel("ctask_1");
+      }
+    });
+
     it("asks the engine when the referenced secret is gone", async () => {
       const tasks = new ComputerTaskManager({
         decisionService: scriptedJev(script),

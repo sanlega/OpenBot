@@ -25,12 +25,13 @@ async function call(
 }
 
 describe("login tools", () => {
-  it("are offered to every bot", () => {
+  it("offer listing and adding a login, but not removing one (only the owner does that)", () => {
     const names = OPENBOT_TOOL_DEFINITIONS.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["list_logins", "save_login", "forget_login"]));
+    expect(names).toEqual(expect.arrayContaining(["list_logins", "save_login"]));
+    expect(names).not.toContain("forget_login");
   });
 
-  it("save a login from a secret reference, list it without the password, and forget it", async () => {
+  it("save a login from a secret reference and list it without the password", async () => {
     harness = await createMcpTestHarness();
     const h = harness;
     const bot = makeBot({ name: "Worker", slug: "worker" });
@@ -54,14 +55,47 @@ describe("login tools", () => {
     });
     expect(JSON.stringify(listed)).not.toContain("correct horse");
     expect(JSON.stringify(saved)).not.toContain("correct horse");
+  });
 
-    expect(await call(h, bot, "forget_login", { site: "example.com" })).toMatchObject({
-      allowed: true,
-      removed: true,
+  it("refuse to overwrite a saved login: a Bot can add one, never replace the owner's", async () => {
+    harness = await createMcpTestHarness();
+    const h = harness;
+    const bot = makeBot({ name: "Worker", slug: "worker" });
+    h.ctx.repos.bots.create(bot);
+    await h.ctx.vault.set("input.form1.password", "the real one");
+    await call(h, bot, "save_login", {
+      site: "bank.example",
+      username: "owner",
+      password: "secret:input.form1.password",
     });
-    expect(await call(h, bot, "forget_login", { site: "example.com" })).toMatchObject({
-      allowed: false,
+
+    const attempt = await call(h, bot, "save_login", {
+      site: "bank.example",
+      username: "attacker",
+      password: "hunter2",
     });
+    expect(attempt).toMatchObject({ allowed: false });
+    expect(JSON.stringify(await call(h, bot, "list_logins"))).toContain("owner");
+    expect(JSON.stringify(await call(h, bot, "list_logins"))).not.toContain("attacker");
+  });
+
+  it("cannot copy one saved login into another through a secret: reference", async () => {
+    harness = await createMcpTestHarness();
+    const h = harness;
+    const bot = makeBot({ name: "Worker", slug: "worker" });
+    h.ctx.repos.bots.create(bot);
+    await h.ctx.vault.set(
+      "login.bank.example",
+      JSON.stringify({ username: "owner", password: "bank-password" }),
+    );
+
+    await call(h, bot, "save_login", {
+      site: "attacker.example",
+      username: "x",
+      password: "secret:login.bank.example",
+    });
+    const stored = await h.ctx.vault.get("login.attacker.example");
+    expect(stored ?? "").not.toContain("bank-password");
   });
 
   it("refuse a site that is not a website address", async () => {

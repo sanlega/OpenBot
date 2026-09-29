@@ -82,12 +82,6 @@ exports[`McpComposer > snapshots tool input schemas 1`] = `
     ],
   },
   {
-    "name": "forget_login",
-    "required": [
-      "site",
-    ],
-  },
-  {
     "name": "computer_status",
     "required": [
       "taskId",

@@ -2,6 +2,7 @@ import type {
   Action,
   ComputerProvider,
   DecisionService,
+  Observation,
   ObservedElement,
 } from "@openbot/contracts";
 import type { ComputerActionBroker } from "./broker.js";
@@ -77,6 +78,8 @@ export interface ComputerTaskManagerOptions {
 interface TaskRuntime {
   snapshot: ComputerTaskSnapshot;
   inputs: Record<string, string>;
+  /** Secret values the host typed in this task; masked in everything Jev or the UI sees. */
+  typedSecrets: Set<string>;
   cancelled: boolean;
   pendingText?: (text: string | null) => void;
   settled: Promise<void>;
@@ -118,6 +121,7 @@ export class ComputerTaskManager {
         instructions: [],
       },
       inputs: { ...(req.inputs ?? {}) },
+      typedSecrets: new Set(),
       cancelled: false,
       settled: Promise.resolve(),
       waiters: new Set(),
@@ -205,6 +209,7 @@ export class ComputerTaskManager {
         this.emit(runtime);
       },
       textForType: (ctx) => this.textFor(runtime, ctx.target, ctx.observation.url),
+      redactObservation: (observation) => maskSecrets(observation, runtime.typedSecrets),
       onStep: (event) => {
         runtime.snapshot.steps.push({
           step: event.step,
@@ -241,9 +246,11 @@ export class ComputerTaskManager {
     const known = matchInput(runtime.inputs, label);
     if (known !== undefined) {
       if (!known.startsWith("secret:") || !this.opts.secrets) return Promise.resolve(known);
-      return this.opts.secrets
-        .resolveRef(known)
-        .then((value) => value ?? this.askEngine(runtime, label));
+      return this.opts.secrets.resolveRef(known).then((value) => {
+        if (value === undefined) return this.askEngine(runtime, label);
+        runtime.typedSecrets.add(value);
+        return value;
+      });
     }
     const kind = this.opts.secrets?.fieldKind(label, target?.role);
     if (kind && this.opts.secrets) {
@@ -251,7 +258,9 @@ export class ComputerTaskManager {
       // The page being typed into right now (the task's last step may be on another page).
       return secrets.loginFor(pageUrl ?? runtime.snapshot.url).then((login) => {
         const value = login?.[kind];
-        return value ? value : this.askEngine(runtime, label);
+        if (!value) return this.askEngine(runtime, label);
+        runtime.typedSecrets.add(value);
+        return value;
       });
     }
     return this.askEngine(runtime, label);
@@ -307,11 +316,33 @@ export class ComputerTaskManager {
   }
 }
 
+/** Shortest key that may match by containment; shorter ones must match the label exactly. */
+const MIN_PARTIAL_KEY = 3;
+
 function matchInput(inputs: Record<string, string>, label: string): string | undefined {
   const wanted = label.trim().toLowerCase();
+  if (!wanted) return undefined;
   for (const [key, value] of Object.entries(inputs)) {
     const k = key.trim().toLowerCase();
-    if (k === wanted || wanted.includes(k) || k.includes(wanted)) return value;
+    // An empty key must never match every field.
+    if (!k) continue;
+    if (k === wanted) return value;
+    if (k.length >= MIN_PARTIAL_KEY && (wanted.includes(k) || k.includes(wanted))) return value;
   }
   return undefined;
+}
+
+const MASK = "••••••";
+
+/** Replaces any field value that holds a secret the host typed, so it never reaches Jev or events. */
+function maskSecrets(observation: Observation, secrets: Set<string>): Observation {
+  if (secrets.size === 0) return observation;
+  return {
+    ...observation,
+    elements: observation.elements.map((el) =>
+      el.value && [...secrets].some((secret) => el.value!.includes(secret))
+        ? { ...el, value: MASK }
+        : el,
+    ),
+  };
 }

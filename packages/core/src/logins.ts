@@ -7,6 +7,8 @@ import type { Vault } from "./vault.js";
  */
 export const LOGIN_VAULT_PREFIX = "login.";
 const SECRET_REF_PREFIX = "secret:";
+/** Where answers to `secret` form fields are stored (see the inputs route). */
+const FORM_SECRET_PREFIX = "input.";
 
 export interface StoredLogin {
   username?: string;
@@ -36,27 +38,60 @@ export function siteKey(input: string): string | undefined {
   return /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(host) ? host : undefined;
 }
 
-/** A page's own host, then its parent domains: `accounts.example.com` tries `example.com` too. */
+/** Sign-in subdomains that may share a login with their parent domain: `accounts.example.com`. */
+const SIGN_IN_LABELS = new Set([
+  "www",
+  "login",
+  "signin",
+  "accounts",
+  "account",
+  "auth",
+  "id",
+  "sso",
+  "secure",
+]);
+
+/** Hosts where plain http is expected (the local desktop VM reaching this computer). */
+const PLAIN_HTTP_OK = /^(localhost|host\.docker\.internal|.*\.local|.*\.internal)$/;
+
+/**
+ * Which saved sites may apply to a page: its own host, plus the parent domain only when the extra
+ * labels are known sign-in ones. `evil.example.com` never gets `example.com`'s login, and a login
+ * is never typed on plain http (except local test hosts).
+ */
 export function siteCandidates(url: string | undefined): string[] {
   if (!url) return [];
-  let host: string;
+  let parsed: URL;
   try {
-    host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    parsed = new URL(url);
   } catch {
     return [];
   }
-  const parts = host.split(".");
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && PLAIN_HTTP_OK.test(host))) {
+    return [];
+  }
+  const labels = host.replace(/^www\./, "").split(".");
   const out: string[] = [];
-  for (let i = 0; i <= parts.length - 2; i += 1) out.push(parts.slice(i).join("."));
+  for (let i = 0; i <= labels.length - 2; i += 1) {
+    if (i > 0 && !labels.slice(0, i).every((label) => SIGN_IN_LABELS.has(label))) break;
+    out.push(labels.slice(i).join("."));
+  }
   return out;
 }
 
+/**
+ * Turns a `secret:` reference from an `ask_user` form into its value. Only the form answers
+ * (`input.*` keys) can be referenced: never a saved login, a connector token or any other vault key.
+ */
 export async function resolveSecretRef(
   vault: LoginVault,
   ref: string,
 ): Promise<string | undefined> {
   if (!ref.startsWith(SECRET_REF_PREFIX)) return ref;
-  return vault.get(ref.slice(SECRET_REF_PREFIX.length));
+  const key = ref.slice(SECRET_REF_PREFIX.length);
+  if (!key.startsWith(FORM_SECRET_PREFIX)) return undefined;
+  return vault.get(key);
 }
 
 /** Saves (or updates) the login for a site. Values may be plain text or `secret:` references. */
@@ -130,13 +165,17 @@ export async function removeLogin(vault: LoginVault, site: string): Promise<bool
   return true;
 }
 
+/** Words that mean a field is a second factor, a repeat or a code, not the account password. */
+const NOT_THE_PASSWORD =
+  /confirm|repeat|retype|verif|one[- ]?time|\botp\b|2fa|\bcode\b|c[o\u00f3]digo|\bpin\b|security|new password/i;
+
 /** Whether a field is asking for a password or for who you are, from what the page calls it. */
 export function loginFieldKind(label: string, role?: string): "password" | "username" | undefined {
-  if (role === "password" || /pass(word|code)?\b|contrase(ñ|n)a|clave/i.test(label)) {
-    return "password";
-  }
-  if (/e-?mail|user ?name|usuario|correo|log ?in|phone|tel[eé]fono|identifier/i.test(label)) {
-    return "username";
+  const isPassword =
+    role === "password" || /\bpass(word)?\b|\bcontrase((\u00f1|n))a\b/i.test(label);
+  if (isPassword) return NOT_THE_PASSWORD.test(label) ? undefined : "password";
+  if (/\b(e-?mail|user ?name|usuario|correo|log ?in|phone|tel[e\u00e9]fono)\b/i.test(label)) {
+    return NOT_THE_PASSWORD.test(label) ? undefined : "username";
   }
   return undefined;
 }

@@ -124,17 +124,22 @@ export class CodexDriver implements EngineDriver {
       });
       let turnId: string;
       try {
-        turnId = await this.appServer.turnStart(threadId, input.text);
+        try {
+          turnId = await this.appServer.turnStart(threadId, input.text);
+        } catch (error) {
+          // The app-server forgot this thread (it restarted): start a fresh one and go on.
+          if (!isThreadNotFound(error)) throw error;
+          this.liveThreads.delete(threadId);
+          threadId = await this.startFreshThread(input);
+          this.threadByBot.set(botKey, threadId);
+          state.threadId = threadId;
+          state.sessionId = threadId;
+          hooks.emit({ type: "session_started", sessionId: threadId });
+          turnId = await this.appServer.turnStart(threadId, input.text);
+        }
       } catch (error) {
-        // The app-server forgot this thread (it restarted): start a fresh one and go on.
-        if (!isThreadNotFound(error)) throw error;
-        this.liveThreads.delete(threadId);
-        threadId = await this.startFreshThread(input);
-        this.threadByBot.set(botKey, threadId);
-        state.threadId = threadId;
-        state.sessionId = threadId;
-        hooks.emit({ type: "session_started", sessionId: threadId });
-        turnId = await this.appServer.turnStart(threadId, input.text);
+        unsubscribe();
+        throw error;
       }
       state.turnId = turnId;
 

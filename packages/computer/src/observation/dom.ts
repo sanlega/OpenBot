@@ -21,7 +21,7 @@ const DOM_SCRIPT = `(() => {
   const nodes = pool.filter((el) => !seen.has(el) && seen.add(el) && visible(el));
   return nodes.slice(0, 80).map((el, index) => {
     const type = el.tagName === 'INPUT' ? (el.getAttribute('type') || 'text').toLowerCase() : '';
-    const inputRole = { checkbox: 'checkbox', radio: 'radio', submit: 'button', button: 'button', reset: 'button', image: 'button', search: 'searchbox', range: 'slider' }[type] || (type ? 'textbox' : '');
+    const inputRole = { checkbox: 'checkbox', radio: 'radio', submit: 'button', button: 'button', reset: 'button', image: 'button', search: 'searchbox', range: 'slider', password: 'password' }[type] || (type ? 'textbox' : '');
     const role = el.getAttribute('role') || inputRole || el.tagName.toLowerCase();
     const label = (el.getAttribute('aria-label')
       || el.getAttribute('placeholder')
@@ -29,7 +29,8 @@ const DOM_SCRIPT = `(() => {
       || (el.innerText || '').trim().slice(0, 120)
       || el.getAttribute('name')
       || el.tagName.toLowerCase());
-    const value = 'value' in el ? String(el.value ?? '') : undefined;
+    // A password field never reveals what is in it, to Jev or anyone else.
+    const value = type === 'password' ? (el.value ? '••••••' : '') : ('value' in el ? String(el.value ?? '') : undefined);
     const rect = el.getBoundingClientRect();
     return {
       role,

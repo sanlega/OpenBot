@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { CoreContext } from "../../context.js";
 import { listLogins, removeLogin, saveLogin, siteKey } from "../../logins.js";
 import { requireOwner } from "../auth.js";
@@ -15,13 +15,14 @@ export function registerLoginRoutes(app: FastifyInstance, ctx: CoreContext): voi
 
   app.put("/api/logins/:site", async (request, reply) => {
     if (!requireOwner(request, reply)) return;
-    const { site } = request.params as { site: string };
+    const site = siteParam(request, reply);
+    if (!site) return;
     const body = (request.body ?? {}) as { username?: unknown; password?: unknown };
     const text = (value: unknown) =>
       typeof value === "string" && value.trim() !== "" ? value : undefined;
     const saved = await saveLogin(
       ctx.vault,
-      decodeURIComponent(site),
+      site,
       { username: text(body.username), password: text(body.password) },
       ctx.clock.now(),
     );
@@ -31,11 +32,22 @@ export function registerLoginRoutes(app: FastifyInstance, ctx: CoreContext): voi
 
   app.delete("/api/logins/:site", async (request, reply) => {
     if (!requireOwner(request, reply)) return;
-    const { site } = request.params as { site: string };
-    const key = siteKey(decodeURIComponent(site));
+    const site = siteParam(request, reply);
+    if (!site) return;
+    const key = siteKey(site);
     if (!key || !(await removeLogin(ctx.vault, key))) {
       return reply.code(404).send({ error: "not_found" });
     }
     return { ok: true };
   });
+}
+
+/** The `:site` path parameter, decoded; a malformed one is a 400, not a crash. */
+function siteParam(request: FastifyRequest, reply: FastifyReply): string | undefined {
+  try {
+    return decodeURIComponent((request.params as { site: string }).site);
+  } catch {
+    void reply.code(400).send({ error: "invalid_login", reason: "that isn't a website address" });
+    return undefined;
+  }
 }

@@ -56,6 +56,8 @@ export interface FastLoopOptions {
    * answer; resolving `null` escalates the task.
    */
   textForType?: (ctx: TypeTextContext) => Promise<string | null>;
+  /** Applied to every observation before Jev, events or hashing see it (masks typed secrets). */
+  redactObservation?: (observation: Observation) => Observation;
   /** Extra instructions the engine added while the task runs (steering). */
   instructions?: () => string[];
   /** Checked before every step; true stops the loop as cancelled. */
@@ -193,7 +195,12 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
   const limit = { observe: 15_000, decide: 20_000, act: 30_000, ...timeouts };
   const observe = async () => {
     onPhase?.("looking");
-    return withDeadline(screen.observe(), limit.observe, "Looking at the screen took too long.");
+    const raw = await withDeadline(
+      screen.observe(),
+      limit.observe,
+      "Looking at the screen took too long.",
+    );
+    return options.redactObservation ? options.redactObservation(raw) : raw;
   };
 
   const broker = optionsBroker ?? new DefaultComputerActionBroker();

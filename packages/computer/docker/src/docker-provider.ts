@@ -65,7 +65,17 @@ export class DockerProvider implements ComputerProvider {
     }
   }
 
-  async ensureStarted(): Promise<void> {
+  private starting: Promise<void> | undefined;
+
+  /** Concurrent callers share one start-up (one Docker Desktop launch, one container). */
+  ensureStarted(): Promise<void> {
+    this.starting ??= this.startOnce().finally(() => {
+      this.starting = undefined;
+    });
+    return this.starting;
+  }
+
+  private async startOnce(): Promise<void> {
     if (this.started) {
       if ((await this.status()).ready) {
         this.scheduleIdleStop();

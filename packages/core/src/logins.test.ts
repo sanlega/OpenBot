@@ -109,3 +109,50 @@ describe("saved logins", () => {
     expect(loginFieldKind(label, role)).toBe(kind);
   });
 });
+
+describe("saved logins: what they may be used for", () => {
+  it("does not offer example.com's login to evil.example.com, or to plain http", () => {
+    expect(siteCandidates("https://evil.example.com/login")).toEqual(["evil.example.com"]);
+    expect(siteCandidates("https://accounts.example.com/login")).toEqual([
+      "accounts.example.com",
+      "example.com",
+    ]);
+    expect(siteCandidates("http://example.com/login")).toEqual([]);
+    // The local VM reaching this computer for tests is the one plain-http exception.
+    expect(siteCandidates("http://host.docker.internal:9911/login")).toEqual([
+      "host.docker.internal",
+    ]);
+  });
+
+  it("only resolves secret: references that point at a form answer, never another vault key", async () => {
+    const vault = new InMemoryVault();
+    await vault.set("input.f1.pw", "form-answer");
+    await vault.set("login.bank.com", JSON.stringify({ username: "u", password: "bank-password" }));
+    await vault.set("connector.github.token", "ghp_secret");
+    expect(await resolveSecretRef(vault, "secret:input.f1.pw")).toBe("form-answer");
+    expect(await resolveSecretRef(vault, "secret:login.bank.com")).toBeUndefined();
+    expect(await resolveSecretRef(vault, "secret:connector.github.token")).toBeUndefined();
+
+    // ...and so a Bot cannot copy one saved login into another through save_login.
+    const copied = await saveLogin(
+      vault,
+      "attacker.example",
+      { username: "x", password: "secret:login.bank.com" },
+      NOW,
+    );
+    expect(copied.ok).toBe(true);
+    expect((await loginForUrl(vault, "https://attacker.example"))?.password).toBeUndefined();
+  });
+
+  it.each([
+    ["Confirm password", undefined],
+    ["Verification code", undefined],
+    ["Security code", undefined],
+    ["Enter your PIN", undefined],
+    ["New password", undefined],
+    ["Search", undefined],
+    ["Telephone book", undefined],
+  ])("does not treat %s as the login", (label, role) => {
+    expect(loginFieldKind(label, role)).toBeUndefined();
+  });
+});

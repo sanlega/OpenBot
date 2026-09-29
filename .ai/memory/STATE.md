@@ -9,12 +9,25 @@ _Last updated: 2026-09-29 by Claude_
   line and the engine-continuity routing hint. `main`'s CI had one red job
   (`test (ubuntu-latest)`) that was only the known flaky Unhandled Rejection with all
   843 tests passing (see LESSONS.md).
-- **Autonomy backlog (2026-09-29), tracked as GitHub issues #1-#7** (#7 is the tracking
-  issue with the suggested order: #6 turn failed with no reason, #2 Full preset still
-  prompts, #4 Docker not running, #3 VM-only still uses the host, #1 Chief should
-  delegate/spawn by default, #5 ask for credentials + vault + VM login). Found in live
-  use; each issue records the evidence and acceptance. v0.1.7 (push notifications to
-  iPhone via APNs, WS frame fix) is released and installed.
+- **Autonomy backlog #1-#7 fixed in code, unreleased (2026-09-30)** (commits 22667ca..45c804e
+  on `main`; decisions D-023..D-026). #6 turn failures are explained (Claude
+  `error_max_turns` wording, Codex thread resume/replace, step limit 50 to 200); #2 Full
+  really means no cards (connector side effects and local-computer skipped; live preset
+  read per action; `AskUserQuestion` read-only); #3 VM-only Bots are denied host browsers
+  (Playwright/`browser_*`/opening a URL from the shell); #4 Docker Desktop is started for
+  the owner and the desktop daemon survives a failed display (stale locks removed); #1 the
+  Chief delegates by default (`substantial_work` Jev question, looser caps 10/8 per day/2
+  min); #5 saved logins (vault `login.<site>`, MCP `list_logins/save_login/forget_login`,
+  `secret:` refs, typed by the host in the VM, Settings > Computer > Saved logins).
+  **Verified live**: local image `openbot-desktop:local` built and run; a real VM task
+  signed in to a host login page with the saved login (real Jev; password never in the
+  snapshot); killed the container with `docker kill` and it recovered; stopped Docker
+  Desktop and `ensureDockerEngine` started it; real Claude CLI under Full ran a `curl`
+  without a card (control bot under workspace_write got one); real Chief created a bot,
+  sent it the job and ended its turn. Full pipeline: 934 unit tests, 18 E2E, lint 0
+  errors. **Deferred on purpose**: the engine's shell still runs on the host (issue #8).
+  Not yet done: an independent agent's review (in progress), release (owner approval),
+  and the desktop image must be republished to GHCR for other users (`v*` tag does it).
 - **v0.1.5 released and installed; remote access verified live (2026-09-29)**: the owner
   paired the iPhone app over LAN (v0.1.2 ported the native sealed pairing + scoped E2E
   from `sanlega/openbot-ios`; plan there:

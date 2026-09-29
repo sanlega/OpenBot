@@ -35,6 +35,24 @@ describe("a Bot whose computer is the virtual machine stays off the host's brows
       { args: { command: "cd x && msedge --new-window" } },
     ],
     ["opening a URL on macOS", { args: { command: "open https://example.com" } }],
+    [
+      "open -a with a named browser",
+      { args: { command: 'open -a "Google Chrome" https://example.com' } },
+    ],
+    ["cmd /c start", { args: { command: "cmd /c start https://example.com" } }],
+    [
+      "google-chrome on Linux",
+      { args: { command: "google-chrome --headless https://example.com" } },
+    ],
+    ["chromium", { args: { command: "chromium --no-sandbox" } }],
+    ["xdg-open a page", { args: { command: "xdg-open index.html" } }],
+    [
+      "PowerShell Start-Process",
+      { args: { command: "powershell -c Start-Process https://example.com" } },
+    ],
+    ["python webbrowser", { args: { command: "python -m webbrowser https://example.com" } }],
+    ["npx playwright", { args: { command: "npx playwright test" } }],
+    ["a script running puppeteer", { args: { command: "node scrape-puppeteer.js" } }],
   ])("denies %s", (_name, overrides) => {
     const reason = builtinDenyReason(req(overrides));
     expect(reason).toMatch(/virtual machine.*computer_task/);
@@ -58,6 +76,10 @@ describe("a Bot whose computer is the virtual machine stays off the host's brows
     "python -m http.server 8934",
     "curl -sL https://example.com/file.jpg -o file.jpg",
     "echo openbot > notes.txt",
+    "open README.md",
+    "start-server --port 3000",
+    "npm install left-pad",
+    "git log --oneline -5",
   ])("does not mistake %s for a browser launch", (command) => {
     expect(usesHostBrowser(req({ args: { command } }))).toBe(false);
   });

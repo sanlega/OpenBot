@@ -187,7 +187,7 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
   {
     name: "save_login",
     description:
-      "Save a website login so computer_task can sign in on its own from now on. Ask the user with ask_user first: a text field for the username and a 'secret' field for the password, then pass the username and the password's `secret:` reference here. The password goes to the vault; you never see it.",
+      "Save a NEW website login so computer_task can sign in on its own from now on. You cannot change or remove a saved login: the owner does that in Settings. Ask the user with ask_user first: a text field for the username and a 'secret' field for the password, then pass the username and the password's `secret:` reference here. The password goes to the vault; you never see it.",
     inputSchema: {
       type: "object",
       properties: {
@@ -195,16 +195,6 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
         username: { type: "string", description: "The username, or a secret: reference" },
         password: { type: "string", description: "A secret: reference from ask_user" },
       },
-      required: ["site"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "forget_login",
-    description: "Remove a saved login for a website (only when the user asks).",
-    inputSchema: {
-      type: "object",
-      properties: { site: { type: "string" } },
       required: ["site"],
       additionalProperties: false,
     },

@@ -106,3 +106,35 @@ dockerIntegration("DockerProvider integration", () => {
     }
   });
 });
+
+describe("DockerProvider concurrent start-up", () => {
+  it("runs one start-up for simultaneous ensureStarted calls (one container, one Docker launch)", async () => {
+    let created = 0;
+    let pings = 0;
+    const provider = new DockerProvider({
+      controlClient: new MemoryControlDaemon(),
+      idleStopMs: 0,
+      docker: {
+        ping: async () => {
+          pings += 1;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        },
+        listContainers: async () => [],
+        getContainer: () => {
+          throw new Error("unexpected");
+        },
+        createContainer: async () => {
+          created += 1;
+          return { id: "cont_1", start: async () => {} };
+        },
+      },
+    });
+    await Promise.all([
+      provider.ensureStarted(),
+      provider.ensureStarted(),
+      provider.ensureStarted(),
+    ]);
+    expect(created).toBe(1);
+    expect(pings).toBe(1);
+  });
+});

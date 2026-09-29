@@ -253,6 +253,17 @@ class ApprovalComputerBroker implements ComputerActionBroker {
     input: Parameters<ComputerActionBroker["checkAction"]>[0],
   ): Promise<BrokerDecision> {
     const decision = await this.rules.checkAction(input);
+    // Full means the Bot doesn't ask: its own local-computer steps run unless the step itself is
+    // destructive or touches a sensitive target (those still get a card).
+    if (
+      decision === "ask" &&
+      input.providerId === "local" &&
+      !input.isDestructive &&
+      !input.sensitiveLabel &&
+      this.presetFor(input.botId) === "full"
+    ) {
+      return "allow";
+    }
     if (decision !== "ask" || !this.runtime) return decision;
     const target =
       input.action.target !== undefined
@@ -278,10 +289,7 @@ class ApprovalComputerBroker implements ComputerActionBroker {
         // A typed password (or any secret) must never be printed on an approval card.
         ...(input.action.op === "type"
           ? {
-              text:
-                loginFieldKind(target ?? "", targetRole(input)) === "password"
-                  ? "(hidden)"
-                  : input.action.text,
+              text: isSecretField(target ?? "", targetRole(input)) ? "(hidden)" : input.action.text,
             }
           : {}),
       }),
@@ -334,4 +342,13 @@ function targetRole(input: Parameters<ComputerActionBroker["checkAction"]>[0]): 
   return input.action.target !== undefined
     ? input.observation.elements.find((el) => el.index === input.action.target)?.role
     : undefined;
+}
+
+/** A field whose typed text must never be printed on an approval card. */
+function isSecretField(label: string, role?: string): boolean {
+  return (
+    role === "password" ||
+    loginFieldKind(label, role) === "password" ||
+    /pass(word|code)?|contrase|secret|token|\bcode\b|\bpin\b|otp|2fa|security|verif/i.test(label)
+  );
 }
