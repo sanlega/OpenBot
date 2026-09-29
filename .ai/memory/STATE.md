@@ -1,8 +1,22 @@
 # Project state
 
-_Last updated: 2026-09-29 by Claude_
+_Last updated: 2026-09-30 by Claude_
 
 ## In progress
+- **Autonomy by default (2026-09-30, D-030, plan `.ai/memory/plans/2026-09-30-autonomous-tasks.md`),
+  committed on `main`, NOT released**: the owner wants GrokBot-style autonomy: every request is
+  attempted to the end, the user is only asked for data (credentials, codes, CAPTCHA) or before
+  deleting/spending. Done: the Jev loop recovers instead of stopping; sign-in/code/CAPTCHA pause
+  the task (`needs_user`) and it resumes by itself when the user signs in inside the VM or the
+  engine steers after `save_login`; stopped tasks resume in place; one task per Bot screen; cards
+  only for the control that pays or deletes; shared `AUTONOMY_PROTOCOL` prompt; `next` hints in
+  every computer result; VM-only Bots never get the Playwright connector (it opened Chrome on the
+  owner's desktop) nor engine browser tools. Verified: 1139 unit, 23 E2E, lint 0 errors, and six
+  live scenarios with real Chief/Jev/Docker on copies of the real `~/.openbot`
+  (`scripts/live/`, see its README). **Next**: release (owner's OK) and replay
+  `scripts/live` against the installed app; try a real third-party site (bot defences untested).
+  Known: the Chief often does short browser jobs itself instead of creating a Bot (delegates when
+  asked); dismissing a form wakes the Bot with a "dismissed" turn that can produce a noisy reply.
 - **Session pointer (2026-09-30)**: everything is committed and pushed (`main`, tag v0.1.12,
   installed on the dev machine). Research summary: `.ai/resources/2026-09-30-multi-agent-delegation-research.md`.
   Open backlog: #8 engine shell inside the VM (bots' shell still runs on the host), #9 Settings-level

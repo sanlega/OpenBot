@@ -33,10 +33,20 @@ D. Verification: unit tests for each new behaviour, an E2E with the fake compute
    cookie banner, list with per-row action buttons) using a real engine.
 
 ## Tasks
-- [ ] T1 loop recovery + pausable blockers + resume (computer)
-- [ ] T2 permission narrowing (computer, runtime, decisions wording)
-- [ ] T3 structured `need` through MCP view + tool docs
-- [ ] T4 prompts (runtime, cos)
-- [ ] T5 unit/E2E tests
-- [ ] T6 live verification loop, fix what it finds
-- [ ] T7 memory, release
+- [x] T1 loop recovery + pausable blockers + resume (computer)
+- [x] T2 permission narrowing (computer, runtime, decisions wording)
+- [x] T3 structured `need` + `next` through MCP view + tool docs
+- [x] T4 prompts (runtime, cos; shared AUTONOMY_PROTOCOL in contracts)
+- [x] T5 unit/E2E tests (1138 unit, 23 E2E green)
+- [x] T6 live verification (real Chief + Jev + Docker, local "Linkup" site): run1 credentials
+      asked once and saved, run2 saved login, run3b user signs in inside the VM, run4 hostile
+      variant; all invited the right person with 0 approval cards. Fixed from live runs:
+      credential fields pause as a login (not needs_input), one task per bot screen.
+- [x] T7 live: delegated worker (run5, Chief creates a bot, form in the Chief's chat, 0 cards);
+      destructive request (run6b, asks only at the final delete button; denied, nothing deleted).
+      Fixed from live runs: host Chrome opened by the Playwright connector on a VM-only Bot;
+      navigation steps of a deletion goal asked. E2E 23/23, unit 1139.
+- [ ] T8 release (needs the owner's OK), then replay on the installed app.
+Live harness: scratchpad `live/site.mjs` (local "Linkup", variants a/b/c, `/__state`,
+`/__autologin`, close-account flow) and `live/drive.mjs` (acts as the user; env RUN_HOME,
+SITE_VARIANT, RUN_VM_LOGIN, RUN_EXPECT=ask, RUN_REQUEST). Worth moving into `scripts/`.
