@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.6 — 2026-09-29
+
+- Cloudflare Tunnel is now set up once: the tunnel token is saved encrypted in the
+  vault and the tunnel starts by itself whenever OpenBot opens. In Devices > Remote
+  access you can change the public hostname, replace the token with a different one,
+  start a stopped tunnel, or remove the token (which also stops the tunnel and forgets
+  its hostname). The token is never shown or sent back to the interface.
+
 ## 0.1.5 — 2026-09-29
 
 - Cloudflare Tunnel: the phone pairing QR now includes your tunnel's public address.

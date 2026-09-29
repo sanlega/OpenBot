@@ -165,6 +165,13 @@ export class CloudflareManager {
     this.accessConfigured = configured;
   }
 
+  /** Drops every remembered hostname (the owner removed the tunnel). */
+  forget(): void {
+    this.manualHostname = undefined;
+    this.detectedHostname = undefined;
+    this.accessConfigured = false;
+  }
+
   /** The owner-entered public hostname (kept in network prefs); `undefined` clears it. */
   setManualHostname(hostname: string | undefined): void {
     this.manualHostname = hostname;

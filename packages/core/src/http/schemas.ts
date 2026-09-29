@@ -157,7 +157,8 @@ export const ComputerImageResetBody = z.object({
 });
 
 export const CloudflareTunnelBody = z.object({
-  token: z.string().min(1),
+  /** Omitted to (re)start with the token already saved in the vault. */
+  token: z.string().min(1).optional(),
 });
 
 export const DecisionsQuery = z.object({

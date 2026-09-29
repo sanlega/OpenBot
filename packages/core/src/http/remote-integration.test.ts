@@ -71,6 +71,29 @@ describe("WS11 remote pairing integration", () => {
     expect(cleared.json()).toEqual({ hostname: null });
   });
 
+  it("reports a saved tunnel token as configured only, and removing clears it", async () => {
+    const { app, test } = await boot();
+    const before = await app.inject({ method: "GET", url: "/api/remote/status" });
+    expect(before.json().cloudflare.configured).toBe(false);
+
+    const noToken = await app.inject({
+      method: "POST",
+      url: "/api/remote/cloudflare",
+      payload: {},
+    });
+    expect(noToken.json().result).toEqual({ ok: false, reason: "no saved tunnel token" });
+
+    await test.ctx.vault.set("remote.cloudflareTunnelToken", "saved-secret-token");
+    const after = await app.inject({ method: "GET", url: "/api/remote/status" });
+    expect(after.json().cloudflare.configured).toBe(true);
+    expect(after.body).not.toContain("saved-secret-token");
+
+    const removed = await app.inject({ method: "DELETE", url: "/api/remote/cloudflare" });
+    expect(removed.json()).toEqual({ ok: true });
+    const gone = await app.inject({ method: "GET", url: "/api/remote/status" });
+    expect(gone.json().cloudflare.configured).toBe(false);
+  });
+
   it("completes QR pairing and serves the WS5 UI shell", async () => {
     const { app, test } = await boot();
     await app.inject({
