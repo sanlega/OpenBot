@@ -49,6 +49,8 @@ export interface UiState {
   turnByMessage: Map<string, string>;
   /** `ask_user` forms by id. */
   inputs: Map<string, InputRequest>;
+  /** Open delegations by the worker's bot id: the thread the user follows the task in. */
+  delegations: Map<string, { ownerThreadId: string; state: string }>;
   /** The docker provider's desktop image (Settings > Computer); null until the first `computer.image_status` event or GET. */
   computerImage: ComputerImageStatus | null;
   connected: boolean;
@@ -74,6 +76,7 @@ export function createInitialState(
     turns: new Map(),
     turnByMessage: new Map(),
     inputs: new Map(),
+    delegations: new Map(),
     computerImage: null,
     connected: false,
     everConnected: false,
@@ -277,6 +280,23 @@ function applyEvent(state: UiState, event: OBEvent): void {
         createdAt: event.ts,
       };
       state.approvals.set(approval.id, approval);
+      break;
+    }
+    case "delegation.updated": {
+      const d = p.delegation as
+        { assigneeBotId?: string; ownerThreadId?: string; state?: string } | undefined;
+      if (d?.assigneeBotId && d.ownerThreadId && d.state) {
+        const open =
+          d.state === "submitted" || d.state === "working" || d.state === "input_required";
+        if (open) {
+          state.delegations.set(d.assigneeBotId, {
+            ownerThreadId: d.ownerThreadId,
+            state: d.state,
+          });
+        } else {
+          state.delegations.delete(d.assigneeBotId);
+        }
+      }
       break;
     }
     case "approval.resolved": {

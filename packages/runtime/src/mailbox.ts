@@ -73,6 +73,7 @@ export interface MailboxOptions {
   sessions?: SessionStore;
 }
 
+const NO_REPLY_RE = /^NO_REPLY[.!]?$/i;
 const MESSAGE_USER_TOOL = "message_user";
 const SEND_MESSAGE_TOOL = "send_message";
 
@@ -266,7 +267,9 @@ export class Mailbox {
       // Don't keep resuming a session the engine just failed on.
       this.opts.sessions?.clear(botId, input.engine);
     }
-    if (status === "completed" && replyText.length === 0) {
+    // A reply of exactly NO_REPLY means "nothing to add" (a harness update the user already saw).
+    if (status === "completed" && NO_REPLY_RE.test(replyText.trim())) replyText = "";
+    else if (status === "completed" && replyText.length === 0) {
       // The engine can end a turn on a tool call with no closing text (seen with
       // Codex/gpt-5.5 on multi-step tasks) — without this, the turn is silently
       // dropped: no message, no error, nothing the user can see went wrong.

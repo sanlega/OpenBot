@@ -49,6 +49,14 @@ export {
   requireOwner as isOwnerIdentity,
   type DeviceIdentity,
 } from "./device-auth.js";
+export {
+  DelegationTracker,
+  delegationsOf,
+  MAX_ROUND_TRIPS,
+  MAX_OPEN_PER_REQUESTER,
+  STALL_AFTER_MS,
+  type DelegatedTurnOutcome,
+} from "./delegations.js";
 export { createModuleHost, type ModuleHost } from "./module-host.js";
 export { runDoctor, type DoctorCheck, type DoctorReport } from "./doctor.js";
 export { buildServer } from "./http/server.js";

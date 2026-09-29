@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type { EngineEvent, ToolApprovalRequest, TurnHooks, TurnInput } from "@openbot/contracts";
@@ -79,8 +80,21 @@ export class CodexAppServer {
     }) as ChildProcessWithoutNullStreams;
 
     const rl = createInterface({ input: this.child.stdout });
+    // Opt-in raw trace for diagnosing protocol drift: every line the app-server sends.
+    const traceFile = process.env.OPENBOT_CODEX_TRACE_FILE;
     rl.on("line", (line) => {
       if (!line.trim()) return;
+      if (traceFile) {
+        try {
+          appendFileSync(
+            traceFile,
+            `${line}
+`,
+          );
+        } catch {
+          // tracing must never affect a turn
+        }
+      }
       try {
         this.handleLine(JSON.parse(line) as Record<string, unknown>);
       } catch {

@@ -7,7 +7,7 @@ import {
   type EngineId,
   type TurnInput,
 } from "@openbot/contracts";
-import type { CoreContext, TurnMailbox } from "@openbot/core";
+import { delegationsOf, type CoreContext, type TurnMailbox } from "@openbot/core";
 import { buildCosSystemPrompt, type AutonomyCaps, type CapCounterService } from "@openbot/cos";
 import { McpComposer, removeTokenFileIfUnchanged, type SessionTokenService } from "@openbot/mcp";
 import {
@@ -16,6 +16,7 @@ import {
   NON_COS_RULE_BLOCK,
   type EnqueueTurnInput,
   type Runtime,
+  type TurnOutcome,
   type SessionStore,
 } from "@openbot/runtime";
 import { EngineHealth, isOutOfService } from "./engine-health.js";
@@ -296,13 +297,18 @@ export function createTurnMailbox(
         payload: { messageId: userMessage.id, text: input.text, author: "user" },
       });
 
+      // A turn on a delegation stays on the engine the task started on: its session lives there.
+      const delegation = input.delegationId
+        ? delegationsOf(ctx).get(input.delegationId)
+        : undefined;
+      const engine = input.engine ?? (delegation?.engine as EngineId | undefined);
       const turn = await buildTurn({
         bot,
         text: input.text,
         chainId: liveChainId,
         threadId: thread.id,
         mode,
-        engine: input.engine,
+        engine,
       });
       if ("error" in turn) {
         // Say why in the chat instead of dropping the message silently.
@@ -314,16 +320,23 @@ export function createTurnMailbox(
           turnId: newId("turn"),
           payload: { errorMessage: turn.error },
         });
+        if (delegation) {
+          await delegationsOf(ctx).turnEnded(delegation.id, {
+            status: "failed",
+            reason: turn.error,
+          });
+        }
         return { ok: false, reason: turn.error, chainId: liveChainId, messageId: userMessage.id };
       }
 
-      submitWithFailover(ctx, deps, buildTurn, turn, {
+      void submitWithFailover(ctx, deps, buildTurn, turn, {
         bot,
         text: input.text,
         chainId: liveChainId,
         threadId: thread.id,
         mode,
         pinnedByUser: Boolean(input.engine),
+        delegationId: delegation?.id,
       });
       return {
         ok: true,
@@ -358,9 +371,10 @@ export function createTurnMailbox(
 }
 
 /**
- * A message from another Bot (`send_message`) is a task for the recipient: run
- * its turn on the same chain, so hop limits and loop guards keep applying. The
- * message itself is already in the recipient's thread (runtime delivery).
+ * A message from another Bot (`send_message`) is a task for the recipient: run its turn on the
+ * same chain, so hop limits and loop guards keep applying, pinned to the engine the task started
+ * on. The message itself is already in the recipient's thread (runtime delivery). When the turn
+ * ends the harness settles the delegation and wakes the requester (see `DelegationTracker`).
  */
 export function wakeOnBotMessages(
   ctx: CoreContext,
@@ -372,19 +386,33 @@ export function wakeOnBotMessages(
     const toBotId = event.payload.toBotId;
     const messageId = event.payload.messageId;
     if (typeof toBotId !== "string" || typeof messageId !== "string") return;
+    const delegationId =
+      typeof event.payload.delegationId === "string" ? event.payload.delegationId : undefined;
     const chainId = event.chainId;
+    const tracker = delegationsOf(ctx);
     void (async () => {
       const bot = ctx.repos.bots.getById(toBotId);
       const thread = bot ? ctx.repos.threads.getByBotId(bot.id) : undefined;
       const message = ctx.repos.messages.getById(messageId);
-      if (!bot || !thread || !message) return;
+      if (!bot || !thread || !message) {
+        if (delegationId) {
+          await tracker.turnEnded(delegationId, {
+            status: "failed",
+            reason: "the recipient or its message no longer exists",
+          });
+        }
+        return;
+      }
       const from = event.botId ? ctx.repos.bots.getById(event.botId) : undefined;
+      const delegation = delegationId ? tracker.get(delegationId) : undefined;
+      const mode = ctx.repos.chains.getById(chainId)?.mode ?? "live";
       const turn = await buildTurn({
         bot,
-        text: `Message from ${from?.name ?? "another Bot"} (bot "${from?.slug ?? event.botId}"):\n\n${message.text}`,
+        text: taskText(from, message.text, delegation !== undefined),
         chainId,
         threadId: thread.id,
-        mode: ctx.repos.chains.getById(chainId)?.mode ?? "live",
+        mode,
+        engine: delegation?.engine as EngineId | undefined,
       });
       if ("error" in turn) {
         await ctx.eventBus.publish({
@@ -394,18 +422,144 @@ export function wakeOnBotMessages(
           chainId,
           payload: { text: "", errorMessage: turn.error },
         });
+        if (delegationId) {
+          await tracker.turnEnded(delegationId, { status: "failed", reason: turn.error });
+        }
         return;
       }
-      submitWithFailover(ctx, deps, buildTurn, turn, {
+      void submitWithFailover(ctx, deps, buildTurn, turn, {
         bot,
         text: turn.text,
         chainId,
         threadId: thread.id,
-        mode: ctx.repos.chains.getById(chainId)?.mode ?? "live",
+        mode,
         pinnedByUser: false,
+        delegationId,
       });
-    })().catch(() => undefined);
+    })().catch(async (error) => {
+      if (delegationId) {
+        await tracker
+          .turnEnded(delegationId, { status: "failed", reason: String(error) })
+          .catch(() => undefined);
+      }
+    });
   });
+}
+
+function taskText(from: Bot | undefined, text: string, delegated: boolean): string {
+  const who = `${from?.name ?? "another Bot"} (bot "${from?.slug ?? "unknown"}")`;
+  if (!delegated) return `Message from ${who}:\n\n${text}`;
+  return [
+    `Task from ${who}:`,
+    "",
+    text,
+    "",
+    `Your closing message is returned to ${from?.name ?? "them"} automatically, so end with the result (or what stopped you). If you are blocked on a decision, call message_user with kind "blocker". If you need something from the user, use ask_user: the form appears in the chat the user is already in.`,
+  ].join("\n");
+}
+
+/**
+ * When a delegation changes hands the other way: the requester takes a turn about the outcome,
+ * on a chain of its own (the original one may be paused or spent). The user already sees a card
+ * with the result, so the requester only adds what they still need to know or do.
+ */
+export function wakeRequesterOnDelegations(
+  ctx: CoreContext,
+  deps: TurnMailboxDeps,
+  buildTurn: TurnBuilder,
+): () => void {
+  const tracker = delegationsOf(ctx);
+  tracker.onWake = async (d) => {
+    const requester = ctx.repos.bots.getById(d.requesterBotId);
+    const thread = requester ? ctx.repos.threads.getByBotId(requester.id) : undefined;
+    if (!requester || requester.archivedAt || !thread) return;
+    const worker = ctx.repos.bots.getById(d.assigneeBotId);
+    const chainId = deps.runtime.chains.create({ origin: "bot", mode: "live" }).id;
+    const kind = d.wakeKind ?? d.state;
+    const lines = [
+      "[OpenBot update. This comes from the harness, not from the user.]",
+      `${worker?.name ?? "A bot"} (bot "${worker?.slug ?? d.assigneeBotId}") reports on the task "${d.title}": ${kind}.`,
+    ];
+    if (d.statusMessage) lines.push(`Detail: ${d.statusMessage}`);
+    if (d.result) lines.push("", "Its result:", d.result);
+    if (d.result && /^Finished (\d+ tool calls?|without returning any text)/.test(d.result)) {
+      lines.push(
+        "",
+        `It ended without a closing message. If you need what it found, ask it with send_message to bot "${worker?.slug ?? d.assigneeBotId}".`,
+      );
+    }
+    lines.push(
+      "",
+      "The user already sees a card in this chat with the above. Add only what they still need to know or do next (a decision, credentials, the next step). If there is nothing to add, reply with exactly NO_REPLY.",
+      d.state === "completed"
+        ? "Do not delegate the same task again."
+        : `To answer or redirect it, call send_message to bot "${worker?.slug ?? d.assigneeBotId}"; it continues the same task.`,
+    );
+    const turn = await buildTurn({
+      bot: requester,
+      text: lines.join("\n"),
+      chainId,
+      threadId: thread.id,
+      mode: "live",
+    });
+    if ("error" in turn) {
+      await ctx.eventBus.publish({
+        type: "turn.failed",
+        botId: requester.id,
+        threadId: thread.id,
+        chainId,
+        turnId: newId("turn"),
+        payload: { errorMessage: turn.error },
+      });
+      return;
+    }
+    void submitWithFailover(ctx, deps, buildTurn, turn, {
+      bot: requester,
+      text: turn.text,
+      chainId,
+      threadId: thread.id,
+      mode: "live",
+      pinnedByUser: false,
+    });
+  };
+
+  // Engine activity keeps a working delegation from looking stalled.
+  const unsubscribe = ctx.eventBus.subscribe((event) => {
+    // A worker parked on a permission card is waiting on the user, not working: say so, so the
+    // task doesn't look stalled or done (the card itself shows in the requester's thread).
+    if (
+      event.type === "approval.requested" &&
+      event.botId &&
+      event.payload.kind !== "bot_request"
+    ) {
+      const summary =
+        typeof event.payload.summary === "string" ? event.payload.summary : "an action";
+      void tracker.needsAnswer(event.botId, `waiting for the user's approval: ${summary}`);
+      return;
+    }
+    if (event.type === "approval.resolved" && event.botId) {
+      const id = event.payload.approvalId;
+      const kind = typeof id === "string" ? ctx.repos.approvals.getById(id)?.kind : undefined;
+      if (kind && kind !== "bot_request") void tracker.answered(event.botId);
+      return;
+    }
+    if (
+      event.botId &&
+      (event.type === "tool.started" ||
+        event.type === "tool.completed" ||
+        event.type === "message.delta")
+    ) {
+      tracker.touch(event.botId);
+    }
+  });
+  void tracker.recover().catch(() => undefined);
+  const sweep = setInterval(() => void tracker.sweepStalled().catch(() => undefined), 60_000);
+  sweep.unref?.();
+  return () => {
+    unsubscribe();
+    clearInterval(sweep);
+    tracker.onWake = undefined;
+  };
 }
 
 const ENGINE_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", fake: "Test" };
@@ -414,52 +568,79 @@ const ENGINE_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex",
  * Runs a turn; if its engine turns out to be out of quota (or logged out), marks
  * it unavailable until it resets and retries once on another engine, telling
  * the user in the chat. An engine the user picked for this one message is not
- * second-guessed.
+ * second-guessed. A turn that is refused or fails says so in the chat, and a turn on a
+ * delegation settles it (and wakes the requester) whatever way it ends.
  */
-function submitWithFailover(
+async function submitWithFailover(
   ctx: CoreContext,
   deps: TurnMailboxDeps,
   buildTurn: TurnBuilder,
   turn: EnqueueTurnInput,
-  args: Omit<BuildTurnArgs, "engine"> & { pinnedByUser: boolean },
-): void {
-  void deps.runtime.mailbox
-    .submit(turn)
-    .then(async (outcome) => {
-      if (outcome.status !== "failed" || !isOutOfService(outcome.reason)) return;
-      const until = healthOf(deps).markOutOfService(turn.engine, outcome.reason);
-      if (args.pinnedByUser) return;
-      const fallback = (Object.keys(deps.drivers) as EngineId[]).find(
-        (e) => e !== turn.engine && deps.drivers[e] && healthOf(deps).isAvailable(e),
-      );
-      if (!fallback) return;
-
-      const time = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      const note = `${ENGINE_NAMES[turn.engine] ?? turn.engine} is out of quota until ${time}, so ${ENGINE_NAMES[fallback] ?? fallback} is answering instead.`;
-      const message = deps.runtime.messages.create({
-        threadId: args.threadId,
-        author: { type: "system" },
-        text: note,
-        attachments: [],
-        chainId: args.chainId,
-        hop: 0,
-        proactive: false,
-        delivery: "delivered",
-        pushed: false,
-      });
+  args: Omit<BuildTurnArgs, "engine"> & { pinnedByUser: boolean; delegationId?: string },
+): Promise<TurnOutcome | undefined> {
+  const tracker = delegationsOf(ctx);
+  const settle = async (outcome: TurnOutcome | undefined): Promise<void> => {
+    if (!args.delegationId) return;
+    await tracker.turnEnded(
+      args.delegationId,
+      outcome ?? { status: "failed", reason: "the turn ended unexpectedly" },
+    );
+  };
+  let final: TurnOutcome | undefined;
+  try {
+    if (args.delegationId) await tracker.started(args.delegationId, turn.engine);
+    final = await deps.runtime.mailbox.submit(turn);
+    if (final.status === "failed" && isOutOfService(final.reason)) {
+      const until = healthOf(deps).markOutOfService(turn.engine, final.reason);
+      const fallback = args.pinnedByUser
+        ? undefined
+        : (Object.keys(deps.drivers) as EngineId[]).find(
+            (e) => e !== turn.engine && deps.drivers[e] && healthOf(deps).isAvailable(e),
+          );
+      if (fallback) {
+        const time = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const note = `${ENGINE_NAMES[turn.engine] ?? turn.engine} is out of quota until ${time}, so ${ENGINE_NAMES[fallback] ?? fallback} is answering instead.`;
+        const message = deps.runtime.messages.create({
+          threadId: args.threadId,
+          author: { type: "system" },
+          text: note,
+          attachments: [],
+          chainId: args.chainId,
+          hop: 0,
+          proactive: false,
+          delivery: "delivered",
+          pushed: false,
+        });
+        await ctx.eventBus.publish({
+          type: "message.created",
+          botId: args.bot.id,
+          threadId: args.threadId,
+          chainId: args.chainId,
+          payload: { messageId: message.id, text: note, author: "system" },
+        });
+        const retry = await buildTurn({ ...args, engine: fallback });
+        if (!("error" in retry)) {
+          if (args.delegationId) await tracker.started(args.delegationId, retry.engine);
+          final = await deps.runtime.mailbox.submit(retry);
+        }
+      }
+    }
+    if (final.status === "refused" && final.reason !== "stopped") {
+      // A refused turn (paused chain, spent cap, missing engine) must not vanish silently.
       await ctx.eventBus.publish({
-        type: "message.created",
+        type: "turn.failed",
         botId: args.bot.id,
         threadId: args.threadId,
         chainId: args.chainId,
-        payload: { messageId: message.id, text: note, author: "system" },
+        turnId: newId("turn"),
+        payload: { errorMessage: final.reason ?? "the turn was refused" },
       });
-
-      const retry = await buildTurn({ ...args, engine: fallback });
-      if ("error" in retry) return;
-      void deps.runtime.mailbox.submit(retry);
-    })
-    .catch(() => undefined);
+    }
+  } catch (error) {
+    final = { status: "failed", reason: error instanceof Error ? error.message : String(error) };
+  }
+  await settle(final).catch(() => undefined);
+  return final;
 }
 
 /** `engine_sessions`-backed store, so a Bot resumes its engine session after a restart (M1). */

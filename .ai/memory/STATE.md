@@ -3,17 +3,21 @@
 _Last updated: 2026-09-29 by Claude_
 
 ## In progress
-- **Bidirectional CoS<->worker delegation (2026-09-29, IN PROGRESS, not released)**: live logs
-  showed the worker stopping without anything reaching the Chief. Plan/design:
-  `.ai/memory/plans/2026-09-29-bidirectional-delegation.md`. Done so far (uncommitted to a
-  release): `request_approval` no longer inserts the approval row twice (was
-  `UNIQUE constraint failed: approvals.id`, left pending cards), with a regression test. Not yet
-  built: guaranteed automatic report-back to the delegator when a delegated turn ends,
-  `message_user` from a delegated worker routed to the delegator, hop budget (`maxHops` 4 pauses the
-  chain after task/report/answer/report), guard exemptions for reports. A research subagent
-  (OpenClaw, Hermes, A2A, LangGraph, etc.) was still running; reconcile its report with the plan
-  before implementing. Worker shell calls that failed with null output were NOT denied by the
-  broker (checked); suspect the Codex sandbox on Windows, unconfirmed.
+- **Bidirectional CoS<->worker delegation (2026-09-30): implemented and verified, NOT released**
+  (D-029; plan `.ai/memory/plans/2026-09-29-bidirectional-delegation.md`). A worker's outcome
+  now always reaches the Chief: a `delegations` table (migration 0003) + `DelegationTracker`
+  (`packages/core/src/delegations.ts`); the harness settles the task when the worker's turn
+  ends, posts a card in the requester's thread and wakes the requester once (`NO_REPLY`
+  suppressed); worker `message_user`, `ask_user`, `request_approval` (kind `bot_request`) and
+  permission cards show in the requester's thread and block the task until answered, then the
+  worker resumes on its own engine; restart recovery, stall sweep, caps 5 open / 8 round trips;
+  `request_approval` no longer inserts twice. Verified: 1097 unit tests, 23 E2E (5 new in
+  `e2e/tests/delegation.spec.ts`), lint 0 errors, format, `mh check`, and LIVE with real
+  Codex, real Claude and mixed engines (delegate -> worker form in the Chief's chat -> answer ->
+  worker resumes -> card + Chief wake). Independent Opus review: see the session handoff.
+  Not built: cancel tool/cascade, UI task board, depth limit. Known: Codex gives no shell
+  output for `unifiedExecStartup` commands (Activity shows none). Release needs the owner's OK
+  (v0.1.11). `OPENBOT_CODEX_TRACE_FILE` dumps raw Codex app-server lines.
 - **v0.1.1 released and installed on the Windows dev machine (2026-09-29)**: tag `v0.1.1`
   (release workflow green, all installers + `SHA256SUMS` published) — carries the
   spawn-gate near-miss fix, the opt-in routine budget switch, the silent-turn fallback

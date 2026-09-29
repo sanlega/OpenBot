@@ -26,6 +26,7 @@ const EVENT_LABELS: Record<EventType, string> = {
   "input.cancelled": "Form withdrawn",
   "handoff.sent": "Handed off work",
   "handoff.received": "Picked up a handoff",
+  "delegation.updated": "Task status changed",
   "bot.created": "Bot created",
   "bot.updated": "Bot updated",
   "bot.archived": "Bot archived",

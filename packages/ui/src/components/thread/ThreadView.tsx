@@ -42,7 +42,15 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
   const bot = thread ? bots.find((b) => b.id === thread.botId) : undefined;
   const messages = thread ? messagesForThread(thread.id) : [];
   const route = thread ? routeForBot(thread.botId) : undefined;
-  const threadApprovals = pendingApprovals.filter((a) => a.botId === thread?.botId);
+  // A worker's approval card shows where the user is talking: its requester's thread.
+  const delegatedHere = new Set(
+    [...state.delegations]
+      .filter(([, d]) => d.ownerThreadId === thread?.id)
+      .map(([botId]) => botId),
+  );
+  const threadApprovals = pendingApprovals.filter(
+    (a) => a.botId === thread?.botId || delegatedHere.has(a.botId),
+  );
   const botTurns = [...state.turns.values()]
     .filter((t) => t.botId === thread?.botId)
     .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));

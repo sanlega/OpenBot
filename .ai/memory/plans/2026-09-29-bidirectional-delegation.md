@@ -1,7 +1,7 @@
 # Bidirectional delegation (CoS <-> worker Bots)
 
-Status: design draft, pending the research report (OpenClaw, Hermes, A2A, LangGraph, Claude Code
-subagents, Codex collab agents). Implement only after reconciling with it.
+Status: implemented (phases 1-3 of the research report) and verified live; see D-029. Remaining:
+cancel tool + cascade, UI task board, depth limit.
 
 ## Problem (live, 2026-09-29)
 

@@ -23,6 +23,7 @@ export const EventType = z.enum([
   "input.cancelled",
   "handoff.sent",
   "handoff.received",
+  "delegation.updated",
   "bot.created",
   "bot.updated",
   "bot.archived",

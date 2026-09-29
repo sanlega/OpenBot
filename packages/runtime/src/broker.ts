@@ -251,12 +251,13 @@ export class PermissionBroker {
    * already resolved and recorded (the Client API updates the store and emits
    * `approval.resolved` itself), without writing or emitting again.
    */
-  settleResolved(approvalId: string, resolution: "allow" | "deny"): void {
+  settleResolved(approvalId: string, resolution: "allow" | "deny"): boolean {
     const pending = this.pending.get(approvalId);
-    if (!pending) return;
+    if (!pending) return false;
     this.opts.clock.clearTimeout(pending.timer);
     this.pending.delete(approvalId);
     pending.resolve(resolution);
+    return true;
   }
 
   private emitResolved(approvalId: string, resolution: "allow" | "deny" | "expired"): void {

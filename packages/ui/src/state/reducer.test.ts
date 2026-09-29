@@ -112,6 +112,31 @@ describe("uiReducer", () => {
     expect(again.lastSeq).toBe(event.seq);
   });
 
+  it("follows a worker's open delegation to the thread the user is in, and drops it when done", () => {
+    let state = createInitialState();
+    const update = (seq: number, delegationState: string): OBEvent => ({
+      id: `evt_dlg_${seq}`,
+      seq,
+      ts: new Date().toISOString(),
+      type: "delegation.updated",
+      botId: "bot_worker",
+      payload: {
+        delegation: {
+          assigneeBotId: "bot_worker",
+          ownerThreadId: "thr_chief",
+          state: delegationState,
+        },
+      },
+    });
+    state = uiReducer(state, { type: "event", event: update(1, "working") });
+    expect(state.delegations.get("bot_worker")).toEqual({
+      ownerThreadId: "thr_chief",
+      state: "working",
+    });
+    state = uiReducer(state, { type: "event", event: update(2, "completed") });
+    expect(state.delegations.has("bot_worker")).toBe(false);
+  });
+
   it("tracks pending approvals", () => {
     let state = createInitialState();
     const event: OBEvent = {

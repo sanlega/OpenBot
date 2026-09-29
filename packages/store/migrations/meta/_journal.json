@@ -22,6 +22,13 @@
       "when": 1790636326072,
       "tag": "0002_lethal_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790712459588,
+      "tag": "0003_perpetual_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import type { Approval, Chain, ComputerProvider, Message, Rule, Turn } from "@openbot/contracts";
 import { newId, type Clock } from "@openbot/contracts";
 import { wireConnectors } from "@openbot/connectors";
-import type { CoreContext } from "@openbot/core";
+import { delegationsOf, type CoreContext } from "@openbot/core";
 import {
   CapCounterService,
   DEFAULT_AUTONOMY_CAPS,
@@ -47,6 +47,7 @@ import {
   createTurnMailbox,
   RepoSessionStore,
   wakeOnBotMessages,
+  wakeRequesterOnDelegations,
 } from "./turn-mailbox.js";
 
 export interface BootstrapOptions {
@@ -123,11 +124,13 @@ export async function bootstrapHarness(
   const buildTurn = createTurnBuilder(ctx, turnDeps);
   ctx.mailbox = createTurnMailbox(ctx, turnDeps, buildTurn);
   wakeOnBotMessages(ctx, turnDeps, buildTurn);
+  wakeRequesterOnDelegations(ctx, turnDeps, buildTurn);
   pinModelOnSpawn(ctx, createEngineChooser(ctx, turnDeps));
   ctx.listModels = modelLister(ctx, turnDeps);
   ctx.onApprovalResolved = (approvalId, resolution) => {
     runtime.broker.settleResolved(approvalId, resolution);
     applyRoutineLiveApproval(ctx, approvalId, resolution);
+    void tellBotItsApprovalAnswer(ctx, approvalId, resolution);
   };
   ctx.computerProvider = options.computerProvider ?? providers.computerProvider;
   if (!options.computerProvider) ctx.computerImageManager = providers.computerImageManager;
@@ -464,4 +467,27 @@ async function closeOrphanedTurns(ctx: CoreContext): Promise<void> {
       payload: { errorMessage: "OpenBot restarted before this turn finished." },
     });
   }
+}
+
+/**
+ * A Bot that asked with `request_approval` ended its turn and is waiting: the user's answer is its
+ * next message. (A tool approval the broker parked is answered inside its own turn instead.)
+ */
+async function tellBotItsApprovalAnswer(
+  ctx: CoreContext,
+  approvalId: string,
+  resolution: "allow" | "deny",
+): Promise<void> {
+  const approval = ctx.repos.approvals.getById(approvalId);
+  if (!approval || approval.kind !== "bot_request" || !ctx.mailbox) return;
+  const tracker = delegationsOf(ctx);
+  const delegation = tracker.openFor(approval.botId);
+  const delegationId = delegation?.state === "input_required" ? delegation.id : undefined;
+  if (delegationId) await tracker.answered(approval.botId);
+  await ctx.mailbox.enqueue({
+    botId: approval.botId,
+    chainId: approval.chainId,
+    text: `The user ${resolution === "allow" ? "approved" : "declined"} your request: "${approval.summary}".`,
+    delegationId,
+  });
 }

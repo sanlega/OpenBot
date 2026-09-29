@@ -16,6 +16,7 @@ import type { RemoteServices } from "@openbot/remote";
 import {
   ApprovalsRepo,
   InputRequestsRepo,
+  DelegationsRepo,
   BotsRepo,
   CapCountersRepo,
   ChainsRepo,
@@ -53,6 +54,7 @@ export interface CoreRepos {
   turns: TurnsRepo;
   approvals: ApprovalsRepo;
   inputRequests: InputRequestsRepo;
+  delegations: DelegationsRepo;
   rules: RulesRepo;
   devices: DevicesRepo;
   connections: ConnectionsRepo;
@@ -116,6 +118,8 @@ export interface TurnMailbox {
     text: string;
     /** Explicit engine override (the route chip); otherwise the Bot's pin or Jev's route. */
     engine?: EngineId;
+    /** The turn works on this delegation: it stays on the delegation's engine and settles it. */
+    delegationId?: string;
   }): Promise<{
     ok: boolean;
     reason?: string;
@@ -240,6 +244,7 @@ export async function createCoreContext(
       turns: new TurnsRepo(db),
       approvals: new ApprovalsRepo(db),
       inputRequests: new InputRequestsRepo(db),
+      delegations: new DelegationsRepo(db),
       rules: new RulesRepo(db),
       devices: new DevicesRepo(db),
       connections: new ConnectionsRepo(db),

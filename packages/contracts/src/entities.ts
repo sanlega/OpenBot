@@ -415,3 +415,42 @@ export const SetupState = z.object({
   completedAt: isoTimestamp().optional(),
 });
 export type SetupState = z.infer<typeof SetupState>;
+
+/**
+ * A task one Bot handed to another (`send_message`). The runtime, not the model, decides its
+ * state: a turn that ends completes, fails or interrupts it, and the requester is woken.
+ */
+export const DelegationState = z.enum([
+  "submitted",
+  "working",
+  "input_required",
+  "completed",
+  "failed",
+  "interrupted",
+]);
+export type DelegationState = z.infer<typeof DelegationState>;
+
+export const Delegation = z.object({
+  id: z.string(),
+  chainId: z.string(),
+  requesterBotId: z.string(),
+  assigneeBotId: z.string(),
+  /** The thread the human is talking in (the requester's); worker cards and results show there. */
+  ownerThreadId: z.string(),
+  title: z.string(),
+  state: DelegationState,
+  statusMessage: z.string().optional(),
+  /** The assignee's closing text once the delegation ended. */
+  result: z.string().optional(),
+  /** The engine the assignee worked on: follow-up turns stay on it (its session lives there). */
+  engine: z.string().optional(),
+  /** Requester -> assignee messages; capped so two Bots can't ping-pong forever. */
+  roundTrips: z.number().int().nonnegative(),
+  /** A wake for the requester is owed; survives a restart until delivered. */
+  wakePending: z.boolean(),
+  wakeKind: z.string().optional(),
+  createdAt: isoTimestamp(),
+  updatedAt: isoTimestamp(),
+  lastEventAt: isoTimestamp(),
+});
+export type Delegation = z.infer<typeof Delegation>;
