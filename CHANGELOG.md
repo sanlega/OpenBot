@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1 — 2026-09-29
+
+- Chief of Staff spawn decisions: when Jev is very confident a task needs a new Bot,
+  a borderline "an existing Bot could do this" score no longer vetoes the spawn.
+- New per-Bot option (Profile) to lift the per-run cost/token cap for that Bot's
+  routine runs, so long routines are not cut off mid-task. Off by default.
+- A turn that finishes on a tool call without a closing message now shows a
+  fallback summary line instead of looking empty.
+- Auto routing tells Jev which engine a Bot is already using, so follow-ups like
+  "continue" stay on the same engine and keep their context.
+
 ## 0.1.0 — 2026-09-27
 
 First public preview of OpenBot.
