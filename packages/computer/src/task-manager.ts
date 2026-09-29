@@ -149,6 +149,13 @@ export class ComputerTaskManager {
   }
 
   start(req: StartComputerTask): ComputerTaskSnapshot {
+    // One screen per bot: a new task replaces the bot's unfinished one instead of both fighting
+    // over the same browser.
+    for (const other of this.tasks.values()) {
+      if (other.snapshot.botId === req.botId && !TERMINAL.has(other.snapshot.status)) {
+        this.cancel(other.snapshot.taskId, `Replaced by a newer task (${req.taskId}).`);
+      }
+    }
     const runtime: TaskRuntime = {
       snapshot: {
         taskId: req.taskId,
@@ -223,7 +230,7 @@ export class ComputerTaskManager {
     return this.copy(runtime.snapshot);
   }
 
-  cancel(taskId: string): ComputerTaskSnapshot | undefined {
+  cancel(taskId: string, reason = "Cancelled."): ComputerTaskSnapshot | undefined {
     const runtime = this.tasks.get(taskId);
     if (!runtime) return undefined;
     if (!TERMINAL.has(runtime.snapshot.status)) {
@@ -231,7 +238,7 @@ export class ComputerTaskManager {
       runtime.pendingText?.(null);
       runtime.pendingText = undefined;
       runtime.resumeBlocked?.("stop");
-      this.finish(runtime, "cancelled", "Cancelled.");
+      this.finish(runtime, "cancelled", reason);
     }
     return this.copy(runtime.snapshot);
   }

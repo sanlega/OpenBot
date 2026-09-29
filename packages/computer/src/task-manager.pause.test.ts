@@ -198,3 +198,22 @@ describe("a task waiting for a person", () => {
     expect(done?.status).toBe("completed");
   });
 });
+
+describe("one task per bot", () => {
+  it("a new task replaces the bot's unfinished one", async () => {
+    const site = siteProvider();
+    const tasks = new ComputerTaskManager({
+      decisionService: jev(),
+      provider: site.provider,
+      blockedPollMs: 60_000,
+    });
+    start(tasks);
+    expect((await tasks.wait("t1", 2_000))?.status).toBe("needs_user");
+    tasks.start({ taskId: "t2", botId: "bot_1", chainId: "chn_1", goal: "Sign in again" });
+    expect(tasks.get("t1")).toMatchObject({
+      status: "cancelled",
+      summary: expect.stringContaining("t2"),
+    });
+    tasks.cancel("t2");
+  });
+});
