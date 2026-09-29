@@ -50,6 +50,8 @@ export class CloudflareManager {
   constructor(
     private readonly spawnFn: SpawnFn = defaultSpawn,
     private readonly command = "cloudflared",
+    /** Finds (or fetches) the `cloudflared` binary; when set it replaces `command`. */
+    private readonly resolveCommand?: () => Promise<string>,
   ) {}
 
   get running(): boolean {
@@ -70,8 +72,16 @@ export class CloudflareManager {
     token = normalizeTunnelToken(token) ?? token;
 
     await this.stop();
+    let command = this.command;
+    if (this.resolveCommand) {
+      try {
+        command = await this.resolveCommand();
+      } catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+      }
+    }
     return new Promise((resolve) => {
-      const child = this.spawnFn(this.command, ["tunnel", "run", "--token", token]);
+      const child = this.spawnFn(command, ["tunnel", "run", "--token", token]);
       this.child = child;
       let settled = false;
 

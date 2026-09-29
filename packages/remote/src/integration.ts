@@ -76,7 +76,13 @@ export async function attachRemoteServices(
   ctx: RemoteCoreContext,
   services?: RemoteServices,
 ): Promise<RemoteServices> {
-  const remote = services ?? (await createRemoteServices({ clock: ctx.clock, vault: ctx.vault }));
+  const remote =
+    services ??
+    (await createRemoteServices({
+      clock: ctx.clock,
+      vault: ctx.vault,
+      openbotHome: ctx.config.openbotHome,
+    }));
   ctx.remote = remote;
   ctx.validators.tailscale = (value) => remote.tailscale.validateKey(value);
   ctx.validators.cloudflare = (value) => remote.cloudflare.validateToken(value);

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-09-29
+
+- Cloudflare Tunnel now works out of the box: if `cloudflared` isn't installed,
+  OpenBot downloads Cloudflare's official build once (checked against a pinned
+  SHA-256) into its own data folder. A `cloudflared` already on your PATH is used
+  as-is. Failures now say what went wrong instead of `spawn cloudflared ENOENT`.
+
 ## 0.1.3 — 2026-09-29
 
 - Cloudflare Tunnel: real tunnel tokens are now accepted (they were rejected with
