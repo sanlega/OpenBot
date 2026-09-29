@@ -64,7 +64,7 @@ export class McpRuntimeServiceAdapter implements McpRuntimeService {
       detail: input.detail,
       expiresAt,
     });
-    this.ctx.repos.approvals.create(approval);
+    // The runtime approval store already persisted it (the repo-backed one writes the row).
     await this.ctx.eventBus.publish({
       type: "approval.requested",
       botId: session.botId,

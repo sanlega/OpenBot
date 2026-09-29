@@ -3,6 +3,17 @@
 _Last updated: 2026-09-29 by Claude_
 
 ## In progress
+- **Bidirectional CoS<->worker delegation (2026-09-29, IN PROGRESS, not released)**: live logs
+  showed the worker stopping without anything reaching the Chief. Plan/design:
+  `.ai/memory/plans/2026-09-29-bidirectional-delegation.md`. Done so far (uncommitted to a
+  release): `request_approval` no longer inserts the approval row twice (was
+  `UNIQUE constraint failed: approvals.id`, left pending cards), with a regression test. Not yet
+  built: guaranteed automatic report-back to the delegator when a delegated turn ends,
+  `message_user` from a delegated worker routed to the delegator, hop budget (`maxHops` 4 pauses the
+  chain after task/report/answer/report), guard exemptions for reports. A research subagent
+  (OpenClaw, Hermes, A2A, LangGraph, etc.) was still running; reconcile its report with the plan
+  before implementing. Worker shell calls that failed with null output were NOT denied by the
+  broker (checked); suspect the Codex sandbox on Windows, unconfirmed.
 - **v0.1.1 released and installed on the Windows dev machine (2026-09-29)**: tag `v0.1.1`
   (release workflow green, all installers + `SHA256SUMS` published) — carries the
   spawn-gate near-miss fix, the opt-in routine budget switch, the silent-turn fallback

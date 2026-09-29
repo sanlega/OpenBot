@@ -72,6 +72,40 @@ async function pendingApprovalId(runtime: ReturnType<typeof createRuntime>): Pro
   throw new Error("no pending approval");
 }
 
+describe("McpRuntimeServiceAdapter.requestApproval", () => {
+  it("stores one approval row when the runtime's store already persists it", async () => {
+    const { service, session } = await setup();
+    const ctx = harness!.ctx;
+    // The harness's store writes the row itself, as the real repo-backed one does.
+    const persisting = createRuntime({
+      decisions: uncertainJev,
+      drivers: {},
+      clock: new FakeClock(0),
+      events: new InMemoryEventSink(),
+      approvalStore: {
+        create: (input) => {
+          const approval = {
+            ...input,
+            id: `apr_${ctx.repos.approvals.list().length + 1}`,
+            status: "pending" as const,
+            createdAt: new Date(0).toISOString(),
+          };
+          ctx.repos.approvals.create(approval);
+          return approval;
+        },
+        get: (id) => ctx.repos.approvals.getById(id),
+        resolve: (id) => ctx.repos.approvals.getById(id)!,
+        listPending: () => ctx.repos.approvals.list({ status: "pending" }),
+      },
+    });
+    const adapter = new McpRuntimeServiceAdapter(ctx, persisting);
+    void service;
+    const result = await adapter.requestApproval(session, { summary: "Deploy", detail: "x" });
+    expect(result.allowed).toBe(true);
+    expect(ctx.repos.approvals.list({ status: "pending" })).toHaveLength(1);
+  });
+});
+
 describe("McpRuntimeServiceAdapter.permissionPrompt", () => {
   it.each(["allow", "deny"] as const)(
     "waits for the user's answer to the card and returns %s",
