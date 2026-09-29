@@ -44,9 +44,9 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
   const route = thread ? routeForBot(thread.botId) : undefined;
   // A worker's approval card shows where the user is talking: its requester's thread.
   const delegatedHere = new Set(
-    [...state.delegations]
-      .filter(([, d]) => d.ownerThreadId === thread?.id)
-      .map(([botId]) => botId),
+    [...state.delegations.values()]
+      .filter((d) => d.ownerThreadId === thread?.id)
+      .map((d) => d.assigneeBotId),
   );
   const threadApprovals = pendingApprovals.filter(
     (a) => a.botId === thread?.botId || delegatedHere.has(a.botId),

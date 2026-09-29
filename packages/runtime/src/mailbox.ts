@@ -46,6 +46,8 @@ export interface TurnOutcome {
   sessionId?: string;
   text?: string;
   reason?: string;
+  /** `text` is the harness's stand-in for a turn that returned none. */
+  synthesized?: boolean;
 }
 
 interface QueuedTurn {
@@ -268,8 +270,10 @@ export class Mailbox {
       this.opts.sessions?.clear(botId, input.engine);
     }
     // A reply of exactly NO_REPLY means "nothing to add" (a harness update the user already saw).
+    let synthesized = false;
     if (status === "completed" && NO_REPLY_RE.test(replyText.trim())) replyText = "";
     else if (status === "completed" && replyText.length === 0) {
+      synthesized = true;
       // The engine can end a turn on a tool call with no closing text (seen with
       // Codex/gpt-5.5 on multi-step tasks) — without this, the turn is silently
       // dropped: no message, no error, nothing the user can see went wrong.
@@ -325,6 +329,7 @@ export class Mailbox {
       sessionId: result.sessionId,
       text: replyText,
       reason: result.errorMessage,
+      synthesized,
     });
     this.pump(botId);
   }

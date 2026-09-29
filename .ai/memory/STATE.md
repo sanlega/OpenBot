@@ -14,7 +14,18 @@ _Last updated: 2026-09-29 by Claude_
   `request_approval` no longer inserts twice. Verified: 1097 unit tests, 23 E2E (5 new in
   `e2e/tests/delegation.spec.ts`), lint 0 errors, format, `mh check`, and LIVE with real
   Codex, real Claude and mixed engines (delegate -> worker form in the Chief's chat -> answer ->
-  worker resumes -> card + Chief wake). Independent Opus review: see the session handoff.
+  worker resumes -> card + Chief wake). Independent Opus review (18 findings) done: fixed the 2 high ones (routing is now keyed on the
+  running turn's delegation, not on "the bot has an open task"; per-pair cap of 6 tasks/hour
+  bounds the fail-and-retry cycle, and a failed/stopped task no longer invites a retry) and the
+  medium ones (a follow-up sent while the worker works settles only when its turn ends; forms
+  and cards counted together; restart interrupts a task parked on a lost permission card; the
+  worker's own result survives a summary-less turn; a user-stopped task is card-only; `list_bots`
+  no longer returns other bots' replies; worker text is fenced in the wake prompt; nested
+  delegations report in the user's conversation; UI keyed by delegation id). Accepted, not
+  fixed: a refused delivery leaves a continued task `working` (low); a background computer_task
+  outliving its turn does not route later cards to the requester (low); a worker->Chief task is
+  not marked blocked while the Chief waits on the user (low). Re-verified: 1105 unit, 23 E2E,
+  live Codex and mixed Codex/Claude form flows.
   Not built: cancel tool/cascade, UI task board, depth limit. Known: Codex gives no shell
   output for `unifiedExecStartup` commands (Activity shows none). Release needs the owner's OK
   (v0.1.11). `OPENBOT_CODEX_TRACE_FILE` dumps raw Codex app-server lines.

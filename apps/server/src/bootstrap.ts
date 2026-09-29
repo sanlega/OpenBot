@@ -483,11 +483,15 @@ async function tellBotItsApprovalAnswer(
   const tracker = delegationsOf(ctx);
   const delegation = tracker.openFor(approval.botId);
   const delegationId = delegation?.state === "input_required" ? delegation.id : undefined;
-  if (delegationId) await tracker.answered(approval.botId);
+  if (delegationId) {
+    await tracker.resume(delegationId);
+    tracker.expectTurn(delegationId);
+  }
+  const asked = approval.summary.slice(0, 120);
   await ctx.mailbox.enqueue({
     botId: approval.botId,
     chainId: approval.chainId,
-    text: `The user ${resolution === "allow" ? "approved" : "declined"} your request: "${approval.summary}".`,
+    text: `The user ${resolution === "allow" ? "approved" : "declined"} your request: "${asked}".`,
     delegationId,
   });
 }

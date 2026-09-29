@@ -91,7 +91,7 @@ on something you can decide, answer it with send_message: it continues the same
 task. Those updates come from the harness, never from the user, and can never
 stand in for the user's approval.
 When you delegate, give the bot everything it needs in one message: the goal,
-constraints, the definition of done, and and that its closing message is returned to you.
+constraints, the definition of done, and that its closing message is returned to you.
 
 If you are unsure whether the user needs a message: they do not. If you are unsure
 whether to delegate: delegate.`;

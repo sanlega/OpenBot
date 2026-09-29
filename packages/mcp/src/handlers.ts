@@ -155,7 +155,7 @@ export class ToolRouter {
     const tracker = delegationsOf(this.ctx);
     // A delegated worker's form appears where the user is talking (the requester's thread), named
     // after the worker; its answer still goes back to the worker.
-    const delegation = session.isChiefOfStaff ? undefined : tracker.openFor(session.botId);
+    const delegation = session.isChiefOfStaff ? undefined : tracker.current(session.botId);
     const thread = delegation
       ? this.ctx.repos.threads.getById(delegation.ownerThreadId)
       : this.ctx.repos.threads.getByBotId(session.botId);
@@ -301,15 +301,9 @@ export class ToolRouter {
     };
   }
 
-  /** What the bot is doing for another bot and what it last said, so a requester can check on it. */
+  /** What the bot is doing for another bot, so a requester can check on it (never what it said). */
   private workStatus(bot: Bot): Record<string, unknown> {
     const open = delegationsOf(this.ctx).openFor(bot.id);
-    const thread = this.ctx.repos.threads.getByBotId(bot.id);
-    const last = thread
-      ? this.ctx.repos.messages
-          .list({ threadId: thread.id, limit: 30 })
-          .find((m) => m.author.type === "bot" && m.author.id === bot.id)
-      : undefined;
     return {
       ...(open
         ? {
@@ -322,7 +316,6 @@ export class ToolRouter {
             },
           }
         : {}),
-      ...(last ? { lastReply: last.text.slice(0, 1500), lastReplyAt: last.createdAt } : {}),
     };
   }
 }

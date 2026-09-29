@@ -7,6 +7,8 @@ export const MAX_ROUND_TRIPS = 8;
 export const MAX_OPEN_PER_REQUESTER = 5;
 /** No engine activity for this long while working counts as stalled. */
 export const STALL_AFTER_MS = 10 * 60_000;
+/** Tasks one requester may hand to the same assignee per hour (bounds a fail-and-retry cycle). */
+export const MAX_PER_PAIR_PER_HOUR = 6;
 const MAX_RESULT_CHARS = 6000;
 
 /** How a turn on behalf of a delegation ended (a subset of the runtime's `TurnOutcome`). */
@@ -14,6 +16,8 @@ export interface DelegatedTurnOutcome {
   status: "completed" | "failed" | "interrupted" | "refused";
   text?: string;
   reason?: string;
+  /** The text is the harness's stand-in for a turn that returned none. */
+  synthesized?: boolean;
 }
 
 export type OpenResult =
@@ -29,6 +33,12 @@ export class DelegationTracker {
   /** Starts the requester's turn about a delegation update (wired by the server bootstrap). */
   onWake?: (delegation: Delegation) => Promise<void> | void;
   private readonly lastTouch = new Map<string, number>();
+  /** Bot id -> the delegation its running turn works on (tools called in that turn belong to it). */
+  private readonly bound = new Map<string, string>();
+  /** Delegation id -> turns queued or running for it: it settles when the last one ends. */
+  private readonly pendingTurns = new Map<string, number>();
+  /** Delegation id -> forms/approvals the human still owes: it works again when none remain. */
+  private readonly waits = new Map<string, number>();
 
   constructor(private readonly ctx: CoreContext) {}
 
@@ -44,9 +54,29 @@ export class DelegationTracker {
     return this.repo.getById(id);
   }
 
-  /** The open delegation this Bot is working on, if any. */
+  /** The newest open delegation this Bot is the assignee of (for events outside any turn). */
   openFor(assigneeBotId: string): Delegation | undefined {
     return this.repo.findOpenForAssignee(assigneeBotId);
+  }
+
+  /** The delegation the Bot's RUNNING turn belongs to; a turn of any other kind has none. */
+  current(botId: string): Delegation | undefined {
+    const id = this.bound.get(botId);
+    const d = id ? this.repo.getById(id) : undefined;
+    return d && OPEN.has(d.state) ? d : undefined;
+  }
+
+  bindTurn(botId: string, delegationId: string): void {
+    this.bound.set(botId, delegationId);
+  }
+
+  unbindTurn(botId: string, delegationId: string): void {
+    if (this.bound.get(botId) === delegationId) this.bound.delete(botId);
+  }
+
+  /** A turn for this delegation is queued: it must not settle before that turn ends. */
+  expectTurn(id: string): void {
+    this.pendingTurns.set(id, (this.pendingTurns.get(id) ?? 0) + 1);
   }
 
   /** A requester -> assignee message: continues the open delegation between them or starts one. */
@@ -56,7 +86,11 @@ export class DelegationTracker {
     chainId: string;
     text: string;
   }): OpenResult {
-    const ownerThread = this.ctx.repos.threads.getByBotId(input.requesterBotId);
+    // A worker that delegates onward keeps the user's conversation as the place results show.
+    const parent = this.current(input.requesterBotId);
+    const ownerThread =
+      (parent ? this.ctx.repos.threads.getById(parent.ownerThreadId) : undefined) ??
+      this.ctx.repos.threads.getByBotId(input.requesterBotId);
     if (!ownerThread) return { ok: false, reason: `no thread for bot ${input.requesterBotId}` };
     const existing = this.repo.findOpenBetween(input.requesterBotId, input.assigneeBotId);
     const now = this.now();
@@ -70,14 +104,25 @@ export class DelegationTracker {
       const updated = this.repo.update(
         existing.id,
         {
-          state: "working",
+          // Still waiting on the human for a form or a card? A follow-up doesn't change that.
+          state: (this.waits.get(existing.id) ?? 0) > 0 ? "input_required" : "working",
           statusMessage: undefined,
           roundTrips: existing.roundTrips + 1,
+          wakeKind: existing.wakeKind === "stalled" ? undefined : existing.wakeKind,
           lastEventAt: now.toISOString(),
         },
         now,
       )!;
       return { ok: true, delegation: updated, continued: true };
+    }
+    const recent = this.repo
+      .list({ requesterBotId: input.requesterBotId, assigneeBotId: input.assigneeBotId })
+      .filter((d) => now.getTime() - new Date(d.createdAt).getTime() < 3_600_000);
+    if (recent.length >= MAX_PER_PAIR_PER_HOUR) {
+      return {
+        ok: false,
+        reason: `${recent.length} tasks went to this bot in the last hour and it keeps not finishing; tell the user what is wrong instead of sending more`,
+      };
     }
     const open = this.repo.list({ requesterBotId: input.requesterBotId, open: true });
     if (open.length >= MAX_OPEN_PER_REQUESTER) {
@@ -126,7 +171,9 @@ export class DelegationTracker {
     const d = this.repo.getById(id);
     if (!d) return;
     const patch: Partial<Delegation> = { engine, lastEventAt: this.now().toISOString() };
-    if (d.state === "submitted" || d.state === "input_required") patch.state = "working";
+    if (d.state === "submitted") patch.state = "working";
+    if (d.state === "input_required" && (this.waits.get(id) ?? 0) === 0) patch.state = "working";
+    if (d.wakeKind === "stalled") patch.wakeKind = undefined;
     const updated = this.repo.update(id, patch, this.now());
     if (updated) await this.announce(updated);
   }
@@ -144,8 +191,9 @@ export class DelegationTracker {
 
   /** The assignee asked the human something on the requester's behalf: blocked, no wake needed. */
   async needsAnswer(assigneeBotId: string, message: string): Promise<Delegation | undefined> {
-    const d = this.repo.findOpenForAssignee(assigneeBotId);
+    const d = this.current(assigneeBotId);
     if (!d) return undefined;
+    this.waits.set(d.id, (this.waits.get(d.id) ?? 0) + 1);
     const updated = this.repo.update(
       d.id,
       { state: "input_required", statusMessage: message, lastEventAt: this.now().toISOString() },
@@ -155,10 +203,29 @@ export class DelegationTracker {
     return updated;
   }
 
-  /** The human answered (or dismissed) a form this assignee asked: back to work. */
+  /** A card the assignee's running turn was parked on was answered. */
   async answered(assigneeBotId: string): Promise<Delegation | undefined> {
-    const d = this.repo.findOpenForAssignee(assigneeBotId);
+    const d = this.current(assigneeBotId);
+    return d ? this.resume(d.id) : undefined;
+  }
+
+  /** The open, blocked delegation this Bot took on for this thread (a form's home). */
+  openInThread(assigneeBotId: string, ownerThreadId: string): Delegation | undefined {
+    return this.repo
+      .list({ assigneeBotId, open: true })
+      .find((d) => d.ownerThreadId === ownerThreadId && d.state === "input_required");
+  }
+
+  /** The human answered (or dismissed) one thing this task waited on; with none left, back to work. */
+  async resume(id: string): Promise<Delegation | undefined> {
+    const d = this.repo.getById(id);
     if (!d || d.state !== "input_required") return d;
+    const left = Math.max(0, (this.waits.get(id) ?? 1) - 1);
+    if (left > 0) {
+      this.waits.set(id, left);
+      return d;
+    }
+    this.waits.delete(id);
     const updated = this.repo.update(
       d.id,
       { state: "working", statusMessage: undefined, lastEventAt: this.now().toISOString() },
@@ -178,7 +245,7 @@ export class DelegationTracker {
     kind: "result" | "decision" | "blocker",
     body: string,
   ): Promise<Delegation | undefined> {
-    const d = this.repo.findOpenForAssignee(assigneeBotId);
+    const d = this.current(assigneeBotId);
     if (!d) return undefined;
     const patch: Partial<Delegation> = { lastEventAt: this.now().toISOString() };
     if (kind === "result") {
@@ -198,8 +265,17 @@ export class DelegationTracker {
   async turnEnded(id: string, outcome: DelegatedTurnOutcome): Promise<void> {
     const d = this.repo.getById(id);
     if (!d) return;
-    if (d.state === "completed" || d.state === "failed" || d.state === "interrupted") return;
+    const left = Math.max(0, (this.pendingTurns.get(id) ?? 1) - 1);
+    if (left > 0) this.pendingTurns.set(id, left);
+    else this.pendingTurns.delete(id);
+    if (!OPEN.has(d.state)) return;
     const now = this.now();
+    if (left > 0) {
+      // A follow-up is still queued for this task: it settles when that turn ends.
+      this.repo.update(id, { lastEventAt: now.toISOString() }, now);
+      return;
+    }
+    const stopped = outcome.status === "refused" && outcome.reason === "stopped";
     let patch: Partial<Delegation>;
     if (outcome.status === "completed") {
       if (d.state === "input_required") {
@@ -207,7 +283,7 @@ export class DelegationTracker {
         // already owes its wake.
         patch = { lastEventAt: now.toISOString() };
       } else {
-        const text = outcome.text?.trim();
+        const text = outcome.synthesized && d.result ? undefined : outcome.text?.trim();
         patch = {
           state: "completed",
           result: text ? clip(text) : d.result,
@@ -217,13 +293,15 @@ export class DelegationTracker {
           lastEventAt: now.toISOString(),
         };
       }
-    } else if (outcome.status === "interrupted") {
+    } else if (outcome.status === "interrupted" || stopped) {
       patch = {
         state: "interrupted",
-        statusMessage: outcome.reason ?? "stopped before it finished",
+        statusMessage: stopped
+          ? "stopped by the user"
+          : (outcome.reason ?? "stopped before it finished"),
         result: outcome.text?.trim() ? clip(outcome.text.trim()) : d.result,
         wakePending: true,
-        wakeKind: "interrupted",
+        wakeKind: stopped ? "stopped" : "interrupted",
         lastEventAt: now.toISOString(),
       };
     } else {
@@ -266,7 +344,13 @@ export class DelegationTracker {
       delivery: "delivered",
       pushed: false,
     };
-    this.ctx.repos.messages.create(message);
+    try {
+      this.ctx.repos.messages.create(message);
+    } catch (error) {
+      // Nothing reached the user: keep the wake owed so a later pass delivers it.
+      this.repo.update(id, { wakePending: true }, this.now());
+      throw error;
+    }
     await this.ctx.eventBus.publish({
       type: "message.created",
       botId: d.assigneeBotId,
@@ -283,20 +367,35 @@ export class DelegationTracker {
 
   /** After a restart: nothing that was running still is; deliver every wake that was owed. */
   async recover(): Promise<void> {
+    this.bound.clear();
+    this.pendingTurns.clear();
+    this.waits.clear();
     for (const d of this.repo.list({ open: true })) {
-      if (d.state === "submitted" || d.state === "working") {
-        const updated = this.repo.update(
-          d.id,
-          {
-            state: "interrupted",
-            statusMessage: "OpenBot restarted before this finished",
-            wakePending: true,
-            wakeKind: "interrupted",
-          },
-          this.now(),
-        );
-        if (updated) await this.announce(updated);
+      // Waiting on a form or a bot's own request survives a restart (the card is stored); a
+      // permission card parked inside a turn does not: that turn is gone.
+      const waitsOnStoredCard =
+        d.state === "input_required" &&
+        (this.ctx.repos.inputRequests
+          .list({ status: "pending", botId: d.assigneeBotId })
+          .some((r) => r.threadId === d.ownerThreadId) ||
+          this.ctx.repos.approvals
+            .list({ status: "pending" })
+            .some((a) => a.botId === d.assigneeBotId && a.kind === "bot_request"));
+      if (waitsOnStoredCard) {
+        this.waits.set(d.id, 1);
+        continue;
       }
+      const updated = this.repo.update(
+        d.id,
+        {
+          state: "interrupted",
+          statusMessage: "OpenBot restarted before this finished",
+          wakePending: true,
+          wakeKind: "interrupted",
+        },
+        this.now(),
+      );
+      if (updated) await this.announce(updated);
     }
     for (const d of this.repo.listWakePending()) await this.deliverWake(d.id);
   }
@@ -324,6 +423,8 @@ export class DelegationTracker {
     }
   }
 }
+
+const OPEN = new Set<string>(["submitted", "working", "input_required"]);
 
 const trackers = new WeakMap<CoreContext, DelegationTracker>();
 
@@ -355,6 +456,8 @@ function cardText(name: string, d: Delegation, kind: string): string {
       return `${name} is blocked on ${task}: ${d.statusMessage ?? "it needs a decision"}`;
     case "stalled":
       return `${name} has shown no activity on ${task}: ${d.statusMessage ?? "it may be stuck"}.`;
+    case "stopped":
+      return `${name} was stopped on ${task}: the user stopped it.`;
     case "interrupted":
       return `${name} was interrupted on ${task}: ${d.statusMessage ?? "it stopped early"}.${d.result ? `\n\nWhat it had so far:\n${d.result}` : ""}`;
     default:

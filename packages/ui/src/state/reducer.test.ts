@@ -122,6 +122,7 @@ describe("uiReducer", () => {
       botId: "bot_worker",
       payload: {
         delegation: {
+          id: "dlg_1",
           assigneeBotId: "bot_worker",
           ownerThreadId: "thr_chief",
           state: delegationState,
@@ -129,12 +130,13 @@ describe("uiReducer", () => {
       },
     });
     state = uiReducer(state, { type: "event", event: update(1, "working") });
-    expect(state.delegations.get("bot_worker")).toEqual({
+    expect(state.delegations.get("dlg_1")).toEqual({
+      assigneeBotId: "bot_worker",
       ownerThreadId: "thr_chief",
       state: "working",
     });
     state = uiReducer(state, { type: "event", event: update(2, "completed") });
-    expect(state.delegations.has("bot_worker")).toBe(false);
+    expect(state.delegations.has("dlg_1")).toBe(false);
   });
 
   it("tracks pending approvals", () => {

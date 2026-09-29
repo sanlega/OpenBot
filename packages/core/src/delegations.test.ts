@@ -105,6 +105,7 @@ describe("DelegationTracker", () => {
     const { ctx, chief, worker, tracker, woken, open } = await setup();
     const d = open();
     await tracker.started(d.id, "claude");
+    tracker.bindTurn(worker.id, d.id);
     await tracker.needsAnswer(worker.id, "waiting for the user: credentials");
     await tracker.turnEnded(d.id, { status: "completed", text: "Asked for credentials." });
     expect(tracker.get(d.id)).toMatchObject({ state: "input_required" });
@@ -125,6 +126,7 @@ describe("DelegationTracker", () => {
     const { worker, tracker, woken, open } = await setup();
     const d = open();
     await tracker.started(d.id, "codex");
+    tracker.bindTurn(worker.id, d.id);
     const routed = await tracker.report(worker.id, "blocker", "No hosting account");
     expect(routed?.id).toBe(d.id);
     expect(woken).toHaveLength(0);
@@ -137,6 +139,114 @@ describe("DelegationTracker", () => {
   it("does not route message_user of a bot that has no open task", async () => {
     const { worker, tracker } = await setup();
     expect(await tracker.report(worker.id, "result", "hi")).toBeUndefined();
+  });
+
+  it("routes only the turn that belongs to a delegation: the user's own chat with the worker is untouched", async () => {
+    const { worker, tracker, open } = await setup();
+    const d = open();
+    await tracker.started(d.id, "codex");
+    // An open task exists, but the running turn is a plain one (nothing bound).
+    expect(tracker.current(worker.id)).toBeUndefined();
+    expect(await tracker.report(worker.id, "blocker", "hello user")).toBeUndefined();
+    expect(await tracker.needsAnswer(worker.id, "x")).toBeUndefined();
+    tracker.bindTurn(worker.id, d.id);
+    expect(tracker.current(worker.id)?.id).toBe(d.id);
+    tracker.unbindTurn(worker.id, d.id);
+    expect(tracker.current(worker.id)).toBeUndefined();
+  });
+
+  it("a follow-up sent while the worker is still working settles only when its turn ends too", async () => {
+    const { tracker, woken, open } = await setup();
+    const d = open("first");
+    tracker.expectTurn(d.id);
+    await tracker.started(d.id, "codex");
+    open("follow-up");
+    tracker.expectTurn(d.id);
+
+    await tracker.turnEnded(d.id, { status: "completed", text: "answer to first" });
+    expect(woken).toHaveLength(0);
+    expect(tracker.get(d.id)!.state).toBe("working");
+
+    await tracker.turnEnded(d.id, { status: "completed", text: "answer to the follow-up" });
+    expect(woken).toHaveLength(1);
+    expect(woken[0]!.result).toBe("answer to the follow-up");
+  });
+
+  it("a form and an approval pending together: back to work only when both are answered", async () => {
+    const { worker, tracker, open } = await setup();
+    const d = open();
+    tracker.bindTurn(worker.id, d.id);
+    await tracker.needsAnswer(worker.id, "form");
+    await tracker.needsAnswer(worker.id, "card");
+    await tracker.answered(worker.id);
+    expect(tracker.get(d.id)!.state).toBe("input_required");
+    await tracker.answered(worker.id);
+    expect(tracker.get(d.id)!.state).toBe("working");
+  });
+
+  it("keeps the worker's own result when the turn returned no closing text", async () => {
+    const { worker, tracker, woken, open } = await setup();
+    const d = open();
+    await tracker.started(d.id, "codex");
+    tracker.bindTurn(worker.id, d.id);
+    await tracker.report(worker.id, "result", "The real findings");
+    await tracker.turnEnded(d.id, {
+      status: "completed",
+      text: "Finished 2 tool calls but didn't return a summary",
+      synthesized: true,
+    });
+    expect(woken[0]!.result).toBe("The real findings");
+  });
+
+  it("a task the user stopped is not sold to the requester as a failure to retry", async () => {
+    const { tracker, woken, open } = await setup();
+    const d = open();
+    await tracker.turnEnded(d.id, { status: "refused", reason: "stopped" });
+    expect(woken[0]).toMatchObject({ state: "interrupted", wakeKind: "stopped" });
+  });
+
+  it("a worker's onward delegation reports in the user's conversation, not the worker's", async () => {
+    const { ctx, chief, worker, tracker, open } = await setup();
+    const parent = open();
+    const helper = bot("Helper");
+    ctx.repos.bots.create(helper);
+    ctx.repos.threads.create({
+      id: newId("thread"),
+      botId: helper.id,
+      kind: "dm",
+      createdAt: new Date().toISOString(),
+    });
+    tracker.bindTurn(worker.id, parent.id);
+    const child = open("sub-task", worker, helper);
+    expect(child.ownerThreadId).toBe(parent.ownerThreadId);
+    expect(child.ownerThreadId).toBe(ctx.repos.threads.getByBotId(chief.id)!.id);
+  });
+
+  it("bounds the fail-and-retry cycle per requester and worker pair", async () => {
+    const { ctx, chief, worker, tracker, open } = await setup();
+    for (let i = 0; i < 6; i++) {
+      const d = open(`try ${i}`);
+      await tracker.turnEnded(d.id, { status: "failed", reason: "engine down" });
+    }
+    const again = tracker.open({
+      requesterBotId: chief.id,
+      assigneeBotId: worker.id,
+      chainId: "chn_1",
+      text: "try again",
+    });
+    expect(again.ok).toBe(false);
+    void ctx;
+  });
+
+  it("after a restart a task waiting on a permission card parked in a lost turn is interrupted", async () => {
+    const { worker, tracker, woken, open } = await setup();
+    const d = open();
+    tracker.bindTurn(worker.id, d.id);
+    await tracker.started(d.id, "codex");
+    await tracker.needsAnswer(worker.id, "waiting for the user's approval: shell");
+    await tracker.recover();
+    expect(tracker.get(d.id)!.state).toBe("interrupted");
+    expect(woken).toHaveLength(1);
   });
 
   it("a follow-up to the same worker continues the same delegation", async () => {
@@ -158,6 +268,7 @@ describe("DelegationTracker", () => {
     });
     expect(refused.ok).toBe(false);
 
+    await t?.cleanup();
     const many = await setup();
     for (let i = 0; i < MAX_OPEN_PER_REQUESTER; i++) {
       const w = bot(`W${i}`);

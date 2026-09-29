@@ -113,9 +113,11 @@ async function resumeDelegation(
   input: InputRequest,
 ): Promise<string | undefined> {
   const tracker = delegationsOf(ctx);
-  const open = tracker.openFor(input.botId);
-  if (!open || open.ownerThreadId !== input.threadId) return undefined;
-  return (await tracker.answered(input.botId))?.id;
+  const open = tracker.openInThread(input.botId, input.threadId);
+  if (!open) return undefined;
+  await tracker.resume(open.id);
+  tracker.expectTurn(open.id);
+  return open.id;
 }
 
 function checkAnswers(
