@@ -1,10 +1,10 @@
 # Project state
 
-_Last updated: 2026-09-30 by Claude (more engines, D-031)_
+_Last updated: 2026-09-30 by Claude (v0.1.15 installed)_
 
 ## In progress
 - **More engines: ACP CLIs and local models (2026-09-30, D-031, plan
-  `.ai/memory/plans/2026-09-30-more-providers.md`) — RELEASED as v0.1.14 (merged to `main`,
+  `.ai/memory/plans/2026-09-30-more-providers.md`) — RELEASED as v0.1.14, then v0.1.15 (model lists cached/warmed: a silent service on LM Studio's port 1234 made `/api/models` take 7 s, so the picker showed only Auto; v0.1.15 installed and answers in ~1 ms) (merged to `main`,
   tag pushed, release workflow green, all installers + SHA256SUMS published, Windows installer
   hash verified, CI on `main` green on all three OSes), installed on the dev machine (reports 0.1.14; Claude, Codex, OpenCode and Cursor available)**: Bots can run on OpenCode (cloud, free and **local models** from
   Ollama/LM Studio), Cursor, Gemini CLI, Grok Build or any owner-added ACP agent, through
