@@ -54,4 +54,3 @@ RUN_HOME=/tmp/openbot-copy RUN_ENGINE=cursor RUN_MODEL=auto node scripts/live/en
 `RUN_ENGINE` (opencode), `RUN_MODEL` (ollama/qwen3:8b), `RUN_PORT` (4592), `RUN_TURN_MIN` (8).
 LM Studio on another port: `OPENBOT_LMSTUDIO_URL=http://127.0.0.1:1235` (on the dev machine a
 Windows service holds 1234). Verified 2026-09-30: all three 9/9.
-
