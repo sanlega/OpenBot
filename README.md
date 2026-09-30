@@ -162,8 +162,14 @@ machine** instead of the container is opt-in and asks every time.
 OpenBot is in active development. Download an installer from the
 [latest GitHub Release](https://github.com/sanlega/OpenBot/releases/latest):
 macOS DMGs are provided for Apple Silicon and Intel, Windows has an x64 installer,
-and Linux has AppImage and `.deb` packages. Installers are unsigned, so your
-operating system may show a security warning.
+and Linux has AppImage and `.deb` packages. Installers are not signed with a paid
+developer certificate, so your operating system may show a security warning.
+
+On macOS, drag OpenBot to Applications and open it once: macOS says it can't verify the
+developer. Open **System Settings > Privacy & Security**, scroll to OpenBot and choose
+**Open Anyway** (only the first time). If macOS says the app "is damaged" (0.1.15 and
+earlier were not signed at all), run `xattr -dr com.apple.quarantine /Applications/OpenBot.app`
+or install 0.1.16 or later.
 
 Or build from source. You need Node.js **22.12 or newer** and pnpm **10**:
 

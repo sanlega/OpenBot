@@ -189,6 +189,14 @@ jobs:
           OPENBOT_FAKE_ENGINES: "1"
           OPENBOT_FAKE_COMPUTER: "1"
 
+      - name: Smoke test packaged app (macOS)
+        if: runner.os == 'macOS'
+        run: pnpm --filter @openbot/desktop run smoke:packaged:mac
+        env:
+          OPENBOT_FAKE_JEV: "1"
+          OPENBOT_FAKE_ENGINES: "1"
+          OPENBOT_FAKE_COMPUTER: "1"
+
       - name: Upload desktop artifacts
         if: always()
         uses: actions/upload-artifact@v4
