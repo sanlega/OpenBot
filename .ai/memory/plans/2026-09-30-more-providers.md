@@ -1,6 +1,6 @@
 # Plan: More engines — ACP CLIs (Cursor, OpenCode, Gemini, Grok…) and local models
 
-- **Date**: 2026-09-30 · **Author**: Claude · **Status**: draft (awaiting owner's OK)
+- **Date**: 2026-09-30 · **Author**: Claude · **Status**: done (2026-09-30), see D-031
 - **Original request**: "connect new providers: local models and other CLI models like
   Cursor; research T3 Code, which is open source and has many providers."
 - **Research**: `.ai/resources/2026-09-30-t3code-providers-research.md`
@@ -134,16 +134,16 @@ account, keeping OpenBot's MCP tools, approvals, delegation and Jev routing.
 | 10 | Live verification on a copy of the real `~/.openbot` (`scripts/live/`): OpenCode+Ollama Bot, Chief delegating to it, approval card, restart+resume; docs (README engines table) | `scripts/live/*`, `README.md`, STATE/DECISIONS | scenario passes; 1 decision D-031 logged | 5–8 | no |
 
 Progress:
-- [ ] T1 spike
-- [ ] T2 contracts
-- [ ] T3 store
-- [ ] T4 ACP driver core
-- [ ] T5 OpenCode + local models
-- [ ] T6 harness wiring
-- [ ] T7 router
-- [ ] T8 UI
-- [ ] T9 Cursor/Gemini/Grok profiles
-- [ ] T10 live verification + docs
+- [x] T1 spike
+- [x] T2 contracts
+- [x] T3 store — not needed: engine columns are free text; custom engines live in `~/.openbot/engines.json`
+- [x] T4 ACP driver core
+- [x] T5 OpenCode + local models
+- [x] T6 harness wiring
+- [x] T7 router
+- [x] T8 UI
+- [x] T9 Cursor/Gemini/Grok profiles — Cursor live 9/9; Gemini to the sign-in error; Grok untested (not installed)
+- [x] T10 live verification + docs
 
 ## Risks
 

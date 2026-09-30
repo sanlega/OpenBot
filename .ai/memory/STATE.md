@@ -1,14 +1,27 @@
 # Project state
 
-_Last updated: 2026-09-30 by Claude_
+_Last updated: 2026-09-30 by Claude (more engines, D-031)_
 
 ## In progress
-- **More engines (2026-09-30, plan `.ai/memory/plans/2026-09-30-more-providers.md`, DRAFT,
-  awaiting owner's OK)**: Cursor/OpenCode/Gemini/Grok via one generic ACP driver
-  (`@openbot/engines-acp`, official `@agentclientprotocol/sdk`) and local models (Ollama,
-  LM Studio) through OpenCode. Research on T3 Code (which does exactly this):
-  `.ai/resources/2026-09-30-t3code-providers-research.md`. Nothing implemented yet.
-  **Next**: T1 spike with `opencode acp` + Ollama (both installed on the dev machine).
+- **More engines: ACP CLIs and local models (2026-09-30, D-031, plan
+  `.ai/memory/plans/2026-09-30-more-providers.md`, DONE on branch `sanlega/add-local-and-cli`,
+  NOT merged or released)**: Bots can run on OpenCode (cloud, free and **local models** from
+  Ollama/LM Studio), Cursor, Gemini CLI, Grok Build or any owner-added ACP agent, through
+  `@openbot/engines-acp` (one generic Agent Client Protocol driver). `EngineId` is an open
+  slug; Settings > Engines lists every engine, local models found and custom agents; setup
+  accepts any ready agent. Verified: 1194 unit, 23 E2E, lint 0 errors, format, `mh check`,
+  and live on a copy of the real `~/.openbot` with `scripts/live/engines.mjs`: OpenCode +
+  Ollama `qwen3:8b`, OpenCode + LM Studio `qwen/qwen3.5-9b` and Cursor each 9/9. Security
+  found live and fixed: Cursor writes files without asking (deny rules in its private home +
+  a driver backstop that stops unasked writes outside the workspace) and the owner's Cursor
+  hooks/MCP/skills leaked into Bots (private home). **Next**: owner review and merge to
+  `main`, then release (bump the two SERVER_VERSION constants too). Not verified: Grok (not
+  installed), Gemini past sign-in (no account), Cursor/OpenCode on macOS/Linux (Cursor's
+  private home assumes the sign-in lives in the system credential store; if not, it falls
+  back to the real home without `--approve-mcps`). Known: engines are detected only at
+  start-up (restart after installing/signing in); small local models word replies loosely
+  and OpenCode ends a turn after a refused permission (the harness shows the fallback line);
+  Cursor reports no token usage.
 - **Autonomy by default (2026-09-30, D-030, plan `.ai/memory/plans/2026-09-30-autonomous-tasks.md`),
   committed on `main`, NOT released**: the owner wants GrokBot-style autonomy: every request is
   attempted to the end, the user is only asked for data (credentials, codes, CAPTCHA) or before

@@ -33,9 +33,13 @@ Key paths:
 - `packages/runtime` — mailbox, chains, delivery, permission broker (incl. dry-run
   simulation), loop guards, caps, usage.
 - `packages/engines/*` — separate workspace packages: `claude/`, `codex/`
-  (`@openbot/engines-claude|codex`), `common/`, `conformance/` (shared driver
+  (`@openbot/engines-claude|codex`), `acp/` (`@openbot/engines-acp`: one generic
+  Agent Client Protocol driver plus profiles for OpenCode — including local Ollama/LM
+  Studio models — Cursor, Gemini CLI, Grok Build and owner-added agents from
+  `~/.openbot/engines.json`; D-031), `common/`, `conformance/` (shared driver
   test suite), and `fake/` (WS0), which implements `EngineDriver` for CI without
   credentials. Fakes sit one level deep (`packages/*/*` is a workspace glob).
+  Engine ids are open slugs (`EngineId`); each driver can `describe()` itself.
 - `packages/decisions` — `DecisionService`: Jev client, purpose budgets, fallbacks,
   question builders, decision log.
 - `packages/cos` — Chief of Staff prompt, `SpawnGate`, `NotifyGate`, caps S1–S10,

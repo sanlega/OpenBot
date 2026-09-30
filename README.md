@@ -20,8 +20,10 @@
 </p>
 
 OpenBot is a desktop app for a small team of persistent AI **Bots**, in a chat that
-feels like a team messenger. Each Bot runs on **Claude Code** or **Codex**, with its
-own role, model, permissions and tools. A **Chief of Staff** takes your requests,
+feels like a team messenger. Each Bot runs on **Claude Code**, **Codex**, **Cursor**,
+**OpenCode** (including local models from Ollama or LM Studio), **Gemini CLI**, **Grok
+Build** or any other agent that speaks the Agent Client Protocol, with its own role,
+model, permissions and tools. A **Chief of Staff** takes your requests,
 does the work itself or hands it to the right Bot, and only comes back when there is
 a result or it needs you.
 
@@ -173,9 +175,29 @@ pnpm --filter @openbot/desktop start
 ```
 
 On first launch, follow the setup wizard: add a TypeSafe (Jev) key and connect at
-least one engine, Claude Code or Codex (their CLI login works; an API key is
-optional). Docker Desktop is optional and enables the virtual computer. OpenBot keeps
+least one engine (their CLI login works; an API key is optional for Claude Code and
+Codex). Docker Desktop is optional and enables the virtual computer. OpenBot keeps
 credentials in a local encrypted vault.
+
+### Engines
+
+| Engine      | Install and sign in                                                          | Notes                                                                           |
+| ----------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Claude Code | `claude auth login`                                                          | Native driver                                                                   |
+| Codex       | `codex login`                                                                | Native driver                                                                   |
+| Cursor      | [Cursor CLI](https://cursor.com/cli), `cursor-agent login`                   | Your Cursor plan; runs from a private home, file writes fenced to the workspace |
+| OpenCode    | [opencode.ai](https://opencode.ai), `opencode auth login` (optional)         | Cloud providers, free models, and **local models**                              |
+| Gemini CLI  | [gemini-cli](https://github.com/google-gemini/gemini-cli), run `gemini` once | ACP mode                                                                        |
+| Grok Build  | [x.ai/cli](https://x.ai/cli), `grok login`                                   | ACP mode                                                                        |
+| Your own    | Settings > Engines > Your own ACP agents                                     | Any command that starts an ACP agent (Goose, Qwen Code, Copilot CLI...)         |
+
+**Local models.** Install OpenCode and start Ollama or LM Studio: their models appear in a
+Bot's model list (Settings > Engines shows what was found). OpenBot gives Ollama models a
+32k context (it makes a copy of the model with a bigger `num_ctx`; the default 4096 tokens
+cut the agent's instructions) and loads LM Studio models with the same context. Other
+addresses: `OLLAMA_HOST`, `OPENBOT_LMSTUDIO_URL`; context size: `OPENBOT_LOCAL_CONTEXT`.
+Small models (8-9B) handle short tool-using tasks; Jev routes heavier work elsewhere.
+Engines are detected at start-up: restart OpenBot after installing or signing in to one.
 
 <table>
   <tr>

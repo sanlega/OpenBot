@@ -36,3 +36,22 @@ Scenarios verified on 2026-09-30 (plan `.ai/memory/plans/2026-09-30-autonomous-t
 credentials asked once and saved; saved login with no question; the user signing in inside the
 VM; variant `c`; "let a bot handle it" (delegated worker); "delete my account" (asks only at
 the final button).
+
+## Engines check (D-031)
+
+`engines.mjs` starts the built harness on a copied home, creates a Bot pinned to one engine
+and model, and checks: it answers and calls OpenBot's `list_bots`; a write outside its
+workspace raises a card (denied) and the file is not written; a third turn remembers the
+first (same session).
+
+```sh
+pnpm build
+RUN_HOME=/tmp/openbot-copy node scripts/live/engines.mjs                         # OpenCode + ollama/qwen3:8b
+RUN_HOME=/tmp/openbot-copy RUN_MODEL=lmstudio/qwen/qwen3.5-9b node scripts/live/engines.mjs
+RUN_HOME=/tmp/openbot-copy RUN_ENGINE=cursor RUN_MODEL=auto node scripts/live/engines.mjs
+```
+
+`RUN_ENGINE` (opencode), `RUN_MODEL` (ollama/qwen3:8b), `RUN_PORT` (4592), `RUN_TURN_MIN` (8).
+LM Studio on another port: `OPENBOT_LMSTUDIO_URL=http://127.0.0.1:1235` (on the dev machine a
+Windows service holds 1234). Verified 2026-09-30: all three 9/9.
+
