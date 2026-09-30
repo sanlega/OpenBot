@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.14 — 2026-09-30
+
+- Bots can run on more engines: **Cursor**, **OpenCode**, **Gemini CLI** and **Grok Build**,
+  besides Claude Code and Codex, using your own accounts. Any other agent that speaks the Agent
+  Client Protocol (Goose, Qwen Code, Copilot CLI...) can be added from Settings > Engines with
+  its command line.
+- **Local models**: with OpenCode installed and Ollama or LM Studio running, their models show
+  up in a bot's model list and run on your computer, free and private. OpenBot gives them
+  enough context for an agent (Ollama's default was cutting the instructions off).
+- Settings > Engines shows every engine, whether it is installed and signed in (with the
+  command to sign in), and which local models were found. The setup wizard accepts any ready
+  engine.
+- Jev picks among all your engines and keeps local models for light tasks.
+- Cursor bots run apart from your own Cursor settings (your hooks, MCP servers and skills no
+  longer reach them) and cannot write outside their workspace unless they have Full
+  permissions; any engine that writes outside the workspace without asking is stopped.
+- A reply made only of blank lines no longer shows as an empty message.
+
 ## 0.1.13 — 2026-09-30
 
 - Bots finish what you ask without babysitting. A computer task no longer stops at the first
