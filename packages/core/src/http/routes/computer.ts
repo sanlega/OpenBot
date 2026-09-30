@@ -22,6 +22,10 @@ export function registerComputerRoutes(app: FastifyInstance, ctx: CoreContext): 
     if (!requireAuth(request, reply)) return;
     if (!ctx.computerProvider)
       return reply.code(501).send({ error: "not_implemented", reason: "WS9" });
+    // The remembered state can be stale (Docker was not running when OpenBot started).
+    if (ctx.computerImageManager && ctx.computerImageManager.getStatus().state === "missing") {
+      await ctx.computerImageManager.refresh().catch(() => undefined);
+    }
     if (ctx.computerImageManager && ctx.computerImageManager.getStatus().state !== "ready") {
       return reply.code(409).send({
         error: "image_missing",

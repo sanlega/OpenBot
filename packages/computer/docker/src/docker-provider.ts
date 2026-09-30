@@ -16,7 +16,7 @@ export interface DockerEngine {
   getContainer(id: string): {
     inspect(): Promise<{
       State: { Running: boolean };
-      Config?: { Env?: string[] };
+      Config?: { Env?: string[]; Image?: string };
       HostConfig?: { Binds?: string[] | null };
     }>;
     start(): Promise<void>;
@@ -37,11 +37,23 @@ export interface DockerProviderOptions {
   idleStopMs?: number;
   /** How Docker Desktop is started when it isn't running; tests replace it. */
   launcher?: DockerLauncherDeps;
+  /** Gets the image when it is not on this computer yet (an update, or the first use). */
+  ensureImage?: () => Promise<void>;
 }
 
 /** D-020: distributed via GHCR; local `docker build` is a dev-checkout-only fallback (see `image-manager.ts`). */
 export const DEFAULT_IMAGE = "ghcr.io/sanlega/openbot-desktop:latest";
 export const DEFAULT_CONTAINER = "openbot-desktop";
+export const DESKTOP_REPOSITORY = "ghcr.io/sanlega/openbot-desktop";
+
+/**
+ * The desktop image made for this version of OpenBot (the release publishes `:v<version>` next to
+ * `:latest`). Pinning it keeps the app and the daemon inside the image in step: `:latest` was
+ * never pulled again, so an updated app kept an old daemon.
+ */
+export function desktopImageFor(version: string): string {
+  return `${DESKTOP_REPOSITORY}:v${version}`;
+}
 /** Docker volume with every screen's browser profile and the shared sign-ins (D-032). */
 export const BROWSER_VOLUME = "openbot-browser";
 export const BROWSER_DIR = "/data/browser";
@@ -109,6 +121,8 @@ export class DockerProvider implements ComputerProvider {
     await ensureDockerEngine(() => docker.ping(), this.options.launcher);
 
     const name = this.options.containerName ?? DEFAULT_CONTAINER;
+    const image = this.options.image ?? DEFAULT_IMAGE;
+    await this.options.ensureImage?.();
     const existing = await docker.listContainers({ all: true });
     const match = existing.find((c) => c.Names.some((n) => n === `/${name}`));
 
@@ -121,10 +135,13 @@ export class DockerProvider implements ComputerProvider {
       );
       if (!savedToken) throw new Error(`desktop container ${name} has no control token`);
       const binds = info.HostConfig?.Binds ?? [];
-      const outdated = desktopBinds(this.options.workspaceMount).some((b) => !binds.includes(b));
+      const outdated =
+        desktopBinds(this.options.workspaceMount).some((b) => !binds.includes(b)) ||
+        // Made from another image (an older OpenBot): the daemon inside must match this app.
+        (info.Config?.Image !== undefined && info.Config.Image !== image);
       if (outdated && container.remove) {
-        // Made before the shared workspace and browser volume (or for another workspace):
-        // replace it. Its sign-ins were in /tmp and could not be kept anyway.
+        // Made before the shared workspace and browser volume, for another workspace or from
+        // another image: replace it. Sign-ins live on the browser volume, so they are kept.
         await container.remove({ force: true });
       } else {
         reuse = true;
@@ -135,7 +152,6 @@ export class DockerProvider implements ComputerProvider {
     }
 
     if (!reuse) {
-      const image = this.options.image ?? DEFAULT_IMAGE;
       const port = this.options.controlPort ?? 8787;
       const created = await docker.createContainer({
         Image: image,

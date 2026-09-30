@@ -15,6 +15,7 @@ export interface DockerImageEngine {
     remove(options?: { force?: boolean }): Promise<unknown>;
   };
   pull(tag: string, options?: unknown): Promise<NodeJS.ReadableStream>;
+  listImages?(options?: unknown): Promise<Array<{ RepoTags?: string[] | null }>>;
   modem: {
     followProgress(
       stream: NodeJS.ReadableStream,
@@ -124,6 +125,43 @@ export class ImageManager implements ComputerImageManagerContract {
     }
     return this.status;
   }
+
+  /**
+   * The image is on this computer, pulled now if it isn't (the first computer use, or the first
+   * after an update). Waits for a pull already in progress.
+   */
+  ensure(): Promise<void> {
+    // Set before the first await, so callers at the same moment share one check and one pull.
+    this.pending ??= (async () => {
+      if ((await this.refresh()).state === "ready") return;
+      await this.get("registry");
+    })().finally(() => {
+      this.pending = undefined;
+    });
+    return this.pending;
+  }
+
+  /**
+   * At start-up: reads the real state, and when an older OpenBot desktop image is here but not
+   * this version's, gets the new one in the background (the owner already chose to use it).
+   */
+  async checkForUpdate(): Promise<ComputerImageStatus> {
+    const status = await this.refresh();
+    if (status.state !== "missing") return status;
+    try {
+      const images = (await (await this.docker()).listImages?.()) ?? [];
+      const repository = this.tag.slice(0, this.tag.lastIndexOf(":"));
+      const older = images.some((i) =>
+        (i.RepoTags ?? []).some((t) => t.startsWith(`${repository}:`)),
+      );
+      if (older) await this.ensure();
+    } catch {
+      // Docker is not running yet: the first computer use gets the image.
+    }
+    return this.status;
+  }
+
+  private pending: Promise<void> | undefined;
 
   /** Pulls from the registry (default) or builds locally; throws `already_in_progress` if a get/reset is already running. */
   async get(source: "registry" | "local" = "registry"): Promise<ComputerImageStatus> {

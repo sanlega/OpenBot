@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Action, Observation } from "@openbot/contracts";
 import { ScreenManager } from "./screen-manager.js";
 import { DockerProvider } from "./docker-provider.js";
@@ -209,5 +209,45 @@ describe("DockerProvider shared workspace and sign-ins (D-032)", () => {
     }).ensureStarted();
     expect(e.removed()).toBe(false);
     expect(e.created).toHaveLength(0);
+  });
+});
+
+describe("DockerProvider image version", () => {
+  it("gets the image first, and replaces a container made from another image", async () => {
+    let removed = false;
+    const created: Array<{ Image: string }> = [];
+    const ensureImage = vi.fn(async () => {});
+    const provider = new DockerProvider({
+      image: "ghcr.io/sanlega/openbot-desktop:v0.1.17",
+      ensureImage,
+      controlClient: new MemoryControlDaemon(),
+      idleStopMs: 0,
+      docker: {
+        ping: async () => {},
+        listContainers: async () => (removed ? [] : [{ Id: "old", Names: ["/openbot-desktop"] }]),
+        getContainer: () => ({
+          inspect: async () => ({
+            State: { Running: true },
+            Config: {
+              Env: ["OPENBOT_CONTROL_TOKEN=t"],
+              Image: "ghcr.io/sanlega/openbot-desktop:latest",
+            },
+            HostConfig: { Binds: ["openbot-browser:/data/browser"] },
+          }),
+          start: async () => {},
+          remove: async () => {
+            removed = true;
+          },
+        }),
+        createContainer: async (options: unknown) => {
+          created.push(options as { Image: string });
+          return { id: "new", start: async () => {} };
+        },
+      },
+    });
+    await provider.ensureStarted();
+    expect(ensureImage).toHaveBeenCalledOnce();
+    expect(removed).toBe(true);
+    expect(created[0]!.Image).toBe("ghcr.io/sanlega/openbot-desktop:v0.1.17");
   });
 });

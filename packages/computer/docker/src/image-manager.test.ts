@@ -204,3 +204,58 @@ describe("ImageManager", () => {
     await expect(manager.reset(true)).resolves.toMatchObject({ state: "ready" });
   });
 });
+
+describe("ImageManager updates", () => {
+  const tag = "ghcr.io/sanlega/openbot-desktop:v0.1.17";
+
+  it("an older OpenBot image on this computer means the new one is pulled at start-up", async () => {
+    const pulled: string[] = [];
+    const manager = new ImageManager({
+      tag,
+      docker: fakeDocker({
+        listImages: async () => [{ RepoTags: ["ghcr.io/sanlega/openbot-desktop:latest"] }],
+        pull: async (t) => {
+          pulled.push(t);
+          return {} as NodeJS.ReadableStream;
+        },
+      }),
+    });
+    expect((await manager.checkForUpdate()).state).toBe("ready");
+    expect(pulled).toEqual([tag]);
+  });
+
+  it("with no OpenBot image at all, start-up downloads nothing (the owner chooses in Settings)", async () => {
+    const pull = vi.fn();
+    const manager = new ImageManager({
+      tag,
+      docker: fakeDocker({ listImages: async () => [{ RepoTags: ["postgres:16"] }], pull }),
+    });
+    expect((await manager.checkForUpdate()).state).toBe("missing");
+    expect(pull).not.toHaveBeenCalled();
+  });
+
+  it("ensure() pulls once, even when asked twice at the same time", async () => {
+    let pulls = 0;
+    let present = false;
+    const manager = new ImageManager({
+      tag,
+      docker: fakeDocker({
+        getImage: () => ({
+          inspect: async () => {
+            if (!present) throw new Error("no such image");
+            return {};
+          },
+          remove: async () => {},
+        }),
+        pull: async () => {
+          pulls += 1;
+          present = true;
+          return {} as NodeJS.ReadableStream;
+        },
+      }),
+    });
+    await Promise.all([manager.ensure(), manager.ensure()]);
+    await manager.ensure();
+    expect(pulls).toBe(1);
+  });
+});

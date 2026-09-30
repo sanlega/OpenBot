@@ -13,8 +13,11 @@ import { FakeComputerProvider } from "@openbot/computer-fake";
 import {
   createDockerProvider,
   createImageManager,
+  DEFAULT_IMAGE,
+  desktopImageFor,
   findLocalDockerfile,
 } from "@openbot/computer-docker";
+import { SERVER_VERSION } from "./index.js";
 import { LocalProvider } from "@openbot/computer-local";
 import {
   createDecisionService,
@@ -107,9 +110,14 @@ export async function bootstrapProviders(
   const decisionService = resolveDecisionService(ctx);
   const { drivers, engineStatuses, engineDescriptors, availableEngines } =
     await resolveEngineDrivers(ctx, detection);
-  const computerProvider = resolveComputerProvider(ctx);
+  const imageTag = desktopImageTag();
   const computerImageManager =
-    computerProvider.id === "docker" ? resolveComputerImageManager(ctx) : undefined;
+    fakeFlag("OPENBOT_FAKE_COMPUTER") || fakeFlag("OPENBOT_LOCAL_COMPUTER")
+      ? undefined
+      : resolveComputerImageManager(ctx, imageTag);
+  const computerProvider = resolveComputerProvider(ctx, imageTag, computerImageManager);
+  // An updated OpenBot gets its matching desktop image in the background.
+  void computerImageManager?.checkForUpdate().catch(() => undefined);
 
   registerSetupValidators(ctx, decisionService, detection);
   await reconcileTypesafeSetup(ctx);
@@ -214,7 +222,22 @@ async function resolveEngineDrivers(
   return { drivers, engineStatuses, engineDescriptors, availableEngines };
 }
 
-function resolveComputerProvider(ctx: CoreContext): ComputerProvider {
+/**
+ * The desktop image for this app: its own version's (`:v<version>`) in an installed app, so the
+ * daemon inside always matches; `:latest` in a dev checkout (built locally from
+ * images/desktop); `OPENBOT_DESKTOP_IMAGE` overrides both.
+ */
+function desktopImageTag(): string {
+  const override = process.env.OPENBOT_DESKTOP_IMAGE?.trim();
+  if (override) return override;
+  return findLocalDockerfile() ? DEFAULT_IMAGE : desktopImageFor(SERVER_VERSION);
+}
+
+function resolveComputerProvider(
+  ctx: CoreContext,
+  image: string,
+  imageManager?: ComputerImageManager & { ensure?: () => Promise<void> },
+): ComputerProvider {
   if (fakeFlag("OPENBOT_FAKE_COMPUTER")) return new FakeComputerProvider();
 
   if (fakeFlag("OPENBOT_LOCAL_COMPUTER")) return new LocalProvider();
@@ -222,12 +245,17 @@ function resolveComputerProvider(ctx: CoreContext): ComputerProvider {
   // Keep the provider wired even while Docker Desktop is starting. Its start
   // operation checks the daemon again, so opening Docker needs no app restart.
   // D-032: the virtual machine sees the bots' workspace at /workspace (same files everywhere).
-  return createDockerProvider({ workspaceMount: ctx.config.workspaceDir });
+  return createDockerProvider({
+    workspaceMount: ctx.config.workspaceDir,
+    image,
+    ensureImage: imageManager?.ensure ? () => imageManager.ensure!() : undefined,
+  });
 }
 
 /** Gets/resets the docker provider's desktop image (D-020); every status change is published as `computer.image_status`. */
-function resolveComputerImageManager(ctx: CoreContext): ComputerImageManager {
+function resolveComputerImageManager(ctx: CoreContext, tag: string) {
   return createImageManager({
+    tag,
     localDockerfile: findLocalDockerfile(),
     onStatus: (status) => {
       void ctx.eventBus.publish({ type: "computer.image_status", payload: { ...status } });
