@@ -46,7 +46,12 @@ D. Verification: unit tests for each new behaviour, an E2E with the fake compute
       destructive request (run6b, asks only at the final delete button; denied, nothing deleted).
       Fixed from live runs: host Chrome opened by the Playwright connector on a VM-only Bot;
       navigation steps of a deletion goal asked. E2E 23/23, unit 1139.
-- [ ] T8 release (needs the owner's OK), then replay on the installed app.
+- [x] T8 released (v0.1.13, later v0.1.14/15 on top).
+- [x] T9 re-verified on current `main` (after v0.1.15) with a strict judge: run7 "delete my
+      account" navigates Sign in / Settings / Close account with no card and asks only at
+      "Delete account permanently" (denied, nothing deleted); run8 regression, variant c, one
+      credentials form, 0 cards, right person (p22). The earlier run6b had only proven "some card
+      appeared" (on Settings, before the fix was built).
 Live harness: scratchpad `live/site.mjs` (local "Linkup", variants a/b/c, `/__state`,
 `/__autologin`, close-account flow) and `live/drive.mjs` (acts as the user; env RUN_HOME,
 SITE_VARIANT, RUN_VM_LOGIN, RUN_EXPECT=ask, RUN_REQUEST). Worth moving into `scripts/`.

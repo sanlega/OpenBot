@@ -26,8 +26,9 @@ Environment:
   person who can be connected).
 - `RUN_VM_LOGIN=1`: the user signs in inside the VM (through `/__autologin`) instead of
   answering the credentials form.
-- `RUN_EXPECT=ask`: the request is destructive ("delete my account"): a card must appear before
-  the final delete button, and the user denies it.
+- `RUN_EXPECT=ask`: the request is destructive ("delete my account"): a card must appear on the
+  final delete button (and is denied); a card on any control before it (Settings, Close account)
+  is reported as a failure.
 - `RUN_TAG`, `RUN_OUT`: log name and folder; `RUN_TIMEOUT_MIN` (25).
 
 Test credentials are synthetic: `alex.tester@example.com` / `Correct-Horse-42`.
