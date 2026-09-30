@@ -122,3 +122,46 @@ describe("DisplaySessionManager when a display fails to start", () => {
     expect(starts).toBe(2);
   });
 });
+
+describe("shared sign-ins between screens (D-032)", () => {
+  it("each bot's browser receives the other screens' sign-ins before it looks or acts", async () => {
+    const stores = new Map<number, Map<string, Record<string, unknown>>>();
+    const store = (port: number) => {
+      if (!stores.has(port)) stores.set(port, new Map());
+      return stores.get(port)!;
+    };
+    const sessions = new DisplaySessionManager({
+      startDisplay: async () => undefined,
+      observePage: async () => searchPage,
+      navigateTab: async () => true,
+      cookies: {
+        getAll: async (port) => [...store(port).values()].map((c) => ({ ...c })) as never,
+        set: async (port, cookies) => {
+          for (const c of cookies) store(port).set(`${c.domain}${c.name}`, { ...c });
+        },
+        remove: async (port, cookies) => {
+          for (const c of cookies) store(port).delete(`${c.domain}${c.name}`);
+        },
+      },
+    });
+    await sessions.observe("bot_a");
+    await sessions.observe("bot_b");
+    const portA = sessions.debugPort("bot_a")!;
+    const portB = sessions.debugPort("bot_b")!;
+    store(portA).set(".mail.test.sid", {
+      name: "sid",
+      value: "signed-in",
+      domain: ".mail.test",
+      path: "/",
+      expires: 4_000_000_000,
+    });
+    await sessions.act("bot_b", { op: "navigate", url: "https://mail.test/" });
+    expect([...store(portB).values()].map((c) => c.value)).toEqual(["signed-in"]);
+  });
+
+  it("puts each screen's profile under the browser volume", () => {
+    const sessions = new DisplaySessionManager({ profileRoot: "/data/browser" });
+    expect(sessions.profileDir(2)).toBe("/data/browser/screen-2");
+    expect(new DisplaySessionManager().profileDir(2)).toBe("/tmp/openbot-chrome-2");
+  });
+});

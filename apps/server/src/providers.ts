@@ -107,7 +107,7 @@ export async function bootstrapProviders(
   const decisionService = resolveDecisionService(ctx);
   const { drivers, engineStatuses, engineDescriptors, availableEngines } =
     await resolveEngineDrivers(ctx, detection);
-  const computerProvider = resolveComputerProvider();
+  const computerProvider = resolveComputerProvider(ctx);
   const computerImageManager =
     computerProvider.id === "docker" ? resolveComputerImageManager(ctx) : undefined;
 
@@ -214,14 +214,15 @@ async function resolveEngineDrivers(
   return { drivers, engineStatuses, engineDescriptors, availableEngines };
 }
 
-function resolveComputerProvider(): ComputerProvider {
+function resolveComputerProvider(ctx: CoreContext): ComputerProvider {
   if (fakeFlag("OPENBOT_FAKE_COMPUTER")) return new FakeComputerProvider();
 
   if (fakeFlag("OPENBOT_LOCAL_COMPUTER")) return new LocalProvider();
 
   // Keep the provider wired even while Docker Desktop is starting. Its start
   // operation checks the daemon again, so opening Docker needs no app restart.
-  return createDockerProvider();
+  // D-032: the virtual machine sees the bots' workspace at /workspace (same files everywhere).
+  return createDockerProvider({ workspaceMount: ctx.config.workspaceDir });
 }
 
 /** Gets/resets the docker provider's desktop image (D-020); every status change is published as `computer.image_status`. */

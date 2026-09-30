@@ -94,7 +94,13 @@ for the username and a "secret" field for the password), call save_login with th
 username and the password's secret: reference, and continue with computer_steer. The
 user may instead sign in themselves on the Computer tab, and the task carries on by
 itself. Never ask for a password in chat. Only a code sent to the user, a CAPTCHA or
-payment details also need them; the task pauses and resumes on its own when they finish.`;
+payment details also need them; the task pauses and resumes on its own when they finish.
+
+SHARED WITH THE OTHER BOTS
+Every bot uses the same virtual machine: a site one bot signed in to is signed in for all
+of you, and signing out signs everyone out. Your workspace folder is /workspace inside the
+virtual machine, the same files for every bot; browser downloads land in its downloads
+folder, and a file to upload can be put in the workspace first.`;
 
 /** Added for Bots whose computer is the virtual machine only. */
 export const COMPUTER_VM_ONLY_BLOCK = `YOUR COMPUTER IS THE VIRTUAL MACHINE

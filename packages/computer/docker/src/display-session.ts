@@ -11,6 +11,10 @@ import {
 import type { Action, ActResult } from "@openbot/contracts";
 import { ScreenManager } from "./screen-manager.js";
 import { createShellExec } from "@openbot/computer/observation";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+// The daemon runs in the Linux container: its paths are POSIX paths.
+import { posix } from "node:path";
+import { SharedCookieJar, type BrowserCookie, type CookieAccess } from "./cookie-jar.js";
 
 export interface DisplaySessionOptions {
   maxScreens?: number;
@@ -27,6 +31,17 @@ export interface DisplaySessionOptions {
   pageInput?: PageInput;
   /** Starts Xvfb, the window manager, VNC and Chromium for a display (stubbed in tests). */
   startDisplay?: (display: number, debugPort: number, vncPort: number) => Promise<void>;
+  /**
+   * Where each screen's browser profile lives. On the container's browser volume, so sign-ins
+   * and browser state survive a restart (D-032); `/tmp` when not set.
+   */
+  profileRoot?: string;
+  /** Downloads go here (the bots' shared workspace, mounted in the container). */
+  downloadDir?: string;
+  /** Reads and writes each browser's cookies; with it, every screen shares one set of sign-ins. */
+  cookies?: CookieAccess;
+  /** Where the shared sign-ins are saved. */
+  cookieFile?: string;
   /** Reads the page (stubbed in tests). */
   observePage?: (
     display: number,
@@ -114,12 +129,64 @@ export class DisplaySessionManager {
   private readonly shell: ShellExec;
   private readonly navigateTab: (debugPort: number, url: string) => Promise<boolean>;
   private readonly pageInput: PageInput;
+  private readonly jar: SharedCookieJar | undefined;
 
   constructor(private readonly options: DisplaySessionOptions = {}) {
     this.screens = new ScreenManager(options.maxScreens ?? 4);
     this.shell = options.shell ?? createShellExec();
     this.navigateTab = options.navigateTab ?? navigateTabOverCdp;
     this.pageInput = options.pageInput ?? cdpPageInput;
+    this.jar = options.cookies
+      ? new SharedCookieJar(options.cookies, options.cookieFile)
+      : undefined;
+  }
+
+  /** The DevTools port of a bot's browser, if it has a screen. */
+  debugPort(botId: string): number | undefined {
+    return this.sessions.get(botId)?.debugPort;
+  }
+
+  /** The profile folder of a screen's browser. */
+  profileDir(display: number): string {
+    return this.options.profileRoot
+      ? posix.join(this.options.profileRoot, `screen-${display}`)
+      : `/tmp/openbot-chrome-${display}`;
+  }
+
+  /** Before a bot looks or acts: its browser gets every sign-in (or sign-out) made on any screen. */
+  private async shareSignIns(session: SessionState): Promise<void> {
+    if (!this.jar) return;
+    const ports = [...this.sessions.values()].map((s) => s.debugPort);
+    await this.jar.sync(session.debugPort, ports).catch(() => undefined);
+  }
+
+  /** Chromium's own preferences for a screen's profile: downloads land in the shared workspace. */
+  private prepareProfile(display: number): void {
+    const dir = this.profileDir(display);
+    try {
+      mkdirSync(posix.join(dir, "Default"), { recursive: true });
+      if (!this.options.downloadDir) return;
+      mkdirSync(this.options.downloadDir, { recursive: true });
+      const file = posix.join(dir, "Default", "Preferences");
+      let prefs: Record<string, unknown> = {};
+      try {
+        prefs = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+      } catch {
+        // First start of this profile.
+      }
+      const download = (prefs.download ?? {}) as Record<string, unknown>;
+      prefs.download = {
+        ...download,
+        default_directory: this.options.downloadDir,
+        prompt_for_download: false,
+        directory_upgrade: true,
+      };
+      const savefile = (prefs.savefile ?? {}) as Record<string, unknown>;
+      prefs.savefile = { ...savefile, default_directory: this.options.downloadDir };
+      writeFileSync(file, JSON.stringify(prefs));
+    } catch {
+      // The browser still starts with its defaults.
+    }
   }
 
   assign(botId: string): SessionState {
@@ -136,6 +203,7 @@ export class DisplaySessionManager {
           }
         }
         this.sessions.delete(id);
+        this.jar?.forget(old.debugPort);
         this.options.onEvict?.(old.display);
       }
     }
@@ -167,6 +235,7 @@ export class DisplaySessionManager {
   async observe(botId: string, mode?: "dom" | "ax" | "ocr" | "auto"): Promise<ObservationResult> {
     const session = this.assign(botId);
     await session.ready;
+    await this.shareSignIns(session);
     const observation = this.options.observePage
       ? await this.options.observePage(session.display, session.debugPort, mode ?? "auto")
       : await runObservationPipeline(
@@ -185,6 +254,7 @@ export class DisplaySessionManager {
   async act(botId: string, action: Action): Promise<ActResult> {
     const session = this.assign(botId);
     await session.ready;
+    await this.shareSignIns(session);
     const env = { ...process.env, DISPLAY: `:${session.display}` };
 
     switch (action.op) {
@@ -207,7 +277,7 @@ export class DisplaySessionManager {
             "--start-maximized",
             "--remote-debugging-address=127.0.0.1",
             `--remote-debugging-port=${session.debugPort}`,
-            `--user-data-dir=/tmp/openbot-chrome-${session.display}`,
+            `--user-data-dir=${this.profileDir(session.display)}`,
             action.url,
           ],
           { detached: true, stdio: "ignore", env },
@@ -320,7 +390,10 @@ export class DisplaySessionManager {
     const env = { ...process.env, DISPLAY: displayStr };
     // A container that was stopped or crashed keeps its old X lock and browser profile lock,
     // which make Xvfb and Chromium refuse to start (and VNC never comes up).
-    await removeStaleDesktopLocks(session.display);
+    await removeStaleDesktopLocks(session.display, this.profileDir(session.display));
+    this.prepareProfile(session.display);
+    // A new browser on this screen: it has to receive the shared sign-ins from scratch.
+    this.jar?.forget(session.debugPort);
     session.processes.push(
       spawn("Xvfb", [displayStr, "-screen", "0", "1600x1000x24"], {
         detached: true,
@@ -358,7 +431,7 @@ export class DisplaySessionManager {
           "--start-maximized",
           "--remote-debugging-address=127.0.0.1",
           `--remote-debugging-port=${session.debugPort}`,
-          `--user-data-dir=/tmp/openbot-chrome-${session.display}`,
+          `--user-data-dir=${this.profileDir(session.display)}`,
           "about:blank",
         ],
         { detached: true, stdio: "ignore", env },
@@ -369,6 +442,19 @@ export class DisplaySessionManager {
   }
 }
 
+/** Each screen's cookies, over the DevTools port of its browser. */
+export const cdpCookies: CookieAccess = {
+  async getAll(debugPort) {
+    return (await withCdp(debugPort, (c) => c.getAllCookies(), 3_000)) as BrowserCookie[];
+  },
+  async set(debugPort, cookies) {
+    await withCdp(debugPort, (c) => c.setCookies(cookies), 3_000);
+  },
+  async remove(debugPort, cookies) {
+    await withCdp(debugPort, (c) => c.deleteCookies(cookies), 3_000);
+  },
+};
+
 function center(bounds: { x: number; y: number; width: number; height: number }) {
   return {
     x: bounds.x + Math.floor(bounds.width / 2),
@@ -376,14 +462,14 @@ function center(bounds: { x: number; y: number; width: number; height: number })
   };
 }
 
-async function removeStaleDesktopLocks(display: number): Promise<void> {
+async function removeStaleDesktopLocks(display: number, profile: string): Promise<void> {
   const { rm } = await import("node:fs/promises");
   for (const path of [
     `/tmp/.X${display}-lock`,
     `/tmp/.X11-unix/X${display}`,
-    `/tmp/openbot-chrome-${display}/SingletonLock`,
-    `/tmp/openbot-chrome-${display}/SingletonSocket`,
-    `/tmp/openbot-chrome-${display}/SingletonCookie`,
+    `${profile}/SingletonLock`,
+    `${profile}/SingletonSocket`,
+    `${profile}/SingletonCookie`,
   ]) {
     await rm(path, { force: true }).catch(() => undefined);
   }

@@ -5,8 +5,9 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomBytes } from "node:crypto";
-import { renameSync, writeFileSync } from "node:fs";
-import { DisplaySessionManager } from "./display-session.js";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { cdpCookies, DisplaySessionManager } from "./display-session.js";
 import { createLiveViewUrl } from "./live-view-url.js";
 import { stripMeta } from "@openbot/computer/observation";
 import type { Action } from "@openbot/contracts";
@@ -27,8 +28,21 @@ function persistLiveTokens(): void {
   renameSync(`${TOKEN_FILE}.next`, TOKEN_FILE);
 }
 
+// D-032: one set of sign-ins and one set of files for every bot. Browser profiles and the shared
+// sign-ins live on the container's browser volume; downloads go to the bots' workspace.
+const BROWSER_DIR = process.env.OPENBOT_BROWSER_DIR;
+const WORKSPACE = process.env.OPENBOT_WORKSPACE_DIR ?? "/workspace";
+
 const sessions = new DisplaySessionManager({
   maxScreens: MAX_SCREENS,
+  ...(BROWSER_DIR
+    ? {
+        profileRoot: BROWSER_DIR,
+        cookies: cdpCookies,
+        cookieFile: join(BROWSER_DIR, "shared-cookies.json"),
+      }
+    : {}),
+  ...(existsSync(WORKSPACE) ? { downloadDir: join(WORKSPACE, "downloads") } : {}),
   onEvict: (display) => {
     for (const [token, entry] of liveTokens) {
       if (entry.display === display) liveTokens.delete(token);

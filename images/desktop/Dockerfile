@@ -36,7 +36,7 @@ COPY --from=build /repo/packages/computer/docker/dist/desktop-daemon.js ./deskto
 COPY images/desktop/entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
-RUN mkdir -p /workspace
+RUN mkdir -p /workspace /data/browser
 VOLUME ["/workspace"]
 
 EXPOSE 8787 6080

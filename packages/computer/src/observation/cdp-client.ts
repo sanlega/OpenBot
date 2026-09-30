@@ -117,6 +117,24 @@ export class CdpClient {
     }
   }
 
+  /** Every cookie of this browser (all sites). */
+  async getAllCookies(): Promise<Array<Record<string, unknown>>> {
+    const result = (await this.send("Network.getAllCookies")) as {
+      cookies?: Array<Record<string, unknown>>;
+    };
+    return result.cookies ?? [];
+  }
+
+  async setCookies(cookies: Array<Record<string, unknown>>): Promise<void> {
+    await this.send("Network.setCookies", { cookies });
+  }
+
+  async deleteCookies(
+    cookies: Array<{ name: string; domain: string; path: string }>,
+  ): Promise<void> {
+    for (const c of cookies) await this.send("Network.deleteCookies", c);
+  }
+
   async axTree(): Promise<unknown> {
     return this.send("Accessibility.getFullAXTree");
   }
