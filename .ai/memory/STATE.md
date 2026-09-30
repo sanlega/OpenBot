@@ -6,7 +6,7 @@ _Last updated: 2026-09-30 by Claude (more engines, D-031)_
 - **More engines: ACP CLIs and local models (2026-09-30, D-031, plan
   `.ai/memory/plans/2026-09-30-more-providers.md`) — RELEASED as v0.1.14 (merged to `main`,
   tag pushed, release workflow green, all installers + SHA256SUMS published, Windows installer
-  hash verified, CI on `main` green on all three OSes). Not yet installed on the dev machine**: Bots can run on OpenCode (cloud, free and **local models** from
+  hash verified, CI on `main` green on all three OSes), installed on the dev machine (reports 0.1.14; Claude, Codex, OpenCode and Cursor available)**: Bots can run on OpenCode (cloud, free and **local models** from
   Ollama/LM Studio), Cursor, Gemini CLI, Grok Build or any owner-added ACP agent, through
   `@openbot/engines-acp` (one generic Agent Client Protocol driver). `EngineId` is an open
   slug; Settings > Engines lists every engine, local models found and custom agents; setup
@@ -15,8 +15,8 @@ _Last updated: 2026-09-30 by Claude (more engines, D-031)_
   Ollama `qwen3:8b`, OpenCode + LM Studio `qwen/qwen3.5-9b` and Cursor each 9/9. Security
   found live and fixed: Cursor writes files without asking (deny rules in its private home +
   a driver backstop that stops unasked writes outside the workspace) and the owner's Cursor
-  hooks/MCP/skills leaked into Bots (private home). **Next**: install v0.1.14 on the dev
-  machine (check no turn is running first) and try a Cursor / local-model Bot from the app. Not verified: Grok (not
+  hooks/MCP/skills leaked into Bots (private home). **Next**: the owner tries a Cursor /
+  local-model Bot from the installed app. Not verified: Grok (not
   installed), Gemini past sign-in (no account), Cursor/OpenCode on macOS/Linux (Cursor's
   private home assumes the sign-in lives in the system credential store; if not, it falls
   back to the real home without `--approve-mcps`). Known: engines are detected only at
