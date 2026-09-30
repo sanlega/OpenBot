@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.15 — 2026-09-30
+
+- Fixed the new engines (OpenCode, Cursor, local models) seeming to be missing from a bot's
+  model list: the list took about 7 seconds to arrive when something other than LM Studio was
+  listening on its port, and until then only "Auto" showed. Model lists now load in the
+  background when OpenBot starts, answer at once afterwards, and the list says when it is
+  still loading.
+
 ## 0.1.14 — 2026-09-30
 
 - Bots can run on more engines: **Cursor**, **OpenCode**, **Gemini CLI** and **Grok Build**,

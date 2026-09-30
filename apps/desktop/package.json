@@ -1,6 +1,6 @@
 {
   "name": "@openbot/desktop",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "private": true,
   "type": "module",
   "description": "OpenBot desktop app: manage a roster of persistent Claude Code and Codex bots.",
