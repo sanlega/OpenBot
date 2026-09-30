@@ -127,6 +127,8 @@ export async function bootstrapHarness(
   wakeRequesterOnDelegations(ctx, turnDeps, buildTurn);
   pinModelOnSpawn(ctx, createEngineChooser(ctx, turnDeps));
   ctx.listModels = modelLister(ctx, turnDeps);
+  // Warm the model lists so the first profile opened shows every engine at once.
+  void ctx.listModels().catch(() => undefined);
   ctx.onApprovalResolved = (approvalId, resolution) => {
     runtime.broker.settleResolved(approvalId, resolution);
     applyRoutineLiveApproval(ctx, approvalId, resolution);

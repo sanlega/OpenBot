@@ -83,9 +83,15 @@ export async function discoverLmStudio(
   doFetch: Fetch = fetch,
 ): Promise<LocalModel[]> {
   type Entry = { id: string; type?: string; max_context_length?: number; capabilities?: string[] };
-  const rich = await getJson<{ data?: Entry[] }>(doFetch, `${base}/api/v0/models`);
+  const rich = await fetchJson<{ data?: Entry[] }>(doFetch, `${base}/api/v0/models`);
+  // Only a server that answered (an older LM Studio without the v0 API) is worth a second try:
+  // something else listening on the port may never answer at all.
   const list: Entry[] =
-    rich?.data ?? (await getJson<{ data?: Entry[] }>(doFetch, `${base}/v1/models`))?.data ?? [];
+    rich.status === "ok"
+      ? (rich.data.data ?? [])
+      : rich.status === "http"
+        ? ((await getJson<{ data?: Entry[] }>(doFetch, `${base}/v1/models`))?.data ?? [])
+        : [];
   return list
     .filter((m) => !m.type || m.type === "llm" || m.type === "vlm")
     .filter((m) => !/embed/i.test(m.id))
@@ -162,13 +168,24 @@ function contextOf(modelInfo: Record<string, unknown> | undefined): number | und
   return undefined;
 }
 
-async function getJson<T>(doFetch: Fetch, url: string): Promise<T | undefined> {
+/** Discovery must stay quick: a local server answers in milliseconds or is not there. */
+const DISCOVERY_TIMEOUT_MS = 1_500;
+
+type Fetched<T> = { status: "ok"; data: T } | { status: "http" } | { status: "unreachable" };
+
+async function fetchJson<T>(doFetch: Fetch, url: string): Promise<Fetched<T>> {
   try {
-    const res = await doFetch(url, { signal: AbortSignal.timeout(3_000) });
-    return res.ok ? ((await res.json()) as T) : undefined;
+    const res = await doFetch(url, { signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS) });
+    if (!res.ok) return { status: "http" };
+    return { status: "ok", data: (await res.json()) as T };
   } catch {
-    return undefined;
+    return { status: "unreachable" };
   }
+}
+
+async function getJson<T>(doFetch: Fetch, url: string): Promise<T | undefined> {
+  const res = await fetchJson<T>(doFetch, url);
+  return res.status === "ok" ? res.data : undefined;
 }
 
 async function postJson<T = unknown>(

@@ -74,24 +74,11 @@ export function openCodeProfile(options: OpenCodeProfileOptions = {}): AcpProfil
     },
 
     async listModels(command, env) {
-      const local = await discoverLocalModels(servers, doFetch);
-      const cloud: ModelInfo[] = [];
-      try {
-        const { stdout, code } = await runCommand(command, ["models"], {
-          env: envFor(env),
-          timeoutMs: 20_000,
-        });
-        if (code === 0) {
-          for (const line of stdout.split(/\r?\n/)) {
-            const id = line.trim();
-            if (/^[\w.-]+\/[\w.:@/-]+$/.test(id) && !parseLocalModelId(id)) {
-              cloud.push({ id, label: id });
-            }
-          }
-        }
-      } catch {
-        // Local models are still listed.
-      }
+      // Local servers and OpenCode's own list are asked at the same time.
+      const [local, cloud] = await Promise.all([
+        discoverLocalModels(servers, doFetch),
+        cloudModels(command, envFor(env)),
+      ]);
       return [...local, ...cloud.slice(0, 200)];
     },
 
@@ -126,6 +113,22 @@ export function openCodeProfile(options: OpenCodeProfileOptions = {}): AcpProfil
       };
     },
   };
+}
+
+/** The providers the owner signed in to with `opencode auth login`, and OpenCode's free models. */
+async function cloudModels(command: string, env: Record<string, string>): Promise<ModelInfo[]> {
+  const cloud: ModelInfo[] = [];
+  try {
+    const { stdout, code } = await runCommand(command, ["models"], { env, timeoutMs: 20_000 });
+    if (code !== 0) return cloud;
+    for (const line of stdout.split(/\r?\n/)) {
+      const id = line.trim();
+      if (/^[\w.-]+\/[\w.:@/-]+$/.test(id) && !parseLocalModelId(id)) cloud.push({ id, label: id });
+    }
+  } catch {
+    // Local models are still listed.
+  }
+  return cloud;
 }
 
 interface ResolvedModel {

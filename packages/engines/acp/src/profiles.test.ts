@@ -361,3 +361,22 @@ describe("tool names", () => {
     expect(toolInputOf(edit)).toMatchObject({ file_path: "/w/a.txt" });
   });
 });
+
+describe("local discovery speed", () => {
+  it("does not retry a server that never answers (something else on LM Studio's port)", async () => {
+    const urls: string[] = [];
+    const hang = (async (url: string | URL) => {
+      urls.push(String(url));
+      throw new DOMException("timed out", "TimeoutError");
+    }) as typeof fetch;
+    expect(await discoverLmStudio("http://127.0.0.1:1234", hang)).toEqual([]);
+    expect(urls).toEqual(["http://127.0.0.1:1234/api/v0/models"]);
+  });
+
+  it("falls back to /v1/models on an older LM Studio that answers 404 to /api/v0", async () => {
+    const { doFetch } = fakeServer({ "/v1/models": () => ({ data: [{ id: "old-model" }] }) });
+    expect((await discoverLmStudio("http://l", doFetch)).map((m) => m.id)).toEqual([
+      "lmstudio/old-model",
+    ]);
+  });
+});

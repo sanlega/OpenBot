@@ -26,11 +26,15 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
   const [status, setStatus] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
 
+  const [modelsLoading, setModelsLoading] = useState(true);
+
   useEffect(() => {
+    setModelsLoading(true);
     void transport
       .get<{ engines: EngineModels[] }>("/api/models")
       .then((res) => setEngines(res.engines))
-      .catch(() => setEngines([]));
+      .catch(() => setEngines([]))
+      .finally(() => setModelsLoading(false));
   }, [transport]);
 
   useEffect(() => {
@@ -128,6 +132,11 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
         </span>
         <select aria-label="Model" value={model} onChange={(e) => setModel(e.target.value)}>
           <option value={AUTO}>Auto (the best model for each message)</option>
+          {modelsLoading ? (
+            <option value="" disabled>
+              Loading the engines' models…
+            </option>
+          ) : null}
           {!known && current !== AUTO ? (
             <option value={current}>
               {current.endsWith(":") ? `${current.slice(0, -1)} (default model)` : current}
