@@ -3,6 +3,12 @@
 _Last updated: 2026-09-30 by Claude_
 
 ## In progress
+- **More engines (2026-09-30, plan `.ai/memory/plans/2026-09-30-more-providers.md`, DRAFT,
+  awaiting owner's OK)**: Cursor/OpenCode/Gemini/Grok via one generic ACP driver
+  (`@openbot/engines-acp`, official `@agentclientprotocol/sdk`) and local models (Ollama,
+  LM Studio) through OpenCode. Research on T3 Code (which does exactly this):
+  `.ai/resources/2026-09-30-t3code-providers-research.md`. Nothing implemented yet.
+  **Next**: T1 spike with `opencode acp` + Ollama (both installed on the dev machine).
 - **Autonomy by default (2026-09-30, D-030, plan `.ai/memory/plans/2026-09-30-autonomous-tasks.md`),
   committed on `main`, NOT released**: the owner wants GrokBot-style autonomy: every request is
   attempted to the end, the user is only asked for data (credentials, codes, CAPTCHA) or before
