@@ -25,6 +25,8 @@ export {
   type TurnMailbox,
   type ComputerTasksControl,
   type LiveComputerTask,
+  type CustomEngineSpec,
+  type CustomEnginesControl,
 } from "./context.js";
 export { EventBus, type PublishInput } from "./event-bus.js";
 export { NdjsonWriter, NullNdjsonWriter } from "./ndjson-writer.js";

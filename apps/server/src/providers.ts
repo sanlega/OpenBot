@@ -1,7 +1,9 @@
+import { join } from "node:path";
 import type {
   ComputerImageManager,
   ComputerProvider,
   DecisionService,
+  EngineDescriptor,
   EngineDriver,
   EngineId,
   EngineStatus,
@@ -21,6 +23,14 @@ import {
   JevClient,
   KeyedDecisionService,
 } from "@openbot/decisions";
+import {
+  AcpDriver,
+  builtinAcpProfiles,
+  customProfiles,
+  readEnginePrefs,
+  writeEnginePrefs,
+  type AcpProfile,
+} from "@openbot/engines-acp";
 import { ClaudeDriver, detectClaude } from "@openbot/engines-claude";
 import { CodexDriver, detectCodex } from "@openbot/engines-codex";
 import { validateAnthropicKey, validateOpenAiKey } from "@openbot/engines-common";
@@ -35,6 +45,8 @@ export const VAULT_KEYS = {
 export interface ProviderDetection {
   detectClaude: typeof detectClaude;
   detectCodex: typeof detectCodex;
+  /** ACP engines to offer (D-031): production passes the built-in ones plus the owner's custom ones; none when omitted. */
+  acpProfiles?: (openbotHome: string) => AcpProfile[];
 }
 
 export interface BootstrapProvidersResult {
@@ -42,13 +54,41 @@ export interface BootstrapProvidersResult {
   drivers: Partial<Record<EngineId, EngineDriver>>;
   computerProvider?: ComputerProvider;
   computerImageManager?: ComputerImageManager;
-  engineStatuses: { claude: EngineStatus; codex: EngineStatus };
+  engineStatuses: Record<string, EngineStatus>;
+  engineDescriptors: Record<string, EngineDescriptor>;
   availableEngines: EngineId[];
+}
+
+const NATIVE_DESCRIPTORS: Record<string, EngineDescriptor> = {
+  claude: {
+    id: "claude",
+    label: "Claude Code",
+    kind: "native",
+    loginCommand: "claude auth login",
+    installUrl: "https://claude.com/product/claude-code",
+    summary:
+      "Anthropic's Claude Code agent: strong at coding, writing and careful multi-step work.",
+    capabilities: { resume: true, steer: true },
+  },
+  codex: {
+    id: "codex",
+    label: "Codex",
+    kind: "native",
+    loginCommand: "codex login",
+    installUrl: "https://developers.openai.com/codex/cli",
+    summary: "OpenAI's Codex agent: strong at coding and long autonomous tasks.",
+    capabilities: { resume: true, steer: true },
+  },
+};
+
+function defaultAcpProfiles(openbotHome: string): AcpProfile[] {
+  return [...builtinAcpProfiles(), ...customProfiles(readEnginePrefs(openbotHome))];
 }
 
 const defaultDetection: ProviderDetection = {
   detectClaude,
   detectCodex,
+  acpProfiles: defaultAcpProfiles,
 };
 
 function fakeFlag(name: string): boolean {
@@ -65,7 +105,8 @@ export async function bootstrapProviders(
   detection: ProviderDetection = defaultDetection,
 ): Promise<BootstrapProvidersResult> {
   const decisionService = resolveDecisionService(ctx);
-  const { drivers, engineStatuses, availableEngines } = await resolveEngineDrivers(detection);
+  const { drivers, engineStatuses, engineDescriptors, availableEngines } =
+    await resolveEngineDrivers(ctx, detection);
   const computerProvider = resolveComputerProvider();
   const computerImageManager =
     computerProvider.id === "docker" ? resolveComputerImageManager(ctx) : undefined;
@@ -75,6 +116,12 @@ export async function bootstrapProviders(
 
   ctx.availableEngines = availableEngines;
   ctx.engineStatuses = engineStatuses;
+  ctx.engineDescriptors = engineDescriptors;
+  const home = ctx.config.openbotHome;
+  ctx.customEngines = {
+    list: () => readEnginePrefs(home).custom,
+    save: (custom) => writeEnginePrefs(home, { ...readEnginePrefs(home), custom }),
+  };
 
   return {
     decisionService,
@@ -82,6 +129,7 @@ export async function bootstrapProviders(
     computerProvider,
     computerImageManager,
     engineStatuses,
+    engineDescriptors,
     availableEngines,
   };
 }
@@ -105,18 +153,40 @@ function resolveDecisionService(ctx: CoreContext): DecisionService {
   });
 }
 
-async function resolveEngineDrivers(detection: ProviderDetection): Promise<{
+async function resolveEngineDrivers(
+  ctx: CoreContext,
+  detection: ProviderDetection,
+): Promise<{
   drivers: Partial<Record<EngineId, EngineDriver>>;
-  engineStatuses: { claude: EngineStatus; codex: EngineStatus };
+  engineStatuses: Record<string, EngineStatus>;
+  engineDescriptors: Record<string, EngineDescriptor>;
   availableEngines: EngineId[];
 }> {
-  const claudeStatus = await detection.detectClaude();
-  const codexStatus = await detection.detectCodex();
+  const enginesDir = join(ctx.config.openbotHome, "engines");
+  const acpDrivers = (detection.acpProfiles?.(ctx.config.openbotHome) ?? []).map(
+    (profile) => new AcpDriver(profile, { enginesDir }),
+  );
+  // Every CLI is probed at once: a slow or missing one must not hold up the rest.
+  const [claudeStatus, codexStatus, ...acpStatuses] = await Promise.all([
+    detection.detectClaude(),
+    detection.detectCodex(),
+    ...acpDrivers.map((d) => d.detect()),
+  ]);
+  const engineStatuses: Record<string, EngineStatus> = {
+    claude: claudeStatus!,
+    codex: codexStatus!,
+  };
+  const engineDescriptors: Record<string, EngineDescriptor> = { ...NATIVE_DESCRIPTORS };
+  acpDrivers.forEach((driver, i) => {
+    engineStatuses[driver.id] = acpStatuses[i]!;
+    engineDescriptors[driver.id] = driver.describe();
+  });
 
   if (fakeFlag("OPENBOT_FAKE_ENGINES")) {
     return {
       drivers: { fake: new FakeEngineDriver() },
-      engineStatuses: { claude: claudeStatus, codex: codexStatus },
+      engineStatuses,
+      engineDescriptors,
       availableEngines: ["fake"],
     };
   }
@@ -124,20 +194,24 @@ async function resolveEngineDrivers(detection: ProviderDetection): Promise<{
   const drivers: Partial<Record<EngineId, EngineDriver>> = {};
   const availableEngines: EngineId[] = [];
 
-  if (engineReady(claudeStatus)) {
+  if (engineReady(claudeStatus!)) {
     drivers.claude = new ClaudeDriver();
     availableEngines.push("claude");
   }
-  if (engineReady(codexStatus)) {
+  if (engineReady(codexStatus!)) {
     drivers.codex = new CodexDriver();
     availableEngines.push("codex");
   }
+  acpDrivers.forEach((driver, i) => {
+    const status = acpStatuses[i]!;
+    // ACP CLIs sign in themselves; an installed one that says it is signed in is ready.
+    if (status.installed && status.login.ok) {
+      drivers[driver.id] = driver;
+      availableEngines.push(driver.id);
+    }
+  });
 
-  return {
-    drivers,
-    engineStatuses: { claude: claudeStatus, codex: codexStatus },
-    availableEngines,
-  };
+  return { drivers, engineStatuses, engineDescriptors, availableEngines };
 }
 
 function resolveComputerProvider(): ComputerProvider {

@@ -142,6 +142,9 @@ importers:
       '@openbot/decisions':
         specifier: workspace:*
         version: link:../../packages/decisions
+      '@openbot/engines-acp':
+        specifier: workspace:*
+        version: link:../../packages/engines/acp
       '@openbot/engines-claude':
         specifier: workspace:*
         version: link:../../packages/engines/claude
@@ -444,6 +447,28 @@ importers:
       '@types/node':
         specifier: 22.20.4
         version: 22.20.4
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.2
+        version: 5.0.2(@types/node@22.20.4)(happy-dom@18.0.1)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(tsx@4.23.15))
+
+  packages/engines/acp:
+    dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 1.5.1
+        version: 1.5.1(zod@4.6.5)
+      '@openbot/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@openbot/engines-common':
+        specifier: workspace:*
+        version: link:../common
+    devDependencies:
+      '@openbot/testkit':
+        specifier: workspace:*
+        version: link:../../testkit
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -845,6 +870,11 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
+
+  '@agentclientprotocol/sdk@1.5.1':
+    resolution: {integrity: sha512-nSUIrC1fOR9+ppKfx9KdwjBBND2sAPzFHo4yVQrGbXZHnayUYpwL8CDVR5LSxbapY/oKMOzNP0wvwfyx3PS2KA==}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -4943,6 +4973,10 @@ snapshots:
   7zip-bin@5.2.0: {}
 
   '@adobe/css-tools@4.5.0': {}
+
+  '@agentclientprotocol/sdk@1.5.1(zod@4.6.5)':
+    dependencies:
+      zod: 4.6.5
 
   '@babel/code-frame@7.29.7':
     dependencies:

@@ -3,7 +3,20 @@ import { z } from "zod";
 /** Plan §4.1. All timestamps are ISO 8601 strings (UTC) at the contract layer; `store` maps them to SQLite integers (unix ms). */
 const isoTimestamp = () => z.string().datetime({ offset: true });
 
-export const EngineId = z.enum(["claude", "codex", "fake"]);
+/**
+ * Engines OpenBot ships a driver for. The set is open (D-031): ACP agents the owner adds
+ * are `acp-<slug>`, so an id is any short lowercase slug, not only one of these.
+ */
+export const BUILTIN_ENGINE_IDS = [
+  "claude",
+  "codex",
+  "opencode",
+  "cursor",
+  "gemini",
+  "grok",
+  "fake",
+] as const;
+export const EngineId = z.string().regex(/^[a-z][a-z0-9-]{1,39}$/, "invalid engine id");
 export type EngineId = z.infer<typeof EngineId>;
 
 export const PermissionPreset = z.enum(["read_only", "workspace_write", "full"]);

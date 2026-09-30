@@ -4,6 +4,7 @@ import type {
   ComputerImageManager,
   ComputerProvider,
   DecisionService,
+  EngineDescriptor,
   EngineId,
   EngineStatus,
   ModelInfo,
@@ -177,12 +178,30 @@ export interface CoreContext {
   /** Wired in by WS13 bootstrap; populated for `/api/engines` and routing. */
   availableEngines?: EngineId[];
   engineStatuses?: Partial<Record<EngineId, EngineStatus>>;
+  /** What each known engine is (label, kind, login command), also the ones not installed. */
+  engineDescriptors?: Partial<Record<EngineId, EngineDescriptor>>;
+  /** Owner-added ACP agents (`~/.openbot/engines.json`); a change applies after a restart. */
+  customEngines?: CustomEnginesControl;
   /** The address the server listens on (set by `serve` before listening). */
   bindHost?: string;
   /** Wired by bootstrap: live computer tasks (progress, steering, cancel) for the UI. */
   computerTasks?: ComputerTasksControl;
   /** Models of each available engine, for `/api/models` (Bot profile model picker). */
   listModels?: () => Promise<Array<{ engine: EngineId; models: ModelInfo[] }>>;
+}
+
+/** An ACP agent the owner added by command line (D-031); its engine id is `acp-<slug>`. */
+export interface CustomEngineSpec {
+  slug: string;
+  label: string;
+  command: string;
+  args: string[];
+}
+
+/** Reads/writes `~/.openbot/engines.json` (wired by bootstrap). */
+export interface CustomEnginesControl {
+  list(): CustomEngineSpec[];
+  save(engines: CustomEngineSpec[]): Promise<void>;
 }
 
 /** Minimal WS12 surface exposed on CoreContext to avoid a core↔routines import cycle. */

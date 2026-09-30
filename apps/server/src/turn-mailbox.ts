@@ -5,6 +5,7 @@ import {
   type ChainMode,
   type EngineDriver,
   type EngineId,
+  type ModelInfo,
   type TurnInput,
 } from "@openbot/contracts";
 import { delegationsOf, type CoreContext, type TurnMailbox } from "@openbot/core";
@@ -92,16 +93,23 @@ function mostRecentlyUsedEngine(
   return { engine: best.engine, idleMinutes: Math.max(0, Math.round(idleMs / 60_000)) };
 }
 
+const MODEL_CACHE_MS = 5 * 60_000;
+
 /** Engine and model for a Bot: an explicit override, the Bot's pin, or Jev's route. */
 export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): EngineChooser {
-  const modelCache = new Map<EngineId, string[]>();
+  // Engines with local models (Ollama, LM Studio) gain and lose models while OpenBot runs.
+  const modelCache = new Map<EngineId, { at: number; models: ModelInfo[] }>();
+
+  async function modelInfosFor(engine: EngineId): Promise<ModelInfo[]> {
+    const cached = modelCache.get(engine);
+    if (cached && Date.now() - cached.at < MODEL_CACHE_MS) return cached.models;
+    const models = (await deps.drivers[engine]?.listModels().catch(() => undefined)) ?? [];
+    modelCache.set(engine, { at: Date.now(), models });
+    return models;
+  }
 
   async function modelsFor(engine: EngineId): Promise<string[]> {
-    const cached = modelCache.get(engine);
-    if (cached) return cached;
-    const models = ((await deps.drivers[engine]?.listModels()) ?? []).map((m) => m.id);
-    modelCache.set(engine, models);
-    return models;
+    return (await modelInfosFor(engine)).map((m) => m.id);
   }
 
   async function defaultModel(engine: EngineId, preferred?: string): Promise<string> {
@@ -119,7 +127,10 @@ export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): En
       (Object.keys(deps.drivers) as EngineId[]).filter((e) => deps.drivers[e]),
     );
     if (available.length === 0) {
-      return { error: "no engine available: log in to Claude Code or Codex, or add an API key" };
+      return {
+        error:
+          "no engine available: sign in to Claude Code, Codex, Cursor or another engine, or add an API key",
+      };
     }
 
     let pinnedEngine = bot.routing.mode === "pinned" ? bot.routing.engine : undefined;
@@ -144,13 +155,23 @@ export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): En
       return { engine, model: await defaultModel(engine) };
     }
     const modelsCatalog: Record<string, string[]> = {};
-    for (const engine of available) modelsCatalog[engine] = await modelsFor(engine);
+    const localModels: string[] = [];
+    const engineInfo: Record<string, { label: string; summary?: string }> = {};
+    for (const engine of available) {
+      const infos = await modelInfosFor(engine);
+      modelsCatalog[engine] = infos.map((m) => m.id);
+      for (const m of infos) if (m.local) localModels.push(`${engine}:${m.id}`);
+      const descriptor = deps.drivers[engine]?.describe?.();
+      if (descriptor) engineInfo[engine] = { label: descriptor.label, summary: descriptor.summary };
+    }
     const current = mostRecentlyUsedEngine(ctx, bot.id, available);
     const route = await ctx.decisionService.route(bot, text, {
       availableEngines: available,
       modelsCatalog,
       currentEngine: current?.engine,
       currentEngineIdleMinutes: current?.idleMinutes,
+      engineInfo,
+      localModels,
     });
     const engine = deps.drivers[route.engine] ? route.engine : available[0]!;
     const model =
@@ -594,6 +615,10 @@ function plain(text: string): string {
 
 const ENGINE_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", fake: "Test" };
 
+function engineName(deps: TurnMailboxDeps, engine: EngineId): string {
+  return ENGINE_NAMES[engine] ?? deps.drivers[engine]?.describe?.().label ?? engine;
+}
+
 /**
  * Runs a turn; if its engine turns out to be out of quota (or logged out), marks
  * it unavailable until it resets and retries once on another engine, telling
@@ -645,7 +670,7 @@ async function submitWithFailover(
           );
       if (fallback) {
         const time = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        const note = `${ENGINE_NAMES[turn.engine] ?? turn.engine} is out of quota until ${time}, so ${ENGINE_NAMES[fallback] ?? fallback} is answering instead.`;
+        const note = `${engineName(deps, turn.engine)} is out of quota until ${time}, so ${engineName(deps, fallback)} is answering instead.`;
         const message = deps.runtime.messages.create({
           threadId: args.threadId,
           author: { type: "system" },

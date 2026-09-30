@@ -86,6 +86,12 @@ export const RouteContext = z.object({
   currentEngine: EngineId.optional(),
   /** Minutes since `currentEngine`'s session was last used; omitted if there's no `currentEngine`. */
   currentEngineIdleMinutes: z.number().optional(),
+  /** Engine id → display name and what it is good at (D-031), for the route question. */
+  engineInfo: z
+    .record(z.string(), z.object({ label: z.string(), summary: z.string().optional() }))
+    .optional(),
+  /** `engine:model` keys that run on this computer (Ollama, LM Studio): free, private, weaker. */
+  localModels: z.array(z.string()).optional(),
 });
 export type RouteContext = z.infer<typeof RouteContext>;
 

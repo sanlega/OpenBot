@@ -15,6 +15,7 @@ import {
 import { FakeEngineDriver } from "@openbot/engines-fake";
 import { ClaudeDriver } from "@openbot/engines-claude";
 import { CodexDriver } from "@openbot/engines-codex";
+import { AcpDriver, customProfile, type AcpProfile } from "@openbot/engines-acp";
 import { bootstrapProviders, type ProviderDetection } from "./providers.js";
 
 const readyClaude: EngineStatus = {
@@ -232,6 +233,61 @@ describe("bootstrapProviders", () => {
 
     expect(result.computerProvider?.id).toBe("local");
     expect(result.computerImageManager).toBeUndefined();
+
+    ctx.closeDb();
+    process.env = prev;
+  });
+
+  it("wires every ACP engine that is installed and signed in, and describes all of them", async () => {
+    const prev = { ...process.env };
+    delete process.env.OPENBOT_FAKE_ENGINES;
+    process.env.OPENBOT_FAKE_JEV = "1";
+    const ctx = await testContext();
+    const profile = (id: string, installed: boolean, signedIn: boolean): AcpProfile => ({
+      id,
+      label: id.toUpperCase(),
+      binaries: [installed ? process.execPath : join(ctx.config.openbotHome, "missing")],
+      loginCommand: `${id} login`,
+      async detect() {
+        return { version: "1", login: { ok: signedIn } };
+      },
+      async listModels() {
+        return [];
+      },
+      async launch() {
+        return { args: [], env: {}, systemPrompt: "prompt" };
+      },
+    });
+    const result = await bootstrapProviders(
+      ctx,
+      mockDetection({
+        detectCodex: vi.fn(async () => missingEngine),
+        acpProfiles: () => [
+          profile("opencode", true, true),
+          profile("cursor", true, false),
+          profile("gemini", false, false),
+        ],
+      }),
+    );
+    expect(result.availableEngines).toEqual(["claude", "opencode"]);
+    expect(result.drivers.opencode).toBeInstanceOf(AcpDriver);
+    expect(result.drivers.cursor).toBeUndefined();
+    expect(ctx.engineStatuses?.cursor).toMatchObject({ installed: true, login: { ok: false } });
+    expect(ctx.engineStatuses?.gemini).toMatchObject({ installed: false });
+    expect(ctx.engineDescriptors?.cursor).toMatchObject({
+      label: "CURSOR",
+      kind: "acp",
+      loginCommand: "cursor login",
+    });
+    expect(ctx.engineDescriptors?.claude).toMatchObject({ kind: "native" });
+
+    await ctx.customEngines?.save([
+      { slug: "goose", label: "Goose", command: "goose", args: ["acp"] },
+    ]);
+    expect(ctx.customEngines?.list()).toEqual([
+      { slug: "goose", label: "Goose", command: "goose", args: ["acp"] },
+    ]);
+    expect(customProfile(ctx.customEngines!.list()[0]!).id).toBe("acp-goose");
 
     ctx.closeDb();
     process.env = prev;

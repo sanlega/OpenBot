@@ -62,7 +62,10 @@ export async function routeBot(
   let band: Band = "human";
 
   if (routeAnswer?.type === "choice") {
-    const [parsedEngine, parsedModel] = routeAnswer.choice.split(":");
+    // Only the first ":" separates engine from model: model ids have their own (`ollama/qwen3:8b`).
+    const sep = routeAnswer.choice.indexOf(":");
+    const parsedEngine = sep > 0 ? routeAnswer.choice.slice(0, sep) : "";
+    const parsedModel = sep > 0 ? routeAnswer.choice.slice(sep + 1) : "";
     if (parsedEngine && parsedModel) {
       engine = parsedEngine as RouteDecision["engine"];
       model = parsedModel;
