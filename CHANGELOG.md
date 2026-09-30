@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.16 — 2026-09-30
+
+- Bots share the virtual machine properly: a site one bot signs in to is signed in for every
+  bot (and signing out signs everyone out), and sign-ins now survive a restart of the
+  virtual machine.
+- Bots share files with the virtual machine: your OpenBot workspace is `/workspace` inside it,
+  and browser downloads land in the workspace's `downloads` folder, visible to every bot and
+  engine. The first time a bot uses the computer after updating, OpenBot replaces the old
+  virtual machine container once (sign-ins made there before were not kept anyway).
+- Fixed the macOS app not opening ("OpenBot is damaged"): the app is now signed (ad hoc). On
+  the first launch, allow it in System Settings > Privacy & Security > Open Anyway.
+
 ## 0.1.15 — 2026-09-30
 
 - Fixed the new engines (OpenCode, Cursor, local models) seeming to be missing from a bot's

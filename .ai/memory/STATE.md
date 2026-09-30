@@ -3,6 +3,14 @@
 _Last updated: 2026-09-30 by Claude (v0.1.15 installed)_
 
 ## In progress
+- **v0.1.16 (2026-09-30, D-032)**: shared VM for real (one set of sign-ins via `SharedCookieJar`,
+  profiles on the `openbot-browser` volume, workspace mounted at `/workspace`, downloads to
+  `workspace/downloads`) and the macOS app ad-hoc signed (`apps/desktop/scripts/after-pack.cjs`;
+  CI now verifies the signature and starts the packaged mac app). **Not verified live**: Docker
+  Desktop was stuck on the dev machine (backend processes from the day before could not be
+  stopped). **Next**: once Docker runs, check with two bots that a sign-in on one reaches the
+  other and that a download lands in `workspace/downloads`; the first computer use replaces the
+  old `openbot-desktop` container.
 - **More engines: ACP CLIs and local models (2026-09-30, D-031, plan
   `.ai/memory/plans/2026-09-30-more-providers.md`) — RELEASED as v0.1.14, then v0.1.15 (model lists cached/warmed: a silent service on LM Studio's port 1234 made `/api/models` take 7 s, so the picker showed only Auto; v0.1.15 installed and answers in ~1 ms) (merged to `main`,
   tag pushed, release workflow green, all installers + SHA256SUMS published, Windows installer
