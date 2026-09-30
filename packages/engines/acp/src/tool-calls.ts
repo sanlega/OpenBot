@@ -53,8 +53,21 @@ export function track(
   return call;
 }
 
+/** Cursor reports every MCP call as one tool, with the server and tool inside its input. */
+function cursorMcp(
+  call: TrackedToolCall,
+): { server: string; tool: string; args: unknown } | undefined {
+  const { providerIdentifier, toolName, args } = call.rawInput;
+  if (typeof providerIdentifier === "string" && typeof toolName === "string") {
+    return { server: providerIdentifier, tool: toolName, args };
+  }
+  return undefined;
+}
+
 /** The name the broker and Activity see. */
 export function toolNameOf(call: TrackedToolCall, mcpServers: string[]): string {
+  const mcp = cursorMcp(call);
+  if (mcp) return `mcp__${mcp.server}__${mcp.tool}`;
   for (const server of mcpServers) {
     for (const sep of ["_", "__", "/", ":"]) {
       const prefix = `${server}${sep}`;
@@ -70,6 +83,12 @@ export function toolNameOf(call: TrackedToolCall, mcpServers: string[]): string 
 
 /** The input in the shape the tool classifier reads (`file_path`, `command`...). */
 export function toolInputOf(call: TrackedToolCall): Record<string, unknown> {
+  const mcp = cursorMcp(call);
+  if (mcp) {
+    return typeof mcp.args === "object" && mcp.args !== null && !Array.isArray(mcp.args)
+      ? { ...(mcp.args as Record<string, unknown>) }
+      : {};
+  }
   const input: Record<string, unknown> = { ...call.rawInput };
   const path =
     str(input.file_path) ??

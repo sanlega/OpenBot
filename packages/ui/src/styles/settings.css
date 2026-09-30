@@ -802,3 +802,31 @@ a.pair-url:hover {
   justify-content: flex-end;
   flex-wrap: wrap;
 }
+
+/* Settings > Engines: add an ACP agent by its command line. */
+.set-agent-form {
+  flex-wrap: wrap;
+}
+
+.set-agent-form input {
+  flex: 1 1 180px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: var(--text-md);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.set-agent-form input::placeholder {
+  color: var(--text-3);
+}
+
+.set-agent-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}

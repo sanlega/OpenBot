@@ -234,6 +234,22 @@ describe("AcpDriver", () => {
     expect(result).toMatchObject({ isError: true, errorMessage: "lost" });
   });
 
+  it("stops a turn whose agent writes outside the workspace without asking", async () => {
+    const outside = join(tmpdir(), "somewhere-else", "x.txt");
+    const { result } = await turn(newDriver(), `@write ${outside}`);
+    expect(result.isError).toBe(true);
+    expect(result.errorMessage).toMatch(/outside this bot's workspace, without asking/);
+  });
+
+  it("lets an unasked write inside the workspace, or under Full, through", async () => {
+    const inside = await turn(newDriver(), `@write ${join(dir, "a.txt")}`);
+    expect(inside.result.isError).toBe(false);
+    const full = await turn(newDriver(), `@write ${join(tmpdir(), "elsewhere.txt")}`, {
+      permission: "full",
+    });
+    expect(full.result.isError).toBe(false);
+  });
+
   it("reports a missing CLI without starting anything", async () => {
     const driver = new AcpDriver(
       { ...fakeProfile({}), binaries: [join(dir, "nope.exe")] },

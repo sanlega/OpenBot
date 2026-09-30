@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Bot, EngineId, ModelInfo } from "@openbot/contracts";
 import { useOpenBot } from "../../state/context.js";
+import { engineName } from "../settings/settings-meta.js";
 
 interface EngineModels {
   engine: EngineId;
@@ -133,7 +134,7 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
             </option>
           ) : null}
           {engines.map((e) => (
-            <optgroup key={e.engine} label={e.engine}>
+            <optgroup key={e.engine} label={engineName(e.engine)}>
               {e.models.map((m) => (
                 <option key={m.id} value={`${e.engine}:${m.id}`}>
                   {m.label ?? m.id}

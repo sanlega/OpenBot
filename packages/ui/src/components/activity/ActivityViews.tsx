@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { engineName as settingsEngineName } from "../settings/settings-meta.js";
 import type { Approval, Bot, InputRequest, Message, Turn } from "@openbot/contracts";
 import {
   BellOff,
@@ -453,10 +454,8 @@ const TURN_STATUS: Record<string, { label: string; tone: string }> = {
 };
 
 function engineName(engine: string): string {
-  if (engine === "claude") return "Claude Code";
   if (engine === "codex") return "Codex";
-  if (engine === "fake") return "Test engine";
-  return engine;
+  return settingsEngineName(engine);
 }
 
 export function AuditView() {

@@ -154,6 +154,8 @@ export class MockClientApiServer {
   private routines = structuredClone(SEED_ROUTINES);
   private routineRuns = structuredClone(SEED_ROUTINE_RUNS);
   private takeoverByBot = new Map<string, boolean>();
+  private customEngines: Array<{ slug: string; label: string; command: string; args: string[] }> =
+    [];
   private computerImage: ComputerImageStatus = {
     state: "ready",
     tag: "ghcr.io/sanlega/openbot-desktop:latest",
@@ -430,6 +432,17 @@ export class MockClientApiServer {
     if (method === "GET" && path === "/api/engines") {
       return sendJson(res, 200, { engines: SEED_ENGINES });
     }
+    if (method === "GET" && path === "/api/engines/custom") {
+      return sendJson(res, 200, { engines: this.customEngines });
+    }
+    if (method === "PUT" && path === "/api/engines/custom") {
+      const body = await readJson<{ engines?: unknown }>(req);
+      const engines = body.engines;
+      if (!Array.isArray(engines))
+        return sendJson(res, 400, { error: "expected { engines: [...] }" });
+      this.customEngines = engines as typeof this.customEngines;
+      return sendJson(res, 200, { engines: this.customEngines, restartRequired: true });
+    }
     if (method === "GET" && path === "/api/digest") {
       return sendJson(res, 200, { digest: SEED_DIGEST });
     }
@@ -643,6 +656,14 @@ export class MockClientApiServer {
             ],
           },
           { engine: "codex", models: [{ id: "gpt-5-codex", label: "GPT-5 Codex" }] },
+          {
+            engine: "opencode",
+            models: [
+              { id: "ollama/qwen3:8b", label: "qwen3:8b (Ollama)", local: true },
+              { id: "lmstudio/qwen/qwen3.5-9b", label: "qwen/qwen3.5-9b (LM Studio)", local: true },
+              { id: "opencode/big-pickle", label: "opencode/big-pickle" },
+            ],
+          },
         ],
       });
     }

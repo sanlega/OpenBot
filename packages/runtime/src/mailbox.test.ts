@@ -117,6 +117,15 @@ describe("Mailbox basic turn lifecycle (against @openbot/engines-fake)", () => {
     ).toBe(true);
   });
 
+  it("a reply of only blank lines counts as no reply, and blank edges are trimmed", async () => {
+    const blank = buildRuntime(new FakeEngineDriver({ replies: ["\n\n"] }));
+    expect((await blank.mailbox.submit(makeInput(blank))).text).toBe(
+      "Finished without returning any text.",
+    );
+    const padded = buildRuntime(new FakeEngineDriver({ replies: ["\n\nPAPAYA\n"] }));
+    expect((await padded.mailbox.submit(makeInput(padded))).text).toBe("PAPAYA");
+  });
+
   it("a turn that ends on a tool call with no closing text still gets a visible reply, not silence", async () => {
     const script = async (hooks: TurnHooks): Promise<TurnResult> => {
       hooks.emit({ type: "session_started", sessionId: "sess_1" });

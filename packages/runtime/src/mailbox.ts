@@ -271,8 +271,10 @@ export class Mailbox {
     }
     // A reply of exactly NO_REPLY means "nothing to add" (a harness update the user already saw).
     let synthesized = false;
-    if (status === "completed" && NO_REPLY_RE.test(replyText.trim())) replyText = "";
-    else if (status === "completed" && replyText.length === 0) {
+    if (status === "completed") replyText = replyText.trim();
+    if (status === "completed" && NO_REPLY_RE.test(replyText)) replyText = "";
+    // Local models often open their answer with blank lines (or reply with nothing else).
+    else if (status === "completed" && replyText.trim().length === 0) {
       synthesized = true;
       // The engine can end a turn on a tool call with no closing text (seen with
       // Codex/gpt-5.5 on multi-step tasks) — without this, the turn is silently

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Bot, EngineEvent, ToolApprovalRequest, TurnInput } from "@openbot/contracts";
 import { AcpDriver } from "./acp-driver.js";
 import { openCodeProfile } from "./profiles/opencode.js";
+import { cursorProfile } from "./profiles/others.js";
 
 /**
  * Opt-in: the real `opencode acp` with a local Ollama model (OPENBOT_E2E_REAL=1).
@@ -85,6 +86,84 @@ describe.runIf(live)("OpenCode + Ollama (live)", () => {
   it("resumes the conversation in a new agent process", async () => {
     const { result, reply } = await run(
       "What was the secret word you found earlier? Reply with only the word.",
+      sessionId,
+    );
+    expect(result.sessionId).toBe(sessionId);
+    expect(reply).toContain("PAPAYA-42");
+  }, 300_000);
+});
+
+/** Opt-in: the real Cursor CLI (OPENBOT_E2E_REAL=1 and OPENBOT_LIVE_CURSOR=1; uses the owner's Cursor plan). */
+describe.runIf(live && process.env.OPENBOT_LIVE_CURSOR === "1")("Cursor (live)", () => {
+  const home = mkdtempSync(join(tmpdir(), "openbot-cursor-live-"));
+  const cwd = mkdtempSync(join(tmpdir(), "openbot-cursor-live-ws-"));
+  const driver = new AcpDriver(cursorProfile(), { enginesDir: join(home, "engines") });
+  const bot = { id: "bot_cursor_live", name: "Cursor live" } as Bot;
+  const run = async (text: string, sessionId?: string) => {
+    const events: EngineEvent[] = [];
+    const approvals: ToolApprovalRequest[] = [];
+    const result = await driver.startTurn(
+      {
+        bot,
+        text,
+        sessionId,
+        attachments: [],
+        systemPrompt: "You are a careful assistant. Use tools when asked. Be brief.",
+        cwd,
+        addDirs: [],
+        auth: { mode: "login", env: {} },
+        mcpServers: [{ name: "echo", command: process.execPath, args: [MCP] }],
+        permission: "workspace_write",
+        allowTools: ["mcp__echo"],
+        denyTools: [],
+        model: "auto",
+        limits: { maxSteps: 20 },
+      },
+      {
+        emit: (e) => events.push(e),
+        requestApproval: async (r) => {
+          approvals.push(r);
+          return "allow";
+        },
+      },
+    ).done;
+    const reply = events.map((e) => (e.type === "text_delta" ? e.text : "")).join("");
+    if (process.env.OPENBOT_LIVE_DEBUG) {
+      console.log(
+        JSON.stringify(
+          events.filter((e) => e.type !== "text_delta"),
+          null,
+          1,
+        ),
+        reply,
+      );
+    }
+    return { result, events, approvals, reply };
+  };
+  let sessionId = "";
+
+  it("is detected as signed in", async () => {
+    const status = await driver.detect();
+    expect(status.installed).toBe(true);
+    expect(status.login.ok).toBe(true);
+  }, 60_000);
+
+  it("calls an MCP tool and writes a file", async () => {
+    const { result, events, reply } = await run(
+      `Call the secret_word tool from the echo MCP server, then write the word into the file ${join(cwd, "word.txt")}, then reply with just the word.`,
+    );
+    expect(result.isError, result.errorMessage).toBe(false);
+    sessionId = result.sessionId;
+    expect(events.some((e) => e.type === "tool_started" && /secret_word/.test(e.toolName))).toBe(
+      true,
+    );
+    expect(existsSync(join(cwd, "word.txt"))).toBe(true);
+    expect(reply).toContain("PAPAYA-42");
+  }, 300_000);
+
+  it("resumes the conversation in a new agent process", async () => {
+    const { result, reply } = await run(
+      "What was the secret word? Reply with only the word.",
       sessionId,
     );
     expect(result.sessionId).toBe(sessionId);

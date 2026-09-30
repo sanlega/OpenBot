@@ -14,6 +14,7 @@ import { openCodeProfile } from "./profiles/opencode.js";
 import { cursorReplyFailure, customProfile } from "./profiles/others.js";
 import { readEnginePrefs, writeEnginePrefs } from "./registry.js";
 import { resolveSpawnTarget } from "./spawn.js";
+import { toolInputOf, toolNameOf, track } from "./tool-calls.js";
 
 let dir: string;
 beforeEach(() => {
@@ -206,7 +207,7 @@ describe("OpenCode profile", () => {
     });
     // The system prompt is an instructions file, not part of the message.
     expect(launch.systemPrompt).toBe("launch");
-    expect(readFileSync(config.instructions[0], "utf8")).toBe("You are OpenBot's bot.");
+    expect(readFileSync(config.instructions[0]!, "utf8")).toBe("You are OpenBot's bot.");
   });
 
   it("points a local Ollama model at the bigger-context copy", async () => {
@@ -231,7 +232,7 @@ describe("OpenCode profile", () => {
     const config = JSON.parse(launch.env.OPENCODE_CONFIG_CONTENT!) as OpenCodeConfig;
     expect(loaded).toEqual(["qwen/qwen3.5-9b"]);
     expect(config.model).toBe("lmstudio/qwen/qwen3.5-9b");
-    expect(config.provider.lmstudio.options.baseURL).toBe("http://l/v1");
+    expect(config.provider.lmstudio!.options.baseURL).toBe("http://l/v1");
   });
 
   it("passes a cloud model through untouched", async () => {
@@ -307,11 +308,56 @@ describe("Windows npm shims", () => {
     });
   });
 
+  it.runIf(process.platform === "win32")(
+    "skips the node.exe a local npm shim names before the script",
+    () => {
+      const shim = join(dir, "gemini.cmd");
+      writeFileSync(
+        shim,
+        'IF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n)\r\n' +
+          '"%_prog%"  "%dp0%\\..\\@google\\gemini-cli\\bundle\\gemini.js" %*\r\n',
+      );
+      expect(resolveSpawnTarget(shim)).toEqual({
+        command: process.execPath,
+        prefixArgs: [join(dir, "..", "@google", "gemini-cli", "bundle", "gemini.js")],
+        shell: false,
+      });
+    },
+  );
+
   it("leaves other commands alone", () => {
     expect(resolveSpawnTarget("/usr/bin/opencode")).toEqual({
       command: "/usr/bin/opencode",
       prefixArgs: [],
       shell: false,
     });
+  });
+});
+
+describe("tool names", () => {
+  it("maps Cursor's single MCP tool onto mcp__<server>__<tool> with the tool's own arguments", () => {
+    const calls = new Map();
+    const call = track(calls, {
+      toolCallId: "c1",
+      title: "MCP: tool",
+      kind: "other",
+      rawInput: { providerIdentifier: "openbot", toolName: "message_user", args: { text: "hi" } },
+    });
+    expect(toolNameOf(call, ["openbot"])).toBe("mcp__openbot__message_user");
+    expect(toolInputOf(call)).toEqual({ text: "hi" });
+  });
+
+  it("maps OpenCode's server_tool names and ACP kinds", () => {
+    const calls = new Map();
+    const mcp = track(calls, { toolCallId: "a", title: "openbot_list_bots", kind: "other" });
+    expect(toolNameOf(mcp, ["openbot"])).toBe("mcp__openbot__list_bots");
+    const edit = track(calls, {
+      toolCallId: "b",
+      title: "write",
+      kind: "edit",
+      rawInput: { filePath: "/w/a.txt", content: "x" },
+    });
+    expect(toolNameOf(edit, ["openbot"])).toBe("Write");
+    expect(toolInputOf(edit)).toMatchObject({ file_path: "/w/a.txt" });
   });
 });

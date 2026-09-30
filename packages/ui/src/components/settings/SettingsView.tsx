@@ -1,22 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Settings, SetupState } from "@openbot/contracts";
-import { Check, Eye, EyeOff, Laptop, Moon, Sparkle, SquareTerminal, Sun } from "lucide-react";
+import { Check, Eye, EyeOff, Laptop, Moon, Sun } from "lucide-react";
 import type { EnginesResponse, SettingsPatch } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { getStoredTheme, setTheme, type ThemePreference } from "../../state/theme.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
 import { ComputerImageCard } from "./ComputerImageCard.js";
+import { EnginesSettings } from "./EnginesSettings.js";
 import { SavedLogins } from "./SavedLogins.js";
 import { SpendingToday } from "./SpendingToday.js";
-import {
-  BUDGET_META,
-  CAP_META,
-  HOURS,
-  cleanVersion,
-  engineName,
-  hourLabel,
-  metaFor,
-} from "./settings-meta.js";
+import { BUDGET_META, CAP_META, HOURS, hourLabel, metaFor } from "./settings-meta.js";
 import {
   NumberField,
   SettingRow,
@@ -229,18 +222,9 @@ export function SettingsView() {
             <SettingsSection
               id="engines"
               title="Engines"
-              description="The coding agents your bots run on. OpenBot uses your own logins and keys."
+              description="The agents your bots run on: Claude Code, Codex, Cursor, OpenCode (with local models) and more. OpenBot uses your own logins and keys."
             >
-              <SettingsGroup>
-                {engines.length === 0 ? (
-                  <SettingRow
-                    label="No engines detected"
-                    help="Install Claude Code or Codex CLI, then restart OpenBot."
-                  />
-                ) : (
-                  engines.map((e) => <EngineRow key={e.id} engine={e} setup={setup} />)
-                )}
-              </SettingsGroup>
+              {setup ? <EnginesSettings engines={engines} setup={setup} /> : null}
             </SettingsSection>
 
             <SettingsSection
@@ -470,55 +454,6 @@ function ThemePicker() {
         </button>
       ))}
     </div>
-  );
-}
-
-function EngineRow({ engine, setup }: { engine: Engine; setup: SetupState }) {
-  const version = cleanVersion(engine.version);
-  const mode =
-    engine.id === "claude"
-      ? setup.claude?.mode
-      : engine.id === "codex"
-        ? setup.codex?.mode
-        : undefined;
-  const how = mode === "api_key" ? "Using an API key" : mode === "login" ? "Using CLI login" : null;
-  const sub = [
-    engine.installed && version ? `Version ${version}` : null,
-    engine.installed ? how : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const hint = !engine.installed
-    ? "Install it to let bots use this engine."
-    : !engine.login.ok
-      ? `Run \`${engine.id} login\` in a terminal, then reopen Settings.`
-      : null;
-  return (
-    <SettingRow
-      leading={
-        <span className="engine-mark" data-engine={engine.id} aria-hidden>
-          {engine.id === "claude" ? <Sparkle size={18} /> : <SquareTerminal size={18} />}
-        </span>
-      }
-      label={engineName(engine.id)}
-      help={hint ?? (sub || undefined)}
-    >
-      {!engine.installed ? (
-        <StatusPill tone="muted">Not installed</StatusPill>
-      ) : engine.login.ok ? (
-        <StatusPill tone="success">
-          {engine.login.account ? (
-            <>
-              Logged in as <span className="set-pill-strong">{engine.login.account}</span>
-            </>
-          ) : (
-            "Logged in"
-          )}
-        </StatusPill>
-      ) : (
-        <StatusPill tone="warning">Not logged in</StatusPill>
-      )}
-    </SettingRow>
   );
 }
 

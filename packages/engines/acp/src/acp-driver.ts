@@ -32,6 +32,7 @@ import type {
 import { resolveCliCommand } from "@openbot/engines-common";
 import { descriptorOf, type AcpEnvironment, type AcpProfile } from "./profile.js";
 import { resolveSpawnTarget } from "./spawn.js";
+import { isOutside } from "./write-fence.js";
 import {
   toolInputOf,
   toolNameOf,
@@ -178,6 +179,10 @@ class AcpTurn {
   private reply = "";
   private steps = 0;
   private stepLimitHit = false;
+  /** A file write outside the workspace that never asked (see `checkUnaskedWrite`). */
+  private unaskedWrite?: string;
+  /** Tool calls the agent asked OpenBot about. */
+  private readonly asked = new Set<string>();
   private stderr = "";
   private usd: number | undefined;
   private cancelTimer?: NodeJS.Timeout;
@@ -246,6 +251,14 @@ class AcpTurn {
           usage.outputTokens += response.usage.outputTokens;
         }
         if (response.stopReason === "cancelled" || this.interrupted) {
+          if (this.unaskedWrite) {
+            return this.finish(
+              fail(
+                `${this.driver.profile.label} changed ${this.unaskedWrite}, outside this bot's workspace, without asking, so OpenBot stopped the turn.`,
+              ),
+              usage,
+            );
+          }
           if (this.stepLimitHit) {
             return this.finish(
               fail(`Stopped after ${this.input.limits.maxSteps} tool calls (the step limit).`),
@@ -308,7 +321,7 @@ class AcpTurn {
     const target = resolveSpawnTarget(command);
     const child = spawn(target.command, [...target.prefixArgs, ...args], {
       cwd: this.input.cwd,
-      env: { ...process.env, ...this.input.auth.env, ...env },
+      env: { ...process.env, ...target.env, ...this.input.auth.env, ...env },
       stdio: ["pipe", "pipe", "pipe"],
       shell: target.shell,
       windowsHide: true,
@@ -425,6 +438,7 @@ class AcpTurn {
         const status = update.status;
         if (status === "in_progress" || status === "completed" || status === "failed") {
           this.startCall(call);
+          this.checkUnaskedWrite(call);
         }
         if ((status === "completed" || status === "failed") && !call.finished) {
           call.finished = true;
@@ -446,6 +460,26 @@ class AcpTurn {
     }
   }
 
+  /**
+   * Backstop for agents whose file tool does not ask (Cursor writes without a permission request;
+   * its deny rules only cover folders that existed at launch): a write outside the workspace that
+   * OpenBot never approved stops the turn, unless the bot has Full permissions.
+   */
+  private checkUnaskedWrite(call: TrackedToolCall): void {
+    if (this.input.permission === "full" || this.asked.has(call.id) || this.interrupted) return;
+    if (call.kind !== "edit" && call.kind !== "delete" && call.kind !== "move") return;
+    const input = toolInputOf(call);
+    const paths = [
+      ...call.locations,
+      ...(typeof input.file_path === "string" ? [input.file_path] : []),
+    ];
+    const allowed = [this.input.cwd, ...this.input.addDirs];
+    const outside = paths.find((p) => isOutside(p, allowed, this.input.cwd));
+    if (!outside) return;
+    this.unaskedWrite = outside;
+    void this.interrupt();
+  }
+
   private startCall(call: TrackedToolCall): void {
     if (call.started) return;
     call.started = true;
@@ -465,6 +499,7 @@ class AcpTurn {
   private async onPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     if (this.interrupted) return { outcome: { outcome: "cancelled" } };
     const call = track(this.calls, params.toolCall);
+    this.asked.add(call.id);
     const name = toolNameOf(call, this.mcpNames);
     // The agent enforces nothing of OpenBot's deny list, so refuse those tools here.
     const denied = this.input.denyTools.some((p) => name === p || name.startsWith(`${p}__`));

@@ -82,24 +82,25 @@ export async function discoverLmStudio(
   base: string,
   doFetch: Fetch = fetch,
 ): Promise<LocalModel[]> {
-  const rich = await getJson<{
-    data?: Array<{ id: string; type?: string; max_context_length?: number }>;
-  }>(doFetch, `${base}/api/v0/models`);
-  const list: Array<{ id: string; type?: string; max_context_length?: number }> =
-    rich?.data ??
-    (await getJson<{ data?: Array<{ id: string }> }>(doFetch, `${base}/v1/models`))?.data ??
-    [];
+  type Entry = { id: string; type?: string; max_context_length?: number; capabilities?: string[] };
+  const rich = await getJson<{ data?: Entry[] }>(doFetch, `${base}/api/v0/models`);
+  const list: Entry[] =
+    rich?.data ?? (await getJson<{ data?: Entry[] }>(doFetch, `${base}/v1/models`))?.data ?? [];
   return list
     .filter((m) => !m.type || m.type === "llm" || m.type === "vlm")
     .filter((m) => !/embed/i.test(m.id))
-    .map((m) => ({
-      provider: "lmstudio" as const,
-      name: m.id,
-      id: `lmstudio/${m.id}`,
-      label: `${m.id} (LM Studio)`,
-      contextWindow: m.max_context_length,
-      local: true,
-    }));
+    .map((m) => {
+      const tools = m.capabilities ? m.capabilities.includes("tool_use") : undefined;
+      return {
+        provider: "lmstudio" as const,
+        name: m.id,
+        id: `lmstudio/${m.id}`,
+        label: `${m.id} (LM Studio${tools === false ? ", no tools" : ""})`,
+        contextWindow: m.max_context_length,
+        local: true,
+        tools,
+      };
+    });
 }
 
 export async function discoverLocalModels(

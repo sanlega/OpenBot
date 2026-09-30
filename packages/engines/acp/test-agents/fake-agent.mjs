@@ -187,6 +187,27 @@ const agent = {
         allowed ? "allowed " : `denied(${answer.outcome.optionId ?? answer.outcome.outcome}) `,
       );
     }
+    const write = /@write (\S+)/.exec(text);
+    if (write) {
+      // A file edit that never asks for permission (Cursor's behaviour).
+      const id = "edit_1";
+      await update({
+        sessionUpdate: "tool_call",
+        toolCallId: id,
+        title: "Edit File",
+        kind: "edit",
+        status: "pending",
+      });
+      await update({
+        sessionUpdate: "tool_call_update",
+        toolCallId: id,
+        status: "in_progress",
+        locations: [{ path: write[1] }],
+      });
+      await sleep(300);
+      if (state.cancelled) return { stopReason: "cancelled" };
+      await update({ sessionUpdate: "tool_call_update", toolCallId: id, status: "completed" });
+    }
     if (text.includes("@mcp")) {
       await update({
         sessionUpdate: "tool_call",
