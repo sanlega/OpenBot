@@ -233,6 +233,7 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
       // A Bot whose computer is the virtual machine never drives a browser on this computer, even
       // if the owner's own engine settings turn one on.
       denyTools: bot.computer === "docker+local" ? [] : HOST_BROWSER_TOOLS,
+      vmOnly: bot.computer === "docker",
       model: choice.model,
       effort: choice.effort,
       // Tool calls in one turn. 50 cut off ordinary multi-step jobs (build and publish a site is

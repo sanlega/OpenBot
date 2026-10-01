@@ -16,6 +16,9 @@ export interface ClaudeProcessHandle {
   isAlive?(): boolean;
 }
 
+/** Built-in Claude Code tools a VM-only Bot keeps: none of them touches the user's computer. */
+export const CLAUDE_VM_ONLY_TOOLS = ["WebSearch", "WebFetch", "TodoWrite", "Task", "ToolSearch"];
+
 /** Synthetic line the transport emits when the CLI process exits. */
 export const PROCESS_EXIT_LINE = "openbot_process_exit";
 
@@ -72,6 +75,11 @@ export class SubprocessClaudeTransport implements ClaudeTransport {
     }
     for (const dir of input.addDirs) {
       args.push("--add-dir", dir);
+    }
+    if (input.vmOnly) {
+      // No shell, file or browser tools on the user's computer: OpenBot's vm_* and browser_*
+      // tools (MCP) work inside the virtual machine instead (D-033).
+      args.push("--tools", CLAUDE_VM_ONLY_TOOLS.join(","));
     }
     if (input.allowTools.length > 0) {
       args.push("--allowedTools", input.allowTools.join(","));

@@ -17,6 +17,8 @@ export interface Observation {
   title?: string;
   screenshotPath?: string;
   elements: ObservedElement[];
+  /** The page's readable text (whitespace collapsed, capped), for reading what a page says. */
+  text?: string;
 }
 
 export type ActionOp =
@@ -43,12 +45,33 @@ export interface Screen {
   takeover(on: boolean): Promise<void>;
 }
 
+/** What a command run inside the bots' machine printed and how it ended. */
+export interface ExecResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  /** Only the end of a long output is kept. */
+  truncated: boolean;
+}
+
 export interface ComputerProvider {
   /** `'docker' | 'local' | 'fake'`. */
   id: string;
   status(): Promise<ComputerStatus>;
   ensureStarted(): Promise<void>;
   screen(botId: string): Promise<Screen>;
+  /**
+   * Runs a shell command inside the bots' machine (the shared workspace is the default working
+   * directory). Only providers with their own machine have it: the virtual machine does, this
+   * computer does not (D-033).
+   */
+  exec?(request: {
+    command: string;
+    cwd?: string;
+    timeoutMs?: number;
+    stdin?: string;
+  }): Promise<ExecResult>;
 }
 
 export interface ComputerTaskRequest {

@@ -45,6 +45,24 @@ describe("threadParams", () => {
     expect(params.config).toEqual({ features: { apps: false } });
   });
 
+  it("switches off the shell, patches, browser and computer use for a VM-only Bot", () => {
+    const params = threadParams(turn({ vmOnly: true, permission: "full" }));
+    expect(params.sandbox).toBe("read-only");
+    expect(params.config).toMatchObject({
+      include_apply_patch_tool: false,
+      features: {
+        apps: false,
+        shell_tool: false,
+        unified_exec: false,
+        browser_use: false,
+        computer_use: false,
+        in_app_browser: false,
+      },
+    });
+    // The VM tools come through OpenBot's MCP server.
+    expect(params.config).toHaveProperty("mcp_servers.openbot");
+  });
+
   it("uses Codex's read-only sandbox only for read-only Bots; the broker is the policy for the rest", () => {
     expect(sandboxFor("read_only")).toBe("read-only");
     expect(sandboxFor("workspace_write")).toBe("danger-full-access");

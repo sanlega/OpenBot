@@ -103,7 +103,7 @@ export type ComputerTaskView = {
   /** While running: opening, looking, deciding, or acting. */
   phase?: string;
   /** The page at the last look: title, URL, and the labels of what's on screen. */
-  page?: { url?: string; title?: string; visible?: string[] };
+  page?: { url?: string; title?: string; visible?: string[]; text?: string };
 };
 
 export interface CreateRoutineInput {

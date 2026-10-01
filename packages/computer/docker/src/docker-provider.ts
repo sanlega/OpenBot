@@ -4,6 +4,7 @@ import type {
   ActResult,
   ComputerProvider,
   ComputerStatus,
+  ExecResult,
   Observation,
   Screen,
 } from "@openbot/contracts";
@@ -195,6 +196,19 @@ export class DockerProvider implements ComputerProvider {
     if (!this.started) throw new Error("DockerProvider.screen() called before ensureStarted()");
     const display = this.screens.assign(botId);
     return new DockerScreen(botId, display, this.controlClient(), this.options.liveViewBaseUrl);
+  }
+
+  async exec(request: {
+    command: string;
+    cwd?: string;
+    timeoutMs?: number;
+    stdin?: string;
+  }): Promise<ExecResult> {
+    if (!this.started) throw new Error("DockerProvider.exec() called before ensureStarted()");
+    const client = this.controlClient();
+    if (!client.exec) throw new Error("this computer cannot run commands");
+    this.scheduleIdleStop();
+    return client.exec(request);
   }
 
   /** Stop the container after idle (plan: stop after idle). Test hook. */

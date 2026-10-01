@@ -242,6 +242,124 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "browser_read",
+    description:
+      "Read the page on this bot's screen in the virtual machine (its browser, shared sign-ins): URL, title, the page's text, and its controls with refs (e0, e1, …) for browser_click / browser_type. Pass `url` to open that page first. Use this to look at or read anything on the web; it is instant and never clicks.",
+    inputSchema: {
+      type: "object",
+      properties: { url: { type: "string", description: "http(s) page to open first" } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_click",
+    description:
+      "Click a control from the last browser_read (by ref). Returns the page after the click, with fresh refs. A ref that is no longer on the page is refused: read again. Paying or deleting asks the user.",
+    inputSchema: {
+      type: "object",
+      properties: { ref: { type: "string", description: "A ref like e12 from browser_read" } },
+      required: ["ref"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_type",
+    description:
+      "Replace the text of a field from the last browser_read (by ref) and optionally press Enter. `text` may be a `secret:` reference from ask_user, or `login:username` / `login:password` for the saved login of the current site (see list_logins): the host types the real value and you never see it. Returns the page after typing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ref: { type: "string" },
+        text: { type: "string" },
+        submit: { type: "boolean", description: "Press Enter after typing" },
+      },
+      required: ["ref", "text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_key",
+    description: "Press Enter, Escape or Tab on the page. Returns the page after it.",
+    inputSchema: {
+      type: "object",
+      properties: { key: { type: "string", enum: ["Enter", "Escape", "Tab"] } },
+      required: ["key"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "browser_scroll",
+    description:
+      "Scroll the page to bring more controls into view (browser_read already returns the whole page's text). Returns the page after it.",
+    inputSchema: {
+      type: "object",
+      properties: { direction: { type: "string", enum: ["down", "up"] } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "vm_shell",
+    description:
+      "Run a bash command inside the virtual machine (Debian with git, node, python3, pip, curl, jq, build tools). The working directory is /workspace, the folder shared with the user. Installs with `pip install --user` or `npm install -g` persist. Returns exit code, stdout and stderr (the end of long output). This is your shell: there is none on the user's computer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        command: { type: "string" },
+        cwd: { type: "string", description: "Default /workspace" },
+        timeoutSeconds: { type: "number", description: "1-600; default 120" },
+      },
+      required: ["command"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "vm_read_file",
+    description:
+      "Read a text file inside the virtual machine. Relative paths are in /workspace (the folder shared with the user).",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "vm_write_file",
+    description:
+      "Create or overwrite a text file inside the virtual machine (folders are created). Relative paths are in /workspace, where the user sees them.",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" }, content: { type: "string" } },
+      required: ["path", "content"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "vm_edit_file",
+    description:
+      "Replace an exact piece of text in a file inside the virtual machine. `old_string` must appear once (or pass replace_all).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        old_string: { type: "string" },
+        new_string: { type: "string" },
+        replace_all: { type: "boolean" },
+      },
+      required: ["path", "old_string", "new_string"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "vm_list_files",
+    description: "List a folder inside the virtual machine (default /workspace).",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "create_routine",
     description: "Create a routine for this bot (CoS may pass botId for another bot).",
     inputSchema: {
@@ -319,6 +437,37 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
 
 /** Tools only injected into the Chief of Staff session (plan §4.9). */
 export const COS_ONLY_TOOLS = new Set(["create_bot", "archive_bot"]);
+
+/** The browser on the bot's virtual-machine screen, driven step by step by the engine (D-033). */
+export const BROWSER_TOOLS = new Set([
+  "browser_read",
+  "browser_click",
+  "browser_type",
+  "browser_key",
+  "browser_scroll",
+]);
+
+/** A shell and files inside the virtual machine (D-033). */
+export const VM_TOOLS = new Set([
+  "vm_shell",
+  "vm_read_file",
+  "vm_write_file",
+  "vm_edit_file",
+  "vm_list_files",
+]);
+
+/** Tools that need a computer: hidden from bots without one. */
+export const COMPUTER_TOOLS = new Set([
+  ...BROWSER_TOOLS,
+  ...VM_TOOLS,
+  "computer_task",
+  "computer_status",
+  "computer_steer",
+  "computer_cancel",
+  "computer_screenshot",
+  "list_logins",
+  "save_login",
+]);
 
 /** Tools exposed to every bot session. */
 export const BASE_TOOLS = OPENBOT_TOOL_DEFINITIONS.filter((t) => !COS_ONLY_TOOLS.has(t.name));

@@ -2,11 +2,18 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { BASE_TOOLS, COS_ONLY_TOOLS, OPENBOT_TOOL_DEFINITIONS } from "../tool-definitions.js";
+import {
+  BASE_TOOLS,
+  COMPUTER_TOOLS,
+  COS_ONLY_TOOLS,
+  OPENBOT_TOOL_DEFINITIONS,
+} from "../tool-definitions.js";
 
 const API_URL = process.env.OPENBOT_API_URL ?? "http://127.0.0.1:0";
 import { readSessionToken } from "./token.js";
 const COS_TOOLS = process.env.OPENBOT_COS_TOOLS === "1";
+/** A bot without a computer is not shown the browser, shell and computer tools. */
+const NO_COMPUTER = process.env.OPENBOT_NO_COMPUTER === "1";
 
 async function forwardTool(name: string, args: unknown): Promise<unknown> {
   const SESSION_TOKEN = readSessionToken();
@@ -31,7 +38,9 @@ async function forwardTool(name: string, args: unknown): Promise<unknown> {
 }
 
 async function main(): Promise<void> {
-  const tools = COS_TOOLS ? OPENBOT_TOOL_DEFINITIONS : BASE_TOOLS;
+  const tools = (COS_TOOLS ? OPENBOT_TOOL_DEFINITIONS : BASE_TOOLS).filter(
+    (tool) => !NO_COMPUTER || !COMPUTER_TOOLS.has(tool.name),
+  );
 
   const server = new Server(
     { name: "openbot-mcp", version: "0.1.0" },

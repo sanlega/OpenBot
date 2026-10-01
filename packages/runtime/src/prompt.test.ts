@@ -38,13 +38,24 @@ describe("computer rules", () => {
   it("tell a Bot to use saved logins and ask for missing ones with a secret field", async () => {
     const { COMPUTER_RULE_BLOCK } = await import("./prompt.js");
     const flat = COMPUTER_RULE_BLOCK.replace(/\s+/g, " ");
-    expect(flat).toContain("list_logins shows which do");
+    expect(flat).toContain("a saved login (list_logins) is typed for you");
+    expect(flat).toContain('"login:username" / "login:password"');
     expect(flat).toContain('a "secret" field for the password');
     expect(flat).toContain("save_login");
     expect(flat).toContain("Never ask for a password in chat");
     expect(flat).toContain(
       "Only a code sent to the user, a CAPTCHA or payment details also need them",
     );
+  });
+
+  it("send a Bot to read pages itself and never restart a task with the same goal", async () => {
+    const { COMPUTER_RULE_BLOCK, COMPUTER_VM_ONLY_BLOCK } = await import("./prompt.js");
+    const flat = COMPUTER_RULE_BLOCK.replace(/\s+/g, " ");
+    expect(flat).toContain("browser_read({url})");
+    expect(flat).toContain("Never start another computer_task with the same goal");
+    const vm = COMPUTER_VM_ONLY_BLOCK.replace(/\s+/g, " ");
+    expect(vm).toContain("vm_shell");
+    expect(vm).toContain("no shell, file or browser tools on it");
   });
 
   it("never sends a Bot to the user for permission on ordinary steps", async () => {

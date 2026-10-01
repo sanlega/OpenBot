@@ -9,6 +9,7 @@ import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cdpCookies, DisplaySessionManager } from "./display-session.js";
 import { createLiveViewUrl } from "./live-view-url.js";
+import { runExec, type ExecRequest } from "./exec.js";
 import { stripMeta } from "@openbot/computer/observation";
 import type { Action } from "@openbot/contracts";
 
@@ -109,6 +110,32 @@ createServer(async (req, res) => {
       const botId = String(body.botId ?? "unknown");
       const action = body.action as Action;
       const result = await sessions.act(botId, action);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(result));
+    } catch (error) {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, reason: String(error) }));
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/exec") {
+    try {
+      const body = (await parseBody(req)) as Partial<ExecRequest>;
+      if (typeof body.command !== "string" || !body.command.trim()) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, reason: "command is required" }));
+        return;
+      }
+      const result = await runExec(
+        {
+          command: body.command,
+          ...(typeof body.cwd === "string" ? { cwd: body.cwd } : {}),
+          ...(typeof body.timeoutMs === "number" ? { timeoutMs: body.timeoutMs } : {}),
+          ...(typeof body.stdin === "string" ? { stdin: body.stdin } : {}),
+        },
+        { cwd: existsSync(WORKSPACE) ? WORKSPACE : "/" },
+      );
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(result));
     } catch (error) {

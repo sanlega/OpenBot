@@ -66,6 +66,7 @@ export class McpComposer {
         OPENBOT_SESSION_TOKEN: sessionToken,
         ...(tokenFile ? { OPENBOT_SESSION_TOKEN_FILE: tokenFile } : {}),
         ...(bot.isChiefOfStaff ? { OPENBOT_COS_TOOLS: "1" } : {}),
+        ...(bot.computer === "none" ? { OPENBOT_NO_COMPUTER: "1" } : {}),
       },
     };
   }

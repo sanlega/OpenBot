@@ -43,10 +43,14 @@ const DOM_SCRIPT = `(() => {
   });
 })()`;
 
+/** Characters of page text kept per observation: enough for a post, a result list or a form. */
+export const PAGE_TEXT_LIMIT = 8000;
+
 export async function observeDom(client: CdpClient): Promise<ObservationResult> {
-  const pageInfo = await client.evaluate<{ url: string; title: string }>(`({
+  const pageInfo = await client.evaluate<{ url: string; title: string; text: string }>(`({
     url: location.href,
     title: document.title,
+    text: (document.body ? document.body.innerText : '').replace(/[ \\t]+/g, ' ').replace(/\\s*\\n\\s*/g, '\\n').trim().slice(0, ${PAGE_TEXT_LIMIT}),
   })`);
   const items = await client.evaluate<
     Array<{
@@ -60,6 +64,7 @@ export async function observeDom(client: CdpClient): Promise<ObservationResult> 
   const observation = normalizeElements(items ?? []);
   observation.url = pageInfo?.url;
   observation.title = pageInfo?.title;
+  if (pageInfo?.text) observation.text = pageInfo.text;
   observation.source = "dom";
   return observation;
 }

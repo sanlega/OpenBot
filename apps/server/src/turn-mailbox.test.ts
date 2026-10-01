@@ -195,8 +195,12 @@ describe("createTurnMailbox (message.send → engine turn)", () => {
 
     const [first, second] = claude.inputs;
     expect(first!.systemPrompt).toContain("USING YOUR COMPUTER");
-    expect(first!.systemPrompt).toContain("computer_steer");
+    expect(first!.systemPrompt).toContain("browser_read");
     expect(second!.systemPrompt).not.toContain("USING YOUR COMPUTER");
+    // A VM-only Bot works inside the virtual machine: no host shell or file tools (D-033).
+    expect(first!.vmOnly).toBe(true);
+    expect(first!.systemPrompt).toContain("vm_shell");
+    expect(second!.vmOnly).toBe(false);
   });
 
   it("moves a turn to another engine when the first is out of quota, and says so", async () => {

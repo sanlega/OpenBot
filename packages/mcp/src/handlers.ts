@@ -25,6 +25,12 @@ const SIDE_EFFECT_TOOLS = new Set([
   "computer_task",
   "computer_steer",
   "computer_cancel",
+  "browser_click",
+  "browser_type",
+  "browser_key",
+  "vm_shell",
+  "vm_write_file",
+  "vm_edit_file",
   "create_routine",
   "update_routine",
   "run_routine",
@@ -122,6 +128,17 @@ export class ToolRouter {
         return this.services.computer.computerCancel(session, parsed.data as never);
       case "computer_screenshot":
         return this.services.computer.computerScreenshot(session);
+      case "browser_read":
+      case "browser_click":
+      case "browser_type":
+      case "browser_key":
+      case "browser_scroll":
+      case "vm_shell":
+      case "vm_read_file":
+      case "vm_write_file":
+      case "vm_edit_file":
+      case "vm_list_files":
+        return this.machineTool(toolName, session, parsed.data as never);
       case "create_routine":
         return this.services.routines.createRoutine(session, parsed.data as never);
       case "list_routines":
@@ -143,6 +160,43 @@ export class ToolRouter {
    * Posts a form card and returns at once: the answers come back as a new user
    * turn (a parked engine turn would hold a CLI process for hours and time out).
    */
+  /** The bot's browser and shell on its virtual machine (D-033). */
+  private async machineTool(
+    toolName: string,
+    session: SessionContext,
+    input: never,
+  ): Promise<ToolResult<Record<string, unknown>>> {
+    const machine = this.services.machine;
+    if (!machine) return refused("this harness has no computer tools");
+    try {
+      switch (toolName) {
+        case "browser_read":
+          return await machine.browserRead(session, input);
+        case "browser_click":
+          return await machine.browserClick(session, input);
+        case "browser_type":
+          return await machine.browserType(session, input);
+        case "browser_key":
+          return await machine.browserKey(session, input);
+        case "browser_scroll":
+          return await machine.browserScroll(session, input);
+        case "vm_shell":
+          return await machine.vmShell(session, input);
+        case "vm_read_file":
+          return await machine.vmReadFile(session, input);
+        case "vm_write_file":
+          return await machine.vmWriteFile(session, input);
+        case "vm_edit_file":
+          return await machine.vmEditFile(session, input);
+        default:
+          return await machine.vmListFiles(session, input);
+      }
+    } catch (error) {
+      // The machine being down or slow is an answer for the engine, not a crashed tool call.
+      return refused(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   private async askUser(
     session: SessionContext,
     input: { title: string; intro?: string; fields: InputField[] },

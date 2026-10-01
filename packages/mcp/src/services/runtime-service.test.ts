@@ -49,7 +49,13 @@ async function setup() {
     clock: new FakeClock(0),
     events: new InMemoryEventSink(),
   });
-  const bot = makeBot({ name: "Writer", slug: "writer", permissionPreset: "workspace_write" });
+  // Works on this computer: a Bot whose computer is the VM has no host shell (see below).
+  const bot = makeBot({
+    name: "Writer",
+    slug: "writer",
+    permissionPreset: "workspace_write",
+    computer: "none",
+  });
   harness.ctx.repos.bots.create(bot);
   const session: SessionContext = {
     botId: bot.id,
@@ -221,6 +227,23 @@ describe("McpRuntimeServiceAdapter.permissionPrompt uses the Bot as it is now", 
     for (const call of [
       { tool_name: "mcp__playwright__browser_navigate", input: { url: "https://example.com" } },
       { tool_name: "Bash", input: { command: "start https://example.com" } },
+    ]) {
+      expect(await service.permissionPrompt(session, call)).toEqual({
+        allowed: true,
+        behavior: "deny",
+      });
+    }
+    expect(runtime.approvals.listPending()).toHaveLength(0);
+  });
+
+  it("denies this computer's shell and file edits to a Bot that works in the VM, even under Full", async () => {
+    const { runtime, service, session } = await setup();
+    harness!.ctx.repos.bots.update(session.botId, { permissionPreset: "full", computer: "docker" });
+    for (const call of [
+      { tool_name: "Bash", input: { command: "ls" } },
+      { tool_name: "shell", input: { command: "echo hi > notes.txt" } },
+      { tool_name: "Write", input: { file_path: "notes.txt", content: "x" } },
+      { tool_name: "apply_patch", input: { file_path: "notes.txt" } },
     ]) {
       expect(await service.permissionPrompt(session, call)).toEqual({
         allowed: true,

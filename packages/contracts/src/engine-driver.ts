@@ -56,6 +56,11 @@ export interface TurnInput {
   permission: Bot["permissionPreset"];
   allowTools: string[];
   denyTools: string[];
+  /**
+   * The Bot works inside the virtual machine only (D-033): the engine's own shell, file and
+   * browser tools are switched off; OpenBot's vm_* and browser_* tools are its hands.
+   */
+  vmOnly?: boolean;
   model: string;
   effort?: "low" | "medium" | "high";
   limits: { maxSteps: number; maxUsd?: number; maxTokens?: number };

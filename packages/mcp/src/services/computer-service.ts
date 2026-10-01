@@ -113,6 +113,19 @@ export class McpComputerServiceAdapter implements McpComputerService {
     return snapshot ? allowed(view(snapshot)) : refused(`no computer task ${input.taskId}`);
   }
 
+  /** The bot's computer task still driving its screen, if any (the browser tools wait for it). */
+  activeTask(botId: string): ComputerTaskSnapshot | undefined {
+    return this.manager?.activeFor(botId);
+  }
+
+  /** The broker the computer loop uses, for steps the engine takes itself (browser tools). */
+  actionBroker(): ComputerActionBroker {
+    return new ApprovalComputerBroker(
+      this.runtime,
+      (botId) => this.ctx.repos.bots.getById(botId)?.permissionPreset ?? "workspace_write",
+    );
+  }
+
   /** The same tasks, for the Client API (UI timeline, steering, cancel). */
   controller(): {
     get(taskId: string): ComputerTaskSnapshot | undefined;
@@ -143,6 +156,7 @@ export class McpComputerServiceAdapter implements McpComputerService {
         .map((el) => el.label.replace(/\s+/g, " ").trim())
         .filter(Boolean)
         .slice(0, 40),
+      ...(observation.text ? { text: observation.text.slice(0, 6000) } : {}),
     };
     // Only point at an image that exists; otherwise the page as text is the answer.
     return observation.screenshotPath
@@ -339,9 +353,9 @@ function nextStep(snapshot: ComputerTaskSnapshot): string | undefined {
     case "escalated":
     case "takeover":
     case "failed":
-      return "Not finished. Do not give up or hand this to the user: look at page.visible, then computer_steer({taskId, instruction}) with a different approach (another route to the same goal, a search, a direct URL). It resumes from the same page. Ask the user only for missing data.";
+      return "Stopped short; `summary` says why. Read page.text and page.visible first: the answer or the next control may already be there. Then do the next step yourself with the browser_* tools (browser_read gives refs, browser_click/browser_type act on them), or steer this task ONCE with a concrete instruction (computer_steer resumes from the same page). Do not start another computer_task with the same goal. Ask the user only for missing data.";
     case "completed":
-      return "Jev says it is done. Verify against your definition of done using page.visible or computer_screenshot before you report; if it is not really done, computer_steer with what is missing.";
+      return "Jev says it is done. Check page.text (and page.visible) against your definition of done before you report; if something is missing, do it with the browser_* tools or computer_steer.";
     default:
       return undefined;
   }
@@ -366,7 +380,12 @@ function view(snapshot: ComputerTaskSnapshot): ComputerTaskView {
     phase: snapshot.status === "running" ? snapshot.phase : undefined,
     page:
       snapshot.url || snapshot.title
-        ? { url: snapshot.url, title: snapshot.title, visible: snapshot.visible }
+        ? {
+            url: snapshot.url,
+            title: snapshot.title,
+            visible: snapshot.visible,
+            ...(snapshot.text ? { text: snapshot.text } : {}),
+          }
         : undefined,
   };
 }

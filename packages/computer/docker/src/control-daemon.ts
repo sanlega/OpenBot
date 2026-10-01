@@ -1,4 +1,4 @@
-import type { Action, ActResult, Observation } from "@openbot/contracts";
+import type { Action, ActResult, ExecResult, Observation } from "@openbot/contracts";
 
 /** HTTP control daemon inside `images/desktop` (plan WS9). */
 export interface ControlDaemonClient {
@@ -6,6 +6,13 @@ export interface ControlDaemonClient {
   act(botId: string, display: number, action: Action): Promise<ActResult>;
   liveView(botId: string): Promise<{ url: string; token: string; expiresAt: string }>;
   health(): Promise<{ ok: boolean }>;
+  /** Runs a shell command inside the machine (missing on old daemons). */
+  exec?(request: {
+    command: string;
+    cwd?: string;
+    timeoutMs?: number;
+    stdin?: string;
+  }): Promise<ExecResult>;
 }
 
 export interface ControlDaemonOptions {
@@ -63,6 +70,30 @@ export class HttpControlDaemonClient implements ControlDaemonClient {
     );
     if (!res.ok) throw new Error(`control daemon act failed: ${res.status}`);
     return (await res.json()) as ActResult;
+  }
+
+  async exec(request: {
+    command: string;
+    cwd?: string;
+    timeoutMs?: number;
+    stdin?: string;
+  }): Promise<ExecResult> {
+    const res = await call("command", () =>
+      fetch(`${this.options.baseUrl}/exec`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(request),
+        // The daemon enforces the command's own limit; this only covers a daemon that hangs.
+        signal: AbortSignal.timeout((request.timeoutMs ?? 120_000) + 15_000),
+      }),
+    );
+    if (res.status === 404) {
+      throw new Error(
+        "this desktop image is too old to run commands; update it in Settings > Computer",
+      );
+    }
+    if (!res.ok) throw new Error(`control daemon exec failed: ${res.status}`);
+    return (await res.json()) as ExecResult;
   }
 
   async liveView(botId: string): Promise<{ url: string; token: string; expiresAt: string }> {

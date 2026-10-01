@@ -104,8 +104,20 @@ export interface FastLoopResult {
   summary?: string;
 }
 
-const DEFAULT_MAX_STEPS = 120;
+const DEFAULT_MAX_STEPS = 60;
 const DEFAULT_MAX_RECOVERIES = 4;
+/** Setbacks over the whole task (consecutive ones are capped by maxRecoveries). */
+const MAX_TOTAL_RECOVERIES = 10;
+/** The same control on the same page runs at most this often: a third click is a loop. */
+const MAX_SAME_ACTION = 2;
+/** Scrolls per page before scrolling stops being offered. */
+const MAX_SCROLLS_PER_PAGE = 5;
+/** Waits in a row before waiting stops being offered. */
+const MAX_WAITS_IN_A_ROW = 2;
+/** Times the very same page state may come back before it counts as going in circles. */
+const MAX_STATE_VISITS = 3;
+/** Steps on one page without typing anything or reaching a new page. */
+const MAX_STEPS_WITHOUT_PROGRESS = 15;
 /** Choices that leave the page as it is; not offered again on a page that stalled. */
 const IDLE_CHOICES = new Set(["wait", "scroll_down", "scroll_up"]);
 const DEFAULT_STALL_THRESHOLD = 3;
@@ -208,7 +220,6 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     chainId,
     providerId,
     maxSteps = DEFAULT_MAX_STEPS,
-    startUrl,
     broker: optionsBroker,
     onStep,
     textForType,
@@ -238,6 +249,10 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     if (recent.length > RECENT_STEPS_IN_STATE) recent.shift();
   };
 
+  // "Go to https://… and describe it": a read-only goal names the page it wants read.
+  const startUrl =
+    options.startUrl ??
+    (isReadOnlyGoal(goal) ? /https?:\/\/[^\s"'<>)]+/.exec(goal)?.[0] : undefined);
   if (startUrl) {
     onPhase?.("opening");
     const nav = await withDeadline(
@@ -246,9 +261,13 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       "Opening the page took too long.",
     ).catch((error: unknown) => ({ ok: false, reason: String((error as Error).message ?? error) }));
     if (!nav.ok) {
-      return { status: "failed", steps: 0, summary: nav.reason ?? "navigation failed" };
+      // A slow page is often there anyway: carry on if it can be read, fail only if not.
+      const now = await observe().catch(() => undefined);
+      if (!now) return { status: "failed", steps: 0, summary: nav.reason ?? "navigation failed" };
+      remember(`opening ${startUrl} was slow; carry on from the page as it is`);
+    } else {
+      remember(`opened ${startUrl}`);
     }
-    remember(`opened ${startUrl}`);
   }
 
   let steps = 0;
@@ -261,7 +280,16 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
   // The page as it was when a real step ran; a different page next time counts as progress.
   let actionHash: string | undefined;
   let troubles = 0;
+  let totalTroubles = 0;
   const maxRecoveries = options.maxRecoveries ?? DEFAULT_MAX_RECOVERIES;
+  // Loop guards: how often each control ran on a page, scrolls per page, waits in a row, how
+  // often each page state came back, and steps since the last real progress.
+  const actionRuns = new Map<string, number>();
+  const scrollsOnPage = new Map<string, number>();
+  const stateVisits = new Map<string, number>();
+  const seenUrls = new Set<string>();
+  let waitsInARow = 0;
+  let stepsWithoutProgress = 0;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
   const giveUp = (
@@ -281,7 +309,8 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
    */
   const recover = async (observation: Observation, reason: string): Promise<boolean> => {
     troubles += 1;
-    if (troubles > maxRecoveries) return false;
+    totalTroubles += 1;
+    if (troubles > maxRecoveries || totalTroubles > MAX_TOTAL_RECOVERIES) return false;
     const action: Action =
       troubles === 1
         ? { op: "wait" }
@@ -290,6 +319,10 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
           : { op: "scroll", text: troubles % 2 === 0 ? "down" : "up" };
     onPhase?.("acting");
     await withDeadline(screen.act(action), limit.act, "timeout").catch(() => undefined);
+    if (action.op === "scroll") {
+      const page = observation.url ?? "";
+      scrollsOnPage.set(page, (scrollsOnPage.get(page) ?? 0) + 1);
+    }
     await sleep(settleMs * 2);
     remember(`${reason}; tried ${describeAction(action)}`);
     onStep?.({
@@ -350,9 +383,43 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       await sleep(Math.max(settleMs, 500));
       continue;
     }
+    // A goal that only asks to look at the page is done once the page is read.
+    if (steps === 1 && isReadOnlyGoal(goal)) {
+      onStep?.({
+        step: steps,
+        observation,
+        action: { op: "done" },
+        outcome: "done",
+        reason: "Read the page (the goal only asks what it shows).",
+      });
+      return { status: "completed", steps, lastObservation: observation, summary: "page read" };
+    }
     const hash = hashObservation(observation);
     if (actionHash !== undefined && hash !== actionHash) troubles = 0;
     actionHash = undefined;
+    const pageKey = observation.url ?? "";
+    // Reaching a page not seen before is progress; so is typing (counted where it runs).
+    if (seenUrls.has(pageKey)) stepsWithoutProgress += 1;
+    else stepsWithoutProgress = 0;
+    seenUrls.add(pageKey);
+    if (stepsWithoutProgress > MAX_STEPS_WITHOUT_PROGRESS) {
+      return giveUp(
+        observation,
+        `Went in circles on "${observation.title || pageKey}": ${MAX_STEPS_WITHOUT_PROGRESS} steps without reaching a new page or typing anything.`,
+      );
+    }
+    const visits = (stateVisits.get(hash) ?? 0) + 1;
+    stateVisits.set(hash, visits);
+    if (visits >= MAX_STATE_VISITS && lastExecuted) {
+      // Back on the very same page state again: whatever led here goes nowhere.
+      failed.add(lastExecuted);
+      stateVisits.set(hash, 0);
+      if (await recover(observation, "came back to the same page again")) continue;
+      return giveUp(
+        observation,
+        "Kept coming back to the same page; nothing I tried moved on from it.",
+      );
+    }
     observationHashes.push(hash);
     const stallCount = countTrailingEqual(observationHashes, hash);
     if (stallCount >= stallThreshold) {
@@ -433,7 +500,13 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
       allowBlocked: !savedLogin,
     })
       .filter((c) => !c.element || !failed.has(`${observation.url ?? ""}|${c.id}`))
-      .filter((c) => !stalledPages.has(hash) || !IDLE_CHOICES.has(c.id));
+      .filter((c) => !stalledPages.has(hash) || !IDLE_CHOICES.has(c.id))
+      .filter(
+        (c) =>
+          !(c.id === "scroll_down" || c.id === "scroll_up") ||
+          (scrollsOnPage.get(pageKey) ?? 0) < MAX_SCROLLS_PER_PAGE,
+      )
+      .filter((c) => c.id !== "wait" || waitsInARow < MAX_WAITS_IN_A_ROW);
     const questions = buildComputerActionQuestions(candidates);
     onPhase?.("deciding");
     let decision: Awaited<ReturnType<DecisionService["decide"]>>;
@@ -644,6 +717,15 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
 
     remember(describeAction(action, targetElement));
     lastExecuted = chosen.element ? `${observation.url ?? ""}|${chosen.id}` : undefined;
+    if (lastExecuted) {
+      const runs = (actionRuns.get(lastExecuted) ?? 0) + 1;
+      actionRuns.set(lastExecuted, runs);
+      // Twice is a retry; a third time on the same page is a loop.
+      if (runs >= MAX_SAME_ACTION) failed.add(lastExecuted);
+    }
+    if (action.op === "scroll") scrollsOnPage.set(pageKey, (scrollsOnPage.get(pageKey) ?? 0) + 1);
+    waitsInARow = action.op === "wait" ? waitsInARow + 1 : 0;
+    if (action.op === "type") stepsWithoutProgress = 0;
     // Only a real step that changes the page counts as getting somewhere, not a guess or a wait.
     if (!forced && action.op !== "wait" && action.op !== "scroll") actionHash = hash;
     // Typing into a search box means searching: submit it in the same step, as
@@ -678,6 +760,19 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     lastObservation,
     summary: `Stopped after ${steps} steps without finishing.`,
   };
+}
+
+/** Asks only to look at a page (describe, report, read), never to change anything on it. */
+const NO_CLICK_RE =
+  /\b(without (clicking|changing|touching)|do not (click|change|touch)|don'?t (click|change|touch)|just (load|look at|read|open) (the|this) page)/i;
+const READ_RE =
+  /\b(describe|report|read|tell me|list|summari[sz]e|what (is|are|does|do)|check (whether|if)|look at|find out)\b/i;
+const ACT_RE =
+  /\b(click|type|fill|post|publish|submit|send|search|sign ?in|log ?in|upload|select|choose|press|create|delete|remove|buy|edit|write|reply|follow|like|add|save|set|change|complete|go to|navigate|open)\b/i;
+
+/** True for a goal that only asks what a page shows: it is done once the page is read. */
+export function isReadOnlyGoal(goal: string): boolean {
+  return NO_CLICK_RE.test(goal) || (READ_RE.test(goal) && !ACT_RE.test(goal));
 }
 
 const CAPTCHA_RE =

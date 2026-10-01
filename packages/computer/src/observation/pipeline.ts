@@ -41,11 +41,16 @@ export async function runObservationPipeline(
   const dom = await withCdp(port, (client) => observeDom(client), cdpTimeoutMs);
   if (dom.elements.length >= MIN_ELEMENTS) return dom;
 
+  // The page's text comes from the DOM read even when another stage lists the controls.
+  const withText = (result: ObservationResult): ObservationResult =>
+    dom.text && !result.text ? { ...result, text: dom.text } : result;
   const ax = await withCdp(port, (client) => observeAx(client), cdpTimeoutMs);
-  if (ax.elements.length >= MIN_ELEMENTS) return ax;
+  if (ax.elements.length >= MIN_ELEMENTS) return withText(ax);
 
   const atspi = await observeAtspi(shell, display);
-  if (atspi.elements.length >= MIN_ELEMENTS) return atspi;
+  if (atspi.elements.length >= MIN_ELEMENTS) return withText(atspi);
 
-  return withCdp(port, (client) => observeOcr(client, shell, display), cdpTimeoutMs);
+  return withText(
+    await withCdp(port, (client) => observeOcr(client, shell, display), cdpTimeoutMs),
+  );
 }

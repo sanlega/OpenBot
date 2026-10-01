@@ -104,6 +104,64 @@ exports[`McpComposer > snapshots tool input schemas 1`] = `
     "required": [],
   },
   {
+    "name": "browser_read",
+    "required": [],
+  },
+  {
+    "name": "browser_click",
+    "required": [
+      "ref",
+    ],
+  },
+  {
+    "name": "browser_type",
+    "required": [
+      "ref",
+      "text",
+    ],
+  },
+  {
+    "name": "browser_key",
+    "required": [
+      "key",
+    ],
+  },
+  {
+    "name": "browser_scroll",
+    "required": [],
+  },
+  {
+    "name": "vm_shell",
+    "required": [
+      "command",
+    ],
+  },
+  {
+    "name": "vm_read_file",
+    "required": [
+      "path",
+    ],
+  },
+  {
+    "name": "vm_write_file",
+    "required": [
+      "path",
+      "content",
+    ],
+  },
+  {
+    "name": "vm_edit_file",
+    "required": [
+      "path",
+      "old_string",
+      "new_string",
+    ],
+  },
+  {
+    "name": "vm_list_files",
+    "required": [],
+  },
+  {
     "name": "create_routine",
     "required": [
       "name",

@@ -38,9 +38,15 @@ export class CdpClient {
     this.ws.onmessage = (event) => {
       const msg = JSON.parse(String(event.data)) as {
         id?: number;
+        method?: string;
+        params?: { type?: string };
         error?: { message: string };
         result?: unknown;
       };
+      if (msg.method === "Page.javascriptDialogOpening") {
+        this.answerDialog(msg.params?.type);
+        return;
+      }
       if (!msg.id) return;
       const pending = this.pending.get(msg.id);
       if (!pending) return;
@@ -48,6 +54,9 @@ export class CdpClient {
       if (msg.error) pending.reject(new Error(msg.error.message));
       else pending.resolve(msg.result);
     };
+    // A dialog left open ("Leave site?" after typing into a composer) blocks every page call
+    // until someone answers it: answer it first.
+    await this.send("Page.handleJavaScriptDialog", { accept: true }, 1_500).catch(() => undefined);
     await this.send("Page.enable");
     await this.send("Runtime.enable");
     await this.send("Accessibility.enable");
@@ -147,11 +156,40 @@ export class CdpClient {
     return Buffer.from(result.data, "base64");
   }
 
-  private async send(method: string, params?: Record<string, unknown>): Promise<unknown> {
+  /**
+   * Leaving a page, alerts and "are you sure?" confirms are answered with OK: the step that
+   * raised them was already checked by the broker, and an open dialog freezes the page. A
+   * prompt asks for text nobody authored, so it is dismissed.
+   */
+  private answerDialog(type: string | undefined): void {
+    void this.send("Page.handleJavaScriptDialog", { accept: type !== "prompt" }, 3_000).catch(
+      () => undefined,
+    );
+  }
+
+  /** One protocol call; a page that never answers (a hung renderer) fails after `timeoutMs`. */
+  private async send(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs = CALL_TIMEOUT_MS,
+  ): Promise<unknown> {
     if (!this.ws) throw new Error("CDP not connected");
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${method} did not answer within ${timeoutMs} ms`));
+      }, timeoutMs);
+      this.pending.set(id, {
+        resolve: (v) => {
+          clearTimeout(timer);
+          resolve(v);
+        },
+        reject: (e) => {
+          clearTimeout(timer);
+          reject(e);
+        },
+      });
       this.ws!.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -196,6 +234,9 @@ export class CdpClient {
     throw new Error(`CDP port ${port} not ready within ${timeoutMs}ms`);
   }
 }
+
+/** Longest a single protocol call may take (the accessibility tree of a huge page is the slowest). */
+const CALL_TIMEOUT_MS = 20_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

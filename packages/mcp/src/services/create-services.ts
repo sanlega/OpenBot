@@ -4,6 +4,7 @@ import type { Runtime } from "@openbot/runtime";
 import type { RoutineOrchestrator } from "@openbot/routines";
 import { McpCosServiceAdapter } from "./cos-service.js";
 import { McpComputerServiceAdapter } from "./computer-service.js";
+import { McpMachineServiceAdapter } from "./machine-service.js";
 import { ConnectorMcpComposer } from "./connector-composer.js";
 import { createFakeMcpServices } from "./fakes.js";
 import type { McpToolServices } from "./interfaces.js";
@@ -19,6 +20,7 @@ export interface McpServiceDeps {
 }
 
 export function createMcpServices(ctx: CoreContext, deps: McpServiceDeps): McpToolServices {
+  const computer = new McpComputerServiceAdapter(ctx, deps.runtime);
   return {
     runtime: new McpRuntimeServiceAdapter(ctx, deps.runtime),
     cos: new McpCosServiceAdapter(ctx, {
@@ -27,7 +29,8 @@ export function createMcpServices(ctx: CoreContext, deps: McpServiceDeps): McpTo
       runtime: deps.runtime,
       caps: deps.caps,
     }),
-    computer: new McpComputerServiceAdapter(ctx, deps.runtime),
+    computer,
+    machine: new McpMachineServiceAdapter(ctx, computer, deps.runtime),
     routines: new McpRoutineServiceAdapter(ctx, deps.orchestrator),
     connectors: new ConnectorMcpComposer(ctx),
   };

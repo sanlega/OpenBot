@@ -7,7 +7,15 @@ export { McpComposer, removeTokenFileIfUnchanged } from "./composer.js";
 export { integrateMcp, type IntegrateMcpOptions } from "./integrate.js";
 export { registerInternalToolRoutes, type InternalToolsOptions } from "./http/register.js";
 export { createToolRouter, ToolRouter } from "./handlers.js";
-export { OPENBOT_TOOL_DEFINITIONS, BASE_TOOLS, COS_ONLY_TOOLS } from "./tool-definitions.js";
+export {
+  OPENBOT_TOOL_DEFINITIONS,
+  BASE_TOOLS,
+  BROWSER_TOOLS,
+  COMPUTER_TOOLS,
+  COS_ONLY_TOOLS,
+  VM_TOOLS,
+} from "./tool-definitions.js";
+export { McpMachineServiceAdapter, VM_WORKSPACE } from "./services/machine-service.js";
 export { TOOL_INPUT_SCHEMAS } from "./tool-schemas.js";
 export type {
   SessionClaims,

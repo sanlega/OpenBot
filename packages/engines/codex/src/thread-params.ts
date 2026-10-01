@@ -13,11 +13,30 @@ export function sandboxFor(preset: Preset): "read-only" | "danger-full-access" {
   return preset === "read_only" ? "read-only" : "danger-full-access";
 }
 
+/**
+ * Codex features that act on the user's computer: its shell (both kinds), and the browser and
+ * computer-use tools. Off for a VM-only Bot (D-033).
+ */
+export const CODEX_HOST_TOOLS_OFF = {
+  shell_tool: false,
+  unified_exec: false,
+  // Code mode runs scripts that can call the shell.
+  code_mode_host: false,
+  browser_use: false,
+  browser_use_external: false,
+  computer_use: false,
+  in_app_browser: false,
+} as const;
+
 /** What `thread/start` and `thread/resume` need, so a Bot's Codex thread behaves like its Claude one. */
 export function threadParams(input: TurnInput): Record<string, unknown> {
   // `apps` is the ChatGPT account's connected apps (Drive, Gmail, ...): hundreds of tools with the
   // owner's own token that a Bot never asked for. Off.
-  const config: Record<string, unknown> = { features: { apps: false } };
+  const config: Record<string, unknown> = {
+    features: input.vmOnly ? { apps: false, ...CODEX_HOST_TOOLS_OFF } : { apps: false },
+    // A VM-only Bot edits files with OpenBot's vm_* tools, inside the virtual machine.
+    ...(input.vmOnly ? { include_apply_patch_tool: false } : {}),
+  };
   if (input.mcpServers.length > 0) {
     const mcp_servers: Record<string, unknown> = {};
     for (const server of input.mcpServers) {
@@ -35,7 +54,8 @@ export function threadParams(input: TurnInput): Record<string, unknown> {
     cwd: input.cwd,
     model: input.model,
     approvalPolicy: "untrusted",
-    sandbox: sandboxFor(input.permission),
+    // Read-only as a backstop: a VM-only Bot has no shell here, and nothing may write on this computer.
+    sandbox: input.vmOnly ? "read-only" : sandboxFor(input.permission),
     // The Bot's own instructions (Chief of Staff rules, computer rules, ...) — without this a Codex
     // Bot is a bare model call that has never heard of OpenBot.
     ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),

@@ -54,6 +54,25 @@ const OPEN_FLAG_RE = /\s--open(\s|=|$)|\bwslview\b|\binvoke-item\b|\bsensible-br
 const BROWSER_SCRIPT_RE =
   /webbrowser\.open|python3?\s+-m\s+webbrowser|\b(npx|pnpm\s+(exec|dlx)|yarn|bunx|node|python3?)\s+[^;&|]*\b(playwright|puppeteer|selenium)\b|\bplaywright\s+(test|codegen|install|open|screenshot|show-report)\b/i;
 
+/**
+ * The engine's own shell and file-changing tools (Claude, Codex, ACP agents): they act on the
+ * user's computer. A VM-only Bot never gets them (D-033); this is the backstop if one slips through.
+ */
+const HOST_WORK_TOOLS = new Set([
+  "Bash",
+  "PowerShell",
+  "shell",
+  "exec_command",
+  "local_shell",
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "NotebookEdit",
+  "apply_patch",
+  "Delete",
+  "Move",
+]);
+
 /** True when the action would drive a browser on the user's own computer instead of the VM. */
 export function usesHostBrowser(req: BrokerRequest): boolean {
   if (HOST_BROWSER_TOOL_RE.test(`${req.action} ${req.summary}`)) return true;
@@ -95,6 +114,9 @@ export function builtinDenyReason(req: BrokerRequest): string | undefined {
   const haystack = haystackOf(req);
   if (req.computerAccess && req.computerAccess !== "docker+local" && usesHostBrowser(req)) {
     return "uses this computer's browser; this Bot's computer is the virtual machine (use computer_task)";
+  }
+  if (req.computerAccess === "docker" && req.kind === "tool" && HOST_WORK_TOOLS.has(req.action)) {
+    return "this Bot works inside the virtual machine: run commands with vm_shell and change files with vm_write_file / vm_edit_file";
   }
   if (CREDENTIAL_PATH_RE.test(haystack)) return "targets a credential path";
   if (DB_OR_VAULT_RE.test(haystack)) return "targets the OpenBot database or vault";

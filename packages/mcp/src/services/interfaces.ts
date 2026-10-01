@@ -1,3 +1,4 @@
+import type { McpMachineServiceAdapter } from "./machine-service.js";
 import type { ComputerTasksControl } from "@openbot/core";
 import type { Bot, McpServerSpec } from "@openbot/contracts";
 import type {
@@ -90,10 +91,26 @@ export interface McpConnectorComposer {
   connectorServersForTurn(botId: string, connectionIds: string[]): Promise<McpServerSpec[]>;
 }
 
+export type McpMachineService = Pick<
+  McpMachineServiceAdapter,
+  | "browserRead"
+  | "browserClick"
+  | "browserType"
+  | "browserKey"
+  | "browserScroll"
+  | "vmShell"
+  | "vmReadFile"
+  | "vmWriteFile"
+  | "vmEditFile"
+  | "vmListFiles"
+>;
+
 export interface McpToolServices {
   runtime: McpRuntimeService;
   cos: McpCosService;
   computer: McpComputerService;
+  /** The bot's browser and shell on its virtual machine (absent in tests without one). */
+  machine?: McpMachineService;
   routines: McpRoutineService;
   connectors?: McpConnectorComposer;
 }

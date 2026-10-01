@@ -22,7 +22,13 @@ export function signatureOf(input: TurnInput): string {
   const servers = (input.mcpServers ?? [])
     .map((s) => ({ name: s.name, command: s.command, args: s.args ?? [] }))
     .sort((a, b) => a.name.localeCompare(b.name));
-  return JSON.stringify({ schema: SCHEMA, sandbox: sandboxFor(input.permission), servers });
+  return JSON.stringify({
+    schema: SCHEMA,
+    sandbox: sandboxFor(input.permission),
+    servers,
+    // A thread made with host tools must not be reused for a VM-only Bot, nor the other way round.
+    ...(input.vmOnly ? { vmOnly: true } : {}),
+  });
 }
 
 const MAX_ENTRIES = 500;

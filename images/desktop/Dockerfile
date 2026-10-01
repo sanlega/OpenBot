@@ -14,6 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OPENBOT_CONTROL_PORT=8787 \
     NOVNC_PORT=6080
 
+# The bots' shell also runs here (D-033): the everyday tools of a developer machine.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg \
     xvfb x11vnc fluxbox \
@@ -23,6 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     python3 python3-gi gir1.2-atspi-2.0 \
     fonts-dejavu-core \
+    git openssh-client python3-pip python3-venv build-essential \
+    jq unzip zip wget less nano procps file ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \

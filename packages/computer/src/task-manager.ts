@@ -64,6 +64,8 @@ export interface ComputerTaskSnapshot {
   phase?: ComputerPhase;
   /** Labels of what's on screen at the last look, so the engine can check the result. */
   visible?: string[];
+  /** The page's text at the last look (capped), so the engine can read the result. */
+  text?: string;
 }
 
 export interface StartComputerTask {
@@ -120,6 +122,8 @@ interface TaskRuntime {
   waiters: Set<() => void>;
 }
 
+/** Page text kept on a task for the engine to read. */
+const SNAPSHOT_TEXT_LIMIT = 4000;
 const DEFAULT_INPUT_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_BLOCKED_TIMEOUT_MS = 60 * 60_000;
 const DEFAULT_BLOCKED_POLL_MS = 3_000;
@@ -178,6 +182,16 @@ export class ComputerTaskManager {
     });
     this.emit(runtime);
     return this.copy(runtime.snapshot);
+  }
+
+  /** The bot's task that is still driving its screen (running, or paused for input or a person). */
+  activeFor(botId: string): ComputerTaskSnapshot | undefined {
+    for (const runtime of this.tasks.values()) {
+      if (runtime.snapshot.botId === botId && !TERMINAL.has(runtime.snapshot.status)) {
+        return this.copy(runtime.snapshot);
+      }
+    }
+    return undefined;
   }
 
   get(taskId: string): ComputerTaskSnapshot | undefined {
@@ -299,6 +313,7 @@ export class ComputerTaskManager {
           .map((el) => el.label.replace(/\s+/g, " ").trim())
           .filter(Boolean)
           .slice(0, 25);
+        runtime.snapshot.text = event.observation.text?.slice(0, SNAPSHOT_TEXT_LIMIT);
         this.emit(runtime, event);
       },
     });
@@ -527,5 +542,14 @@ function maskSecrets(observation: Observation, secrets: Set<string>): Observatio
         ? { ...el, value: MASK }
         : el,
     ),
+    // A typed secret can also show up in the page's text (a field echoed back, a preview).
+    ...(observation.text
+      ? {
+          text: [...secrets].reduce(
+            (text, secret) => (secret ? text.split(secret).join(MASK) : text),
+            observation.text,
+          ),
+        }
+      : {}),
   };
 }
