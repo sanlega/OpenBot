@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.1.18 — 2026-10-01
+
+- **Bots remember.** A bot keeps what it learns across conversations: your preferences and
+  standing instructions, who people are, how it does its job. Facts about you are shared by
+  every bot. Each bot has a **Memory** tab where you can see, fix or delete what it knows.
+- **A safer, self-healing virtual machine.** Bots' commands no longer run as an administrator:
+  they cannot read the virtual machine's control key or the browser's saved sessions, nor
+  control the screens directly. Installing system packages still works (`sudo apt-get
+install`). If the browser or the live view crashes, it comes back by itself, and a runaway
+  command can no longer take the desktop down.
+- **Settings > Computer > Health**: a self-check of the virtual machine (browser, live view,
+  internet, clock, workspace, isolation) and a "Refresh the computer" button that starts a new
+  one keeping your files and sign-ins.
+- **More sign-ins are shared between bots**: apps that keep you signed in without cookies
+  (Notion, Linear and similar) now stay signed in on every bot's screen, and Google no longer
+  signs bots out for "suspicious" activity.
+- **Bots no longer get stuck or go in circles.** A turn where the engine stops responding is
+  restarted once and then reported, instead of hanging; a bot repeating the same call with the
+  same result is told to change approach; pages behind Cloudflare, CAPTCHAs and similar walls
+  are named instead of "I couldn't find the button", and routes that worked on a site are
+  reused next time.
+- **The Playwright connector works for bots in the virtual machine**: it drives the bot's own
+  browser there, and can never read your sessions. You can limit the sites it may open.
+- A bot working on a task from another bot only sends an email, posts or buys when you asked
+  for exactly that; otherwise it prepares a draft. "Always allow" now allows just that command
+  or that file. If OpenBot closes unexpectedly, the Chief of Staff tells you when it restarts.
+- Fixed: a click on a page with a single button could do nothing and still report success.
+- The virtual machine updates itself to this version the first time a bot uses it after the
+  update, once no bot is using it (files and sign-ins are kept; packages bots installed with
+  apt must be installed again).
+
 ## 0.1.17 — 2026-10-01
 
 - **Bots whose computer is the virtual machine now work only there.** They no longer get a
