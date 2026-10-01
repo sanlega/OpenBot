@@ -1,10 +1,20 @@
 # Project state
 
-_Last updated: 2026-10-01 by Claude (backlog sweep on main-2, verified by two reviewer agents; NOT released)_
+_Last updated: 2026-10-01 by Claude (v0.1.19 released and installed: backlog sweep + D-036)_
 
 ## In progress
-- **Backlog sweep after v0.1.18 (2026-10-01), on `main-2`, pushed, NOT merged to `main` and
-  NOT released** (plan `.ai/memory/plans/2026-10-01-backlog-sweep.md`, every item ticked).
+- **v0.1.19 RELEASED and installed on the Windows dev machine (2026-10-01)**: `main-2`
+  fast-forwarded into `main` (29 commits), CI green on all three OSes (desktop E2E
+  included), tag `v0.1.19`, release workflow green (5 installers + SHA256SUMS + GHCR
+  `:v0.1.19`), Windows installer hash verified, installed silently with no turn or task
+  running. Checks on the installed app:
+  - It reports 0.1.19 and wrote `~/.openbot/local-owner.key`.
+  - D-036 holds live: `/api/bots` returns 401 without the key and 200 with it.
+  - Migrations 0006/0007 are applied, and `/api/tasks` lists the real tasks.
+  - The `:v0.1.19` image was pulled in the background; the VM was replaced on start and the self-check passes 10/10.
+
+  **Next**: the owner uses Tasks, Files, Check again and the greeting; replay `scripts/live` (they now read the key file).
+- **Backlog sweep after v0.1.18 (2026-10-01), shipped in v0.1.19** (plan `.ai/memory/plans/2026-10-01-backlog-sweep.md`, every item ticked).
   K1-K4 (refusals and loops reach every engine, "not answered" is not "refused"), L1-L3 (cancel
   with cascade, depth limit 3, Tasks screen), M1-M3 (new-bot defaults, Reset OpenBot, Speed),
   N1-N3 (connector tabs protected, Computer > Files, the engine's plan in the turn), P1 (Check
