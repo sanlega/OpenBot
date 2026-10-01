@@ -486,6 +486,8 @@ export class MockClientApiServer {
         };
       if (patch.quietHours)
         this.settings.quietHours = patch.quietHours as typeof this.settings.quietHours;
+      if (patch.botDefaults)
+        this.settings.botDefaults = patch.botDefaults as typeof this.settings.botDefaults;
       this.settings.updatedAt = new Date().toISOString();
       return sendJson(res, 200, { settings: this.settings });
     }

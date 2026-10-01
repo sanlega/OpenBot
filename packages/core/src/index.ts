@@ -72,3 +72,4 @@ export {
   type ConnectorToolClass,
 } from "./connector-service.js";
 export * from "./memory.js";
+export * from "./bot-defaults.js";

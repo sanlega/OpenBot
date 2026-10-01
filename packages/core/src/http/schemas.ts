@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  BotDefaults,
   ComputerAccess,
   EngineAuthOverride,
   EngineRouting,
@@ -19,11 +20,11 @@ export const CreateBotBody = z.object({
   pinned: z.boolean().default(false),
   hidden: z.boolean().default(false),
   isChiefOfStaff: z.boolean().default(false),
-  routing: EngineRouting.default({ mode: "auto" }),
+  routing: EngineRouting.optional(),
   auth: EngineAuthOverride.optional(),
-  // Bots run with full permissions inside the virtual machine unless configured otherwise (#9).
-  permissionPreset: PermissionPreset.default("full"),
-  computer: ComputerAccess.default("docker"),
+  // Unset: the owner's defaults for new bots (Settings), else full permissions in the VM (#9).
+  permissionPreset: PermissionPreset.optional(),
+  computer: ComputerAccess.optional(),
   connectors: z.array(z.string()).default([]),
   limits: z
     .object({
@@ -95,6 +96,7 @@ export const UpdateSettingsBody = z.object({
   caps: z.record(z.string(), z.number()).optional(),
   budgets: z.record(z.string(), z.number()).optional(),
   quietHours: z.object({ enabled: z.boolean(), start: z.string(), end: z.string() }).optional(),
+  botDefaults: BotDefaults.optional(),
 });
 export type UpdateSettingsBody = z.infer<typeof UpdateSettingsBody>;
 

@@ -425,11 +425,20 @@ export const CapCounter = z.object({
 });
 export type CapCounter = z.infer<typeof CapCounter>;
 
+/** M1: what a new bot starts with, when whoever creates it does not say (the owner's choice). */
+export const BotDefaults = z.object({
+  routing: EngineRouting.optional(),
+  permissionPreset: PermissionPreset.optional(),
+  computer: ComputerAccess.optional(),
+});
+export type BotDefaults = z.infer<typeof BotDefaults>;
+
 export const Settings = z.object({
   id: z.literal("singleton").default("singleton"),
   caps: z.record(z.string(), z.number()),
   budgets: z.record(z.string(), z.number()),
   quietHours: z.object({ enabled: z.boolean(), start: z.string(), end: z.string() }).optional(),
+  botDefaults: BotDefaults.optional(),
   updatedAt: isoTimestamp(),
 });
 export type Settings = z.infer<typeof Settings>;

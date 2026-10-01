@@ -235,6 +235,7 @@ export interface SettingsPatch {
   caps?: Record<string, number>;
   budgets?: Record<string, number>;
   quietHours?: { enabled: boolean; start: string; end: string };
+  botDefaults?: Settings["botDefaults"];
 }
 
 export type AppScreen =

@@ -1,5 +1,5 @@
 import { newId, type Bot } from "@openbot/contracts";
-import { delegationsOf, type CoreContext } from "@openbot/core";
+import { delegationsOf, withBotDefaults, type CoreContext } from "@openbot/core";
 import { CapCounterService, NotifyGate, SpawnGate, justificationFromSpawn } from "@openbot/cos";
 import type { Runtime } from "@openbot/runtime";
 import type { CreateBotInput, MessageUserInput, SessionContext, ToolResult } from "../types.js";
@@ -60,9 +60,8 @@ export class McpCosServiceAdapter implements McpCosService {
       hidden: false,
       isChiefOfStaff: false,
       createdBy: session.botId,
-      routing: input.routing ?? { mode: "auto" },
-      permissionPreset: input.preset ?? "full",
-      computer: "docker",
+      // M1: the owner's defaults for new bots, unless the Chief chose.
+      ...withBotDefaults(this.ctx, { routing: input.routing, permissionPreset: input.preset }),
       connectors: [],
       limits: {},
       justification: justificationFromSpawn(

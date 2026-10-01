@@ -22,13 +22,14 @@ import {
 } from "./SettingsPrimitives.js";
 
 type Engine = EnginesResponse["engines"][number];
-type Editable = Pick<Settings, "caps" | "budgets" | "quietHours">;
+type Editable = Pick<Settings, "caps" | "budgets" | "quietHours" | "botDefaults">;
 
 const SECTIONS = [
   { id: "appearance", label: "Appearance" },
   { id: "engines", label: "Engines" },
   { id: "jev", label: "Jev" },
   { id: "autonomy", label: "Autonomy" },
+  { id: "new-bots", label: "New bots" },
   { id: "computer", label: "Computer" },
   { id: "notifications", label: "Notifications" },
   { id: "spending", label: "Spending" },
@@ -44,8 +45,112 @@ const THEMES: Array<{ value: ThemePreference; label: string; icon: ReactNode }> 
 
 const DEFAULT_QUIET = { enabled: false, start: "22:00", end: "08:00" };
 
+type BotDefaultsValue = NonNullable<Settings["botDefaults"]>;
+
+/** M1: engine, permissions and computer for bots created without choosing. */
+function NewBotDefaults({
+  value,
+  engines,
+  onChange,
+}: {
+  value: BotDefaultsValue;
+  engines: Engine[];
+  onChange: (next: BotDefaultsValue) => void;
+}) {
+  const routing =
+    value.routing?.mode === "pinned" && value.routing.engine ? value.routing.engine : "auto";
+  const usable = engines.filter((e) => e.available ?? (e.installed && e.login.ok));
+  return (
+    <SettingsGroup>
+      <SettingRow
+        label="Engine"
+        help="Auto lets Jev pick the engine and model for each message."
+        htmlFor="default-engine"
+      >
+        <select
+          id="default-engine"
+          className="set-select"
+          value={routing}
+          onChange={(e) =>
+            onChange({
+              ...value,
+              routing:
+                e.target.value === "auto"
+                  ? { mode: "auto" }
+                  : { mode: "pinned", engine: e.target.value },
+            })
+          }
+        >
+          <option value="auto">Auto (recommended)</option>
+          {usable.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.descriptor?.label ?? e.id}
+            </option>
+          ))}
+        </select>
+      </SettingRow>
+      <SettingRow
+        label="Permissions"
+        help={
+          (value.permissionPreset ?? "full") === "full"
+            ? "Works without asking, except to spend money or delete things."
+            : (value.permissionPreset ?? "full") === "workspace_write"
+              ? "Changes files in its workspace; asks before anything else."
+              : "Can read, but asks you before changing anything."
+        }
+        htmlFor="default-permissions"
+      >
+        <select
+          id="default-permissions"
+          className="set-select"
+          value={value.permissionPreset ?? "full"}
+          onChange={(e) =>
+            onChange({
+              ...value,
+              permissionPreset: e.target.value as BotDefaultsValue["permissionPreset"],
+            })
+          }
+        >
+          <option value="full">Full (recommended)</option>
+          <option value="workspace_write">Workspace only</option>
+          <option value="read_only">Read only</option>
+        </select>
+      </SettingRow>
+      <SettingRow
+        label="Computer"
+        help={
+          (value.computer ?? "docker") === "docker"
+            ? "Works inside the virtual machine, never on this computer."
+            : (value.computer ?? "docker") === "docker+local"
+              ? "The virtual machine, and also this computer's shell, files and browser."
+              : "No computer: chat and connectors only."
+        }
+        htmlFor="default-computer"
+      >
+        <select
+          id="default-computer"
+          className="set-select"
+          value={value.computer ?? "docker"}
+          onChange={(e) =>
+            onChange({ ...value, computer: e.target.value as BotDefaultsValue["computer"] })
+          }
+        >
+          <option value="docker">Virtual machine (recommended)</option>
+          <option value="docker+local">Virtual machine + this computer</option>
+          <option value="none">None</option>
+        </select>
+      </SettingRow>
+    </SettingsGroup>
+  );
+}
+
 function editableOf(s: Settings): Editable {
-  return { caps: s.caps, budgets: s.budgets, quietHours: s.quietHours };
+  return {
+    caps: s.caps,
+    budgets: s.budgets,
+    quietHours: s.quietHours,
+    botDefaults: s.botDefaults ?? {},
+  };
 }
 
 function sameEditable(a: Editable, b: Editable): boolean {
@@ -166,6 +271,7 @@ export function SettingsView() {
         caps: draft.caps,
         budgets: draft.budgets,
         ...(draft.quietHours ? { quietHours: draft.quietHours } : {}),
+        botDefaults: draft.botDefaults ?? {},
       };
       const res = await transport.patch<{ settings: Settings }>("/api/settings", patch);
       setSaved(res.settings);
@@ -277,6 +383,18 @@ export function SettingsView() {
                   ))}
                 </SettingsGroup>
               ) : null}
+            </SettingsSection>
+
+            <SettingsSection
+              id="new-bots"
+              title="New bots"
+              description="What a bot starts with when you or the Chief of Staff create one without choosing. Existing bots keep their own settings."
+            >
+              <NewBotDefaults
+                value={draft.botDefaults ?? {}}
+                engines={engines}
+                onChange={(botDefaults) => setDraft({ ...draft, botDefaults })}
+              />
             </SettingsSection>
 
             <SettingsSection

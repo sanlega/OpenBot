@@ -3,6 +3,7 @@ import type {
   EngineRouting,
   EngineAuthOverride,
   BotJustification,
+  BotDefaults,
   MessageAuthor,
   RoutineTrigger,
   RoutineLimits,
@@ -325,6 +326,8 @@ export const settings = sqliteTable("settings", {
     start: string;
     end: string;
   }>(),
+  /** M1: what new bots start with. */
+  botDefaults: text("bot_defaults", { mode: "json" }).$type<BotDefaults>(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 

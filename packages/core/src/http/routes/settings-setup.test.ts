@@ -55,3 +55,54 @@ describe("POST /api/setup/validate (typesafe)", () => {
     expect(res.json()).toMatchObject({ result: { ok: false } });
   });
 });
+
+describe("defaults for new bots (M1)", () => {
+  it("are saved in Settings and used when a bot is created without choosing", async () => {
+    testContext = await createTestContext();
+    app = await buildServer(testContext.ctx);
+    const plain = await app.inject({
+      method: "POST",
+      url: "/api/bots",
+      payload: { name: "Before" },
+    });
+    expect(plain.json().bot).toMatchObject({
+      routing: { mode: "auto" },
+      permissionPreset: "full",
+      computer: "docker",
+    });
+
+    const saved = await app.inject({
+      method: "PATCH",
+      url: "/api/settings",
+      payload: {
+        botDefaults: {
+          routing: { mode: "pinned", engine: "codex" },
+          permissionPreset: "workspace_write",
+          computer: "none",
+        },
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().settings.botDefaults).toMatchObject({
+      permissionPreset: "workspace_write",
+    });
+
+    const after = await app.inject({
+      method: "POST",
+      url: "/api/bots",
+      payload: { name: "After" },
+    });
+    expect(after.json().bot).toMatchObject({
+      routing: { mode: "pinned", engine: "codex" },
+      permissionPreset: "workspace_write",
+      computer: "none",
+    });
+    // What the creator chose still wins.
+    const chosen = await app.inject({
+      method: "POST",
+      url: "/api/bots",
+      payload: { name: "Chosen", computer: "docker", permissionPreset: "full" },
+    });
+    expect(chosen.json().bot).toMatchObject({ computer: "docker", permissionPreset: "full" });
+  });
+});

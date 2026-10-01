@@ -51,6 +51,7 @@ export function registerSettingsAndSetupRoutes(app: FastifyInstance, ctx: CoreCo
       caps: { ...current.caps, ...body.caps },
       budgets: { ...current.budgets, ...body.budgets },
       quietHours: body.quietHours ?? current.quietHours,
+      botDefaults: body.botDefaults ?? current.botDefaults,
       updatedAt: ctx.clock.now().toISOString(),
     };
     ctx.repos.settings.upsert(next);

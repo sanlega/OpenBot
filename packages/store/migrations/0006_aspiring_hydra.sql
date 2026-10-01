@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `bot_defaults` text;

@@ -3,6 +3,7 @@ import { newId, type Bot } from "@openbot/contracts";
 import type { CoreContext } from "../../context.js";
 import { requireAuth, requireOwner } from "../auth.js";
 import { parseOrReject } from "../validation.js";
+import { withBotDefaults } from "../../bot-defaults.js";
 import { BotConnectorsBody, CreateBotBody, RouteOverrideBody, UpdateBotBody } from "../schemas.js";
 
 /** `bots`: CRUD + `duplicate`; `bots/:id/route`; `bots/:id/why`; `bots/:id/connectors` (plan §4.7). */
@@ -37,10 +38,8 @@ export function registerBotRoutes(app: FastifyInstance, ctx: CoreContext): void 
       // WS4/WS8), not this HTTP endpoint — so every Bot created here is
       // user-initiated by definition.
       createdBy: "user",
-      routing: body.routing,
+      ...withBotDefaults(ctx, body),
       auth: body.auth,
-      permissionPreset: body.permissionPreset,
-      computer: body.computer,
       connectors: body.connectors,
       limits: body.limits,
     };
