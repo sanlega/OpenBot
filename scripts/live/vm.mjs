@@ -83,7 +83,9 @@ try {
   let onHost = "";
   try {
     onHost = readFileSync(join(workspace, "notes", "hello.md"), "utf8");
-  } catch {}
+  } catch {
+    // Not there: the check below fails.
+  }
   check(
     "a file written in the VM is in the host workspace",
     write.code === 0 && onHost.includes("hi from the VM"),
