@@ -135,5 +135,18 @@ export function latencySummary(turns: Turn[], last = 50) {
       measured.map((t) => span(t.latency?.queuedAt, t.latency?.firstToolAt)),
     ),
     medianTotalMs: median(measured.map((t) => span(t.latency?.queuedAt, t.latency?.completedAt))),
+    // C6: how much of the input came from the prompt cache (engines that report it).
+    cacheReuse: cacheReuse(turns.slice(-last)),
   };
+}
+
+function cacheReuse(turns: Turn[]): number | undefined {
+  const reported = turns.filter((t) => t.usage.cacheReadTokens !== undefined);
+  const input = reported.reduce(
+    (n, t) => n + t.usage.inputTokens + (t.usage.cacheReadTokens ?? 0),
+    0,
+  );
+  if (reported.length === 0 || input === 0) return undefined;
+  const read = reported.reduce((n, t) => n + (t.usage.cacheReadTokens ?? 0), 0);
+  return Math.round((read / input) * 100) / 100;
 }

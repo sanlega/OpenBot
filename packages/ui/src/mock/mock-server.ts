@@ -515,6 +515,25 @@ export class MockClientApiServer {
       this.customEngines = engines as typeof this.customEngines;
       return sendJson(res, 200, { engines: this.customEngines, restartRequired: true });
     }
+    // Same shape as GET /api/usage (packages/core/src/http/routes/remote-and-audit.ts).
+    if (method === "GET" && path === "/api/usage") {
+      const botId = url.searchParams.get("botId");
+      return sendJson(res, 200, {
+        turns: [],
+        totalUsd: 0,
+        totalTokens: 0,
+        latency: botId
+          ? {
+              turns: 12,
+              medianSetupMs: 900,
+              medianFirstTextMs: 4200,
+              medianFirstToolMs: 3100,
+              medianTotalMs: 21000,
+              cacheReuse: 0.82,
+            }
+          : { turns: 0 },
+      });
+    }
     if (method === "GET" && path === "/api/digest") {
       return sendJson(res, 200, { digest: SEED_DIGEST });
     }

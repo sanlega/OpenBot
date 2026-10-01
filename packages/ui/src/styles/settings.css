@@ -869,3 +869,9 @@ a.pair-url:hover {
     grid-column: 1 / -1;
   }
 }
+
+.speed-first {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}

@@ -35,3 +35,14 @@ describe("latencySummary (C10)", () => {
     expect(summary.medianFirstToolMs).toBeUndefined();
   });
 });
+
+describe("cache reuse (C6)", () => {
+  it("is the share of input read from the prompt cache", () => {
+    const withCache = (input: number, read: number): Turn => ({
+      ...turn(1, 100, 200),
+      usage: { inputTokens: input, outputTokens: 0, usd: 0, cacheReadTokens: read },
+    });
+    expect(latencySummary([withCache(200, 800), withCache(0, 0)]).cacheReuse).toBe(0.8);
+    expect(latencySummary([turn(1, 100, 200)]).cacheReuse).toBeUndefined();
+  });
+});

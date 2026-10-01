@@ -10,6 +10,7 @@ import { ComputerImageCard } from "./ComputerImageCard.js";
 import { DataSettings } from "./DataSettings.js";
 import { EnginesSettings } from "./EnginesSettings.js";
 import { SavedLogins } from "./SavedLogins.js";
+import { SpeedCard } from "./SpeedCard.js";
 import { SpendingToday } from "./SpendingToday.js";
 import { BUDGET_META, CAP_META, HOURS, hourLabel, metaFor } from "./settings-meta.js";
 import {
@@ -32,6 +33,7 @@ const SECTIONS = [
   { id: "new-bots", label: "New bots" },
   { id: "computer", label: "Computer" },
   { id: "notifications", label: "Notifications" },
+  { id: "speed", label: "Speed" },
   { id: "spending", label: "Spending" },
   { id: "data", label: "Data" },
   { id: "about", label: "About" },
@@ -451,6 +453,14 @@ export function SettingsView() {
                   </SettingRow>
                 ) : null}
               </SettingsGroup>
+            </SettingsSection>
+
+            <SettingsSection
+              id="speed"
+              title="Speed"
+              description="How long each bot takes to start answering (median of its latest turns). Slow first words usually mean the engine is starting up or busy."
+            >
+              <SpeedCard />
             </SettingsSection>
 
             <SettingsSection id="spending" title="Spending">
