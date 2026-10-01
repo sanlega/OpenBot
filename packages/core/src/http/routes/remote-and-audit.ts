@@ -1,3 +1,4 @@
+import type { Turn } from "@openbot/contracts";
 import type { FastifyInstance } from "fastify";
 import { computeBindHostFlags, type CoreContext } from "../../context.js";
 import { requireAuth, requireOwner } from "../auth.js";
@@ -81,7 +82,7 @@ export function registerRemoteAndAuditRoutes(app: FastifyInstance, ctx: CoreCont
       (sum, t) => sum + t.usage.inputTokens + t.usage.outputTokens,
       0,
     );
-    return { turns, totalUsd, totalTokens };
+    return { turns, totalUsd, totalTokens, latency: latencySummary(turns) };
   });
 
   app.get("/api/audit", async (request, reply) => {
@@ -99,4 +100,40 @@ export function registerRemoteAndAuditRoutes(app: FastifyInstance, ctx: CoreCont
     if (!query) return;
     return { decisions: ctx.repos.decisions.list({ purpose: query.purpose }) };
   });
+}
+
+/**
+ * C10: where the time before a first answer goes, as medians over the latest turns: setting up
+ * (routing, tools) until the engine starts, then until its first words.
+ */
+export function latencySummary(turns: Turn[], last = 50) {
+  const measured = turns
+    .filter((t) => t.latency?.queuedAt && t.latency.engineStartedAt)
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+    .slice(-last);
+  const span = (from?: string, to?: string) =>
+    from && to ? Date.parse(to) - Date.parse(from) : undefined;
+  const median = (values: Array<number | undefined>) => {
+    const sorted = values
+      .filter((v): v is number => v !== undefined && v >= 0)
+      .sort((a, b) => a - b);
+    if (sorted.length === 0) return undefined;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2
+      ? sorted[mid]
+      : Math.round(((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2);
+  };
+  return {
+    turns: measured.length,
+    medianSetupMs: median(
+      measured.map((t) => span(t.latency?.queuedAt, t.latency?.engineStartedAt)),
+    ),
+    medianFirstTextMs: median(
+      measured.map((t) => span(t.latency?.queuedAt, t.latency?.firstDeltaAt)),
+    ),
+    medianFirstToolMs: median(
+      measured.map((t) => span(t.latency?.queuedAt, t.latency?.firstToolAt)),
+    ),
+    medianTotalMs: median(measured.map((t) => span(t.latency?.queuedAt, t.latency?.completedAt))),
+  };
 }

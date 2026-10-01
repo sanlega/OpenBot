@@ -22,6 +22,7 @@ export class TurnsRepo {
         sessionId: turn.sessionId,
         status: turn.status,
         usage: turn.usage,
+        latency: turn.latency,
         createdAt: new Date(turn.createdAt),
       })
       .run();
@@ -54,6 +55,21 @@ export class TurnsRepo {
     this.db.update(turns).set({ sessionId }).where(eq(turns.id, id)).run();
   }
 
+  /** C10: records when stages of the turn happened (merged with what is already there). */
+  markLatency(id: string, marks: NonNullable<Turn["latency"]>): void {
+    const row = this.db
+      .select({ latency: turns.latency })
+      .from(turns)
+      .where(eq(turns.id, id))
+      .get();
+    if (!row) return;
+    this.db
+      .update(turns)
+      .set({ latency: { ...(row.latency ?? {}), ...marks } })
+      .where(eq(turns.id, id))
+      .run();
+  }
+
   updateStatus(id: string, status: Turn["status"], usage?: Turn["usage"]): void {
     this.db
       .update(turns)
@@ -75,6 +91,7 @@ function toTurn(row: TurnRow): Turn {
     sessionId: row.sessionId ?? undefined,
     status: row.status as Turn["status"],
     usage: row.usage,
+    ...(row.latency ? { latency: row.latency } : {}),
     createdAt: row.createdAt.toISOString(),
   };
 }

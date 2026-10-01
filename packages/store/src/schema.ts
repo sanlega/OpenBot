@@ -6,6 +6,7 @@ import type {
   MessageAuthor,
   RoutineTrigger,
   RoutineLimits,
+  TurnLatency,
   TurnUsage,
   InputField,
   InputAnswer,
@@ -137,6 +138,8 @@ export const turns = sqliteTable(
     sessionId: text("session_id"),
     status: text("status").notNull(),
     usage: text("usage", { mode: "json" }).notNull().$type<TurnUsage>(),
+    /** C10: when each stage of the turn happened. */
+    latency: text("latency", { mode: "json" }).$type<TurnLatency>(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [index("turns_chain_id_idx").on(t.chainId), index("turns_bot_id_idx").on(t.botId)],

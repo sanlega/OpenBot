@@ -5,6 +5,8 @@ export interface TurnStore {
   create(input: Omit<Turn, "id" | "createdAt" | "usage" | "status"> & { id?: string }): Turn;
   update(id: string, patch: Partial<Pick<Turn, "status" | "usage" | "sessionId">>): Turn;
   get(id: string): Turn | undefined;
+  /** C10: records when stages of the turn happened. */
+  markLatency?(id: string, marks: NonNullable<Turn["latency"]>): void;
 }
 
 export class InMemoryTurnStore implements TurnStore {
@@ -34,6 +36,11 @@ export class InMemoryTurnStore implements TurnStore {
 
   get(id: string): Turn | undefined {
     return this.turns.get(id);
+  }
+
+  markLatency(id: string, marks: NonNullable<Turn["latency"]>): void {
+    const turn = this.turns.get(id);
+    if (turn) this.turns.set(id, { ...turn, latency: { ...turn.latency, ...marks } });
   }
 }
 

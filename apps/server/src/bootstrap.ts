@@ -434,6 +434,10 @@ export class RepoTurnStore implements TurnStore {
   get(id: string): Turn | undefined {
     return this.ctx.repos.turns.getById(id);
   }
+
+  markLatency(id: string, marks: NonNullable<Turn["latency"]>): void {
+    this.ctx.repos.turns.markLatency(id, marks);
+  }
 }
 
 class RepoRuleStore implements RuleStore {

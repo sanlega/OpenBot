@@ -157,6 +157,19 @@ export const TurnUsage = z.object({
 });
 export type TurnUsage = z.infer<typeof TurnUsage>;
 
+/**
+ * C10: when each stage of a turn happened (ISO times), to tell whether the engine CLI start-up,
+ * Jev routing or composing the tools is what makes a first answer slow.
+ */
+export const TurnLatency = z.object({
+  queuedAt: isoTimestamp().optional(),
+  engineStartedAt: isoTimestamp().optional(),
+  firstDeltaAt: isoTimestamp().optional(),
+  firstToolAt: isoTimestamp().optional(),
+  completedAt: isoTimestamp().optional(),
+});
+export type TurnLatency = z.infer<typeof TurnLatency>;
+
 export const Turn = z.object({
   id: z.string(),
   botId: z.string(),
@@ -168,6 +181,7 @@ export const Turn = z.object({
   sessionId: z.string().optional(),
   status: TurnStatus,
   usage: TurnUsage,
+  latency: TurnLatency.optional(),
   createdAt: isoTimestamp(),
 });
 export type Turn = z.infer<typeof Turn>;

@@ -29,6 +29,13 @@
       "when": 1790712459588,
       "tag": "0003_perpetual_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790846765919,
+      "tag": "0004_wet_wind_dancer",
+      "breakpoints": true
     }
   ]
 }

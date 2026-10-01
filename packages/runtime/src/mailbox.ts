@@ -6,6 +6,7 @@ import type {
   EngineId,
   MessageKind,
   ToolApprovalRequest,
+  Turn,
   TurnHandle,
   TurnHooks,
   TurnInput,
@@ -60,6 +61,7 @@ export interface TurnOutcome {
 interface QueuedTurn {
   input: EnqueueTurnInput;
   resolve: (outcome: TurnOutcome) => void;
+  queuedAt: string;
 }
 
 interface ActiveTurn {
@@ -119,7 +121,7 @@ export class Mailbox {
   submit(input: EnqueueTurnInput): Promise<TurnOutcome> {
     return new Promise((resolve) => {
       const queue = this.queues.get(input.bot.id) ?? [];
-      queue.push({ input, resolve });
+      queue.push({ input, resolve, queuedAt: this.opts.clock.now().toISOString() });
       this.queues.set(input.bot.id, queue);
       this.pump(input.bot.id);
     });
@@ -218,6 +220,18 @@ export class Mailbox {
       turnId,
       payload: { engine: input.engine, model: input.model },
     });
+    // C10: when each stage happened, to see what makes a first answer slow.
+    const mark = (marks: NonNullable<Turn["latency"]>) => {
+      try {
+        this.opts.turns.markLatency?.(turnId, marks);
+      } catch {
+        // Measurements never break a turn.
+      }
+    };
+    const nowIso = () => this.opts.clock.now().toISOString();
+    mark({ queuedAt: item.queuedAt });
+    let sawDelta = false;
+    let sawTool = false;
 
     let turnInput: TurnInput = { ...input, sessionId };
     if (input.prepareTurn) {
@@ -267,6 +281,13 @@ export class Mailbox {
       const hooks: TurnHooks = {
         emit: (e: EngineEvent) => {
           watch?.activity(e as { type: string; toolUseId?: string });
+          if (e.type === "text_delta" && !sawDelta) {
+            sawDelta = true;
+            mark({ firstDeltaAt: nowIso() });
+          } else if (e.type === "tool_started" && !sawTool) {
+            sawTool = true;
+            mark({ firstToolAt: nowIso() });
+          }
           if (e.type === "tool_started") {
             toolCallCount += 1;
             if (replyText.trim()) lastSaid = replyText;
@@ -282,6 +303,7 @@ export class Mailbox {
             : this.handleApprovalRequest(botId, input, r),
       };
       try {
+        if (attempt === 1) mark({ engineStartedAt: nowIso() });
         handle = driver.startTurn(attemptInput, hooks);
         const active: ActiveTurn = { handle, turnId };
         this.active.set(botId, active);
@@ -333,6 +355,7 @@ export class Mailbox {
     }
     await this.finish(input, turnId);
     await Promise.all(pendingToolEffects);
+    mark({ completedAt: nowIso() });
 
     const status = result.isError
       ? result.errorMessage === "interrupted"

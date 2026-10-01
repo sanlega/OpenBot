@@ -742,3 +742,24 @@ describe("Mailbox stall watch (C8)", () => {
     expect(runtime.mailbox.isBusy("bot_a")).toBe(false);
   });
 });
+
+describe("Mailbox latency marks (C10)", () => {
+  it("records when the turn was queued, the engine started, and the first text and tool came", async () => {
+    const driver = new ScriptedEngineDriver(async (hooks) => {
+      hooks.emit({ type: "tool_started", toolName: "Bash", input: {}, toolUseId: "t1" });
+      hooks.emit({ type: "tool_completed", toolUseId: "t1", output: "ok", isError: false });
+      hooks.emit({ type: "text_delta", text: "done" });
+      return turnResult();
+    });
+    const runtime = buildRuntime(driver);
+    const outcome = await runtime.mailbox.submit(makeInput(runtime));
+    const turn = runtime.turns.get(outcome.turnId!)!;
+    expect(Object.keys(turn.latency ?? {}).sort()).toEqual([
+      "completedAt",
+      "engineStartedAt",
+      "firstDeltaAt",
+      "firstToolAt",
+      "queuedAt",
+    ]);
+  });
+});
