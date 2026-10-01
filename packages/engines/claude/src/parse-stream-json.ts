@@ -152,6 +152,9 @@ export function handleClaudeLine(
       inputTokens: state.usage.inputTokens,
       outputTokens: state.usage.outputTokens,
       usd: state.usage.usd,
+      ...(typeof usage?.cache_read_input_tokens === "number"
+        ? { cacheReadTokens: usage.cache_read_input_tokens }
+        : {}),
     });
     if (state.isError && !state.errorMessage) {
       state.errorMessage = describeResultError(line);

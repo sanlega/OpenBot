@@ -154,6 +154,8 @@ export const TurnUsage = z.object({
   inputTokens: z.number().int().nonnegative().default(0),
   outputTokens: z.number().int().nonnegative().default(0),
   usd: z.number().nonnegative().default(0),
+  /** Input tokens read from the prompt cache, when the engine reports it. */
+  cacheReadTokens: z.number().int().nonnegative().optional(),
 });
 export type TurnUsage = z.infer<typeof TurnUsage>;
 

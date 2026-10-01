@@ -77,7 +77,14 @@ export type EngineEvent =
   | { type: "text_delta"; text: string }
   | { type: "tool_started"; toolName: string; input: unknown; toolUseId: string }
   | { type: "tool_completed"; toolUseId: string; output: unknown; isError: boolean }
-  | { type: "usage"; inputTokens: number; outputTokens: number; usd?: number }
+  | {
+      type: "usage";
+      inputTokens: number;
+      outputTokens: number;
+      usd?: number;
+      /** Input tokens served from the prompt cache (C6: a stable tool list keeps this high). */
+      cacheReadTokens?: number;
+    }
   | { type: "session_started"; sessionId: string }
   | { type: "error"; message: string; authFailure?: boolean };
 

@@ -763,3 +763,28 @@ describe("Mailbox latency marks (C10)", () => {
     ]);
   });
 });
+
+describe("Mailbox per-turn usage", () => {
+  it("stores what the turn used, including prompt-cache reads", async () => {
+    const driver = new ScriptedEngineDriver(async (hooks) => {
+      hooks.emit({
+        type: "usage",
+        inputTokens: 100,
+        outputTokens: 20,
+        usd: 0.01,
+        cacheReadTokens: 80,
+      });
+      hooks.emit({ type: "usage", inputTokens: 10, outputTokens: 5, usd: 0.002 });
+      hooks.emit({ type: "text_delta", text: "ok" });
+      return turnResult();
+    });
+    const runtime = buildRuntime(driver);
+    const outcome = await runtime.mailbox.submit(makeInput(runtime));
+    expect(runtime.turns.get(outcome.turnId!)!.usage).toEqual({
+      inputTokens: 110,
+      outputTokens: 25,
+      usd: 0.012,
+      cacheReadTokens: 80,
+    });
+  });
+});

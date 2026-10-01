@@ -230,6 +230,8 @@ export class Mailbox {
     };
     const nowIso = () => this.opts.clock.now().toISOString();
     mark({ queuedAt: item.queuedAt });
+    // What this turn used (engines report per-turn totals or deltas; either way they add up).
+    const turnUsage = { inputTokens: 0, outputTokens: 0, usd: 0, cacheReadTokens: 0 };
     let sawDelta = false;
     let sawTool = false;
 
@@ -281,6 +283,12 @@ export class Mailbox {
       const hooks: TurnHooks = {
         emit: (e: EngineEvent) => {
           watch?.activity(e as { type: string; toolUseId?: string });
+          if (e.type === "usage") {
+            turnUsage.inputTokens += e.inputTokens;
+            turnUsage.outputTokens += e.outputTokens;
+            turnUsage.usd += e.usd ?? 0;
+            turnUsage.cacheReadTokens += e.cacheReadTokens ?? 0;
+          }
           if (e.type === "text_delta" && !sawDelta) {
             sawDelta = true;
             mark({ firstDeltaAt: nowIso() });
@@ -362,7 +370,16 @@ export class Mailbox {
         ? "interrupted"
         : "failed"
       : "completed";
-    this.opts.turns.update(turnId, { status, sessionId: result.sessionId });
+    this.opts.turns.update(turnId, {
+      status,
+      sessionId: result.sessionId,
+      usage: {
+        inputTokens: turnUsage.inputTokens,
+        outputTokens: turnUsage.outputTokens,
+        usd: turnUsage.usd,
+        ...(turnUsage.cacheReadTokens > 0 ? { cacheReadTokens: turnUsage.cacheReadTokens } : {}),
+      },
+    });
     if (status === "completed" && result.sessionId) {
       this.opts.sessions?.set(botId, input.engine, result.sessionId);
     } else if (status === "failed" && storedSessionId) {
