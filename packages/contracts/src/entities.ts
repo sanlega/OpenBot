@@ -475,6 +475,10 @@ export const Delegation = z.object({
   assigneeBotId: z.string(),
   /** The thread the human is talking in (the requester's); worker cards and results show there. */
   ownerThreadId: z.string(),
+  /** The task this one was handed out for (the requester was working on it), if any. */
+  parentId: z.string().optional(),
+  /** Hand-offs from the user: 1 for a task the user's own bot handed out. */
+  depth: z.number().int().positive().optional(),
   title: z.string(),
   state: DelegationState,
   statusMessage: z.string().optional(),

@@ -75,7 +75,7 @@ export interface PermissionBrokerOptions {
 export class PermissionBroker {
   private readonly pending = new Map<
     string,
-    { resolve: (o: "allow" | "deny") => void; timer: number }
+    { resolve: (o: "allow" | "deny") => void; timer: number; turnId?: string }
   >();
 
   constructor(private readonly opts: PermissionBrokerOptions) {}
@@ -240,7 +240,7 @@ export class PermissionBroker {
    * {@link resolveApproval}, or times out (30 min default, plan §5 WS2) and
    * resolves to `"deny"`.
    */
-  waitForApproval(approvalId: string): Promise<"allow" | "deny"> {
+  waitForApproval(approvalId: string, turnId?: string): Promise<"allow" | "deny"> {
     const approval = this.opts.approvalStore.get(approvalId);
     if (!approval) throw new Error(`PermissionBroker: unknown approval ${approvalId}`);
     if (approval.status !== "pending") {
@@ -257,7 +257,7 @@ export class PermissionBroker {
         this.emitResolved(approvalId, "expired");
         resolvePromise("deny");
       }, timeoutMs);
-      this.pending.set(approvalId, { resolve: resolvePromise, timer });
+      this.pending.set(approvalId, { resolve: resolvePromise, timer, turnId });
     });
   }
 
@@ -265,12 +265,14 @@ export class PermissionBroker {
    * K2: the turn waiting on these cards ended (stopped, stalled, interrupted): nobody can act on
    * the answer any more. The cards close as expired — not denied — and the next turn is told so.
    */
-  abandonFor(botId: string, chainId: string): string[] {
+  abandonTurn(turnId: string): string[] {
     const abandoned: string[] = [];
     for (const [approvalId, pending] of [...this.pending]) {
+      // Only the cards THIS turn waits on: a background computer task's card outlives the turn
+      // that started it and is still answered.
+      if (pending.turnId !== turnId) continue;
       const approval = this.opts.approvalStore.get(approvalId);
-      if (!approval || approval.botId !== botId || approval.chainId !== chainId) continue;
-      if (approval.kind === "bot_request" || approval.status !== "pending") continue;
+      if (!approval || approval.kind === "bot_request" || approval.status !== "pending") continue;
       this.opts.clock.clearTimeout(pending.timer);
       this.pending.delete(approvalId);
       this.opts.approvalStore.resolve(approvalId, "expired");

@@ -76,3 +76,32 @@ describe("POST /api/reset (M2)", () => {
     expect(await ctx.vault.get("anthropic.apiKey")).toBe("kept-key");
   });
 });
+
+describe("POST /api/tasks/:id/cancel (L1)", () => {
+  it("answers 404 for an unknown task and 409 for one that already ended", async () => {
+    t = await createTestContext();
+    app = await buildServer(t.ctx);
+    expect(
+      (await app.inject({ method: "POST", url: "/api/tasks/dlg_missing/cancel" })).statusCode,
+    ).toBe(404);
+    const now = t.ctx.clock.now().toISOString();
+    t.ctx.repos.delegations.create({
+      id: "dlg_done",
+      chainId: "chn_1",
+      requesterBotId: "bot_a",
+      assigneeBotId: "bot_b",
+      ownerThreadId: "thr_a",
+      title: "Done already",
+      state: "completed",
+      roundTrips: 1,
+      wakePending: false,
+      createdAt: now,
+      updatedAt: now,
+      lastEventAt: now,
+    });
+    const ended = await app.inject({ method: "POST", url: "/api/tasks/dlg_done/cancel" });
+    expect(ended.statusCode).toBe(409);
+    const list = await app.inject({ method: "GET", url: "/api/tasks" });
+    expect(list.json().tasks.map((x: { id: string }) => x.id)).toEqual(["dlg_done"]);
+  });
+});

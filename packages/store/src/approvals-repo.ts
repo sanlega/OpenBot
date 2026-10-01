@@ -32,11 +32,15 @@ export class ApprovalsRepo {
     return row ? toApproval(row) : undefined;
   }
 
-  list(filter: { status?: Approval["status"] } = {}): Approval[] {
+  list(filter: { status?: Approval["status"]; botId?: string } = {}): Approval[] {
+    const conditions = [
+      filter.status ? eq(approvals.status, filter.status) : undefined,
+      filter.botId ? eq(approvals.botId, filter.botId) : undefined,
+    ].filter((c) => c !== undefined);
     const rows = this.db
       .select()
       .from(approvals)
-      .where(filter.status ? eq(approvals.status, filter.status) : undefined)
+      .where(conditions.length ? and(...conditions) : undefined)
       .all();
     return rows.map(toApproval);
   }

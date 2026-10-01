@@ -439,6 +439,9 @@ export function createTurnMailbox(
       await deps.runtime.mailbox.stop(turn.botId);
       return { ok: true };
     },
+    cancelTask: async (botId: string, delegationId: string) => {
+      await deps.runtime.mailbox.cancelTask(botId, delegationId);
+    },
     stopBot: async (botId: string) => {
       if (!ctx.repos.bots.getById(botId)) return { ok: false, reason: "bot not found" };
       await deps.runtime.mailbox.stop(botId);
@@ -628,7 +631,11 @@ export function wakeRequesterOnDelegations(
       "The user already sees a card in this chat with the above. Add only what they still need to know or do next (a decision, credentials, the next step). If there is nothing to add, reply with exactly NO_REPLY.",
     );
     if (kind === "completed") lines.push("Do not delegate the same task again.");
-    else if (kind === "blocked" || kind === "stalled") {
+    else if (kind === "cancelled") {
+      lines.push(
+        "Someone else cancelled it (see Detail). Do not send it again unless the user asks; tell the user only if they were waiting for this result.",
+      );
+    } else if (kind === "blocked" || kind === "stalled") {
       lines.push(
         `To answer or redirect it, call send_message to bot "${slug}"; it continues the same task.`,
       );
@@ -745,6 +752,7 @@ async function submitWithFailover(
     if (!id) return t;
     return {
       ...t,
+      taskId: id,
       prepareTurn: async (turnId) => {
         tracker.bindTurn(t.bot.id, id);
         return (await t.prepareTurn?.(turnId)) ?? {};

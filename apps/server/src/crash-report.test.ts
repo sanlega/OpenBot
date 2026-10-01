@@ -82,3 +82,38 @@ describe("harness reminders (K2)", () => {
     expect(text).toMatch(/previous turn was interrupted/);
   });
 });
+
+describe("start-up after a crash (K2)", () => {
+  it("closes cards a lost turn waited on, but keeps a bot's own request and routine cards", async () => {
+    const { closeOrphanedTurns, toolLoopMode } = await import("./bootstrap.js");
+    home = await mkdtemp(join(tmpdir(), "openbot-orphans-"));
+    ctx = await createCoreContext({
+      clock: new FakeClock(new Date("2026-10-01T10:00:00Z")),
+      config: loadConfig({ env: { OPENBOT_HOME: home }, overrides: { dbPath: ":memory:" } }),
+      disableNdjson: true,
+    });
+    const card = (id: string, kind: "tool" | "bot_request" | "routine_live") =>
+      ctx!.repos.approvals.create({
+        id,
+        kind,
+        botId: "bot_a",
+        summary: id,
+        detail: "",
+        status: "pending",
+        expiresAt: "2026-10-01T10:30:00.000Z",
+        createdAt: "2026-10-01T09:59:00.000Z",
+      });
+    card("apr_tool", "tool");
+    card("apr_ask", "bot_request");
+    card("apr_routine", "routine_live");
+    await closeOrphanedTurns(ctx);
+    expect(ctx.repos.approvals.getById("apr_tool")?.resolution).toBe("expired");
+    expect(ctx.repos.approvals.getById("apr_ask")?.status).toBe("pending");
+    expect(ctx.repos.approvals.getById("apr_routine")?.status).toBe("pending");
+    expect([toolLoopMode(undefined), toolLoopMode("OFF"), toolLoopMode("shadow")]).toEqual([
+      "on",
+      "off",
+      "shadow",
+    ]);
+  });
+});

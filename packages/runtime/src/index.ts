@@ -39,6 +39,8 @@ export interface RuntimeOptions {
   stallWatch?: MailboxOptions["stallWatch"];
   /** C1: records loops in the engines' own tool calls (shadow). */
   onToolLoop?: MailboxOptions["onToolLoop"];
+  /** K3: what to do on a loop in the engines' own tools (on, shadow, off). */
+  nativeToolLoops?: MailboxOptions["nativeToolLoops"];
   loopGuards?: Pick<
     LoopGuardOptions,
     "maxMessagesPerPairPerWindow" | "pairWindowMs" | "maxRepeatedContent"
@@ -133,6 +135,7 @@ export function createRuntime(opts: RuntimeOptions): Runtime {
     sessions,
     stallWatch: opts.stallWatch,
     onToolLoop: opts.onToolLoop,
+    nativeToolLoops: opts.nativeToolLoops,
   });
 
   return {

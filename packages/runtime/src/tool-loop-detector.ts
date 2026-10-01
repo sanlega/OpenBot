@@ -115,6 +115,11 @@ export class ToolLoopDetector {
     return this.mode === "on" ? action : "none";
   }
 
+  /** How many times in a row the turn's last call returned the same thing. */
+  repetitions(turnId: string): number {
+    return this.turns.get(turnId)?.n ?? 0;
+  }
+
   /** The turn is over: forget it. */
   endTurn(turnId: string): void {
     this.turns.delete(turnId);

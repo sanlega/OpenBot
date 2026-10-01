@@ -881,3 +881,53 @@ class StubAskDecisions extends FakeDecisionService {
     return "human" as const;
   }
 }
+
+describe("Mailbox stops only one task's work (L1) and abandons only its turn's cards (K2)", () => {
+  it("cancelTask stops the turn for that task and its queued turns, nothing else", async () => {
+    let releaseFirst: () => void = () => undefined;
+    const started: string[] = [];
+    const driver = new ScriptedEngineDriver(async (_hooks, input) => {
+      started.push(input.text);
+      if (input.text === "task A") await new Promise<void>((r) => (releaseFirst = r));
+      return turnResult();
+    });
+    // The scripted driver's interrupt does nothing; make the first turn end when interrupted.
+    const original = driver.startTurn.bind(driver);
+    driver.startTurn = (input, hooks) => {
+      const handle = original(input, hooks);
+      return { ...handle, interrupt: async () => releaseFirst() };
+    };
+    const runtime = buildRuntime(driver);
+    const a = runtime.mailbox.submit(makeInput(runtime, { text: "task A", taskId: "dlg_A" }));
+    const queuedA = runtime.mailbox.submit(makeInput(runtime, { text: "more A", taskId: "dlg_A" }));
+    const user = runtime.mailbox.submit(makeInput(runtime, { text: "user message" }));
+    await new Promise((r) => setTimeout(r, 5));
+    await runtime.mailbox.cancelTask("bot_a", "dlg_A");
+    expect((await queuedA).status).toBe("refused");
+    await a;
+    expect((await user).status).toBe("completed");
+    expect(started).toEqual(["task A", "user message"]);
+  });
+
+  it("a turn's end leaves cards that other work is waiting on", async () => {
+    const runtime = buildRuntime(new FakeEngineDriver({ replies: ["ok"] }));
+    const ask = (action: string) =>
+      runtime.broker.requireApproval(
+        {
+          botId: "bot_a",
+          chainId: "chn_1",
+          kind: "computer_action",
+          action,
+          summary: action,
+          detail: action,
+        },
+        "test",
+      );
+    const mine = ask("click Delete").approvalId!;
+    const background = ask("click Pay").approvalId!;
+    void runtime.broker.waitForApproval(mine, "turn_1");
+    void runtime.broker.waitForApproval(background);
+    expect(runtime.broker.abandonTurn("turn_1")).toEqual([mine]);
+    expect(runtime.approvals.get(background)?.status).toBe("pending");
+  });
+});

@@ -120,7 +120,7 @@ export class DelegationTracker {
       )!;
       return { ok: true, delegation: updated, continued: true };
     }
-    const depth = this.depthOf(input.requesterBotId) + 1;
+    const depth = (parent ? (parent.depth ?? this.depthOf(input.requesterBotId)) : 0) + 1;
     if (depth > MAX_DELEGATION_DEPTH) {
       return {
         ok: false,
@@ -149,6 +149,8 @@ export class DelegationTracker {
       requesterBotId: input.requesterBotId,
       assigneeBotId: input.assigneeBotId,
       ownerThreadId: ownerThread.id,
+      ...(parent ? { parentId: parent.id } : {}),
+      depth,
       title: titleOf(input.text),
       state: "submitted",
       roundTrips: 1,
@@ -161,7 +163,10 @@ export class DelegationTracker {
     return { ok: true, delegation, continued: false };
   }
 
-  /** How many open hand-offs separate this bot from the user (0: the user asked it directly). */
+  /**
+   * How many open hand-offs separate this bot from the user, for tasks made before depths were
+   * stored (0: the user asked it directly).
+   */
   depthOf(botId: string): number {
     let depth = 0;
     let bot = botId;
@@ -180,21 +185,24 @@ export class DelegationTracker {
    * helpers have nobody to report to). The workers' turns are stopped; nobody is woken: whoever
    * cancelled already knows.
    */
-  async cancel(id: string, by: string): Promise<Delegation[]> {
+  async cancel(id: string, by: { name: string; botId?: string }): Promise<Delegation[]> {
     const d = this.repo.getById(id);
     if (!d || !OPEN.has(d.state)) return [];
     const cancelled: Delegation[] = [];
-    for (const child of this.repo.list({ requesterBotId: d.assigneeBotId, open: true })) {
+    // Only the tasks handed out FOR this one (its helpers), not the worker's other work.
+    for (const child of this.repo.list({ parentId: id, open: true })) {
       cancelled.push(...(await this.cancel(child.id, by)));
     }
     const now = this.now();
+    // Whoever cancelled knows; the bot that asked is told when someone else did it.
+    const tellRequester = by.botId !== d.requesterBotId;
     const updated = this.repo.update(
       id,
       {
         state: "interrupted",
-        statusMessage: `cancelled by ${by}`,
-        wakePending: false,
-        wakeKind: "stopped",
+        statusMessage: `cancelled by ${by.name}`,
+        wakePending: tellRequester,
+        wakeKind: "cancelled",
         lastEventAt: now.toISOString(),
       },
       now,
@@ -205,8 +213,13 @@ export class DelegationTracker {
       cancelled.push(updated);
       await this.announce(updated);
     }
-    // Its work stops now (a turn it is running for this task, and what is queued).
-    await this.ctx.mailbox?.stopBot?.(d.assigneeBotId).catch(() => undefined);
+    // Only this task's own work stops: the turn running for it and the turns queued for it. The
+    // worker's other tasks, the user's messages to it and its routines go on. Never the turn of
+    // whoever is cancelling.
+    if (d.assigneeBotId !== by.botId) {
+      await this.ctx.mailbox?.cancelTask?.(d.assigneeBotId, id).catch(() => undefined);
+    }
+    if (updated && tellRequester) await this.deliverWake(updated.id);
     return cancelled;
   }
 
@@ -519,6 +532,8 @@ function cardText(name: string, d: Delegation, kind: string): string {
       return `${name} has shown no activity on ${task}: ${d.statusMessage ?? "it may be stuck"}.`;
     case "stopped":
       return `${name} was stopped on ${task}: the user stopped it.`;
+    case "cancelled":
+      return `${name} stopped working on ${task}: it was ${d.statusMessage ?? "cancelled"}.`;
     case "interrupted":
       return `${name} was interrupted on ${task}: ${d.statusMessage ?? "it stopped early"}.${d.result ? `\n\nWhat it had so far:\n${d.result}` : ""}`;
     default:

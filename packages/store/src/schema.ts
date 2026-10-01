@@ -371,6 +371,8 @@ export const delegations = sqliteTable(
     requesterBotId: text("requester_bot_id").notNull(),
     assigneeBotId: text("assignee_bot_id").notNull(),
     ownerThreadId: text("owner_thread_id").notNull(),
+    parentId: text("parent_id"),
+    depth: integer("depth"),
     title: text("title").notNull(),
     state: text("state").notNull(),
     statusMessage: text("status_message"),
@@ -387,6 +389,7 @@ export const delegations = sqliteTable(
     index("delegations_assignee_idx").on(t.assigneeBotId),
     index("delegations_requester_idx").on(t.requesterBotId),
     index("delegations_state_idx").on(t.state),
+    index("delegations_parent_idx").on(t.parentId),
   ],
 );
 

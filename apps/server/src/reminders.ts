@@ -20,28 +20,30 @@ export function harnessReminders(ctx: CoreContext, bot: Bot): string[] {
     );
   }
   // K2: a card nobody answered because the turn ended is not a refusal.
+  // Only cards closed before their deadline (the turn ended first): one that timed out after 30
+  // minutes of no answer is old news, and asking again every turn would nag.
   const since = last?.createdAt ?? "";
+  const now = ctx.clock.now().toISOString();
   const unanswered = ctx.repos.approvals
-    .list({})
+    .list({ botId: bot.id })
     .filter(
       (a) =>
-        a.botId === bot.id &&
         a.resolution === "expired" &&
         a.kind !== "bot_request" &&
-        a.createdAt >= since,
+        a.createdAt >= since &&
+        a.expiresAt > now,
     )
     .slice(0, 3);
   if (unanswered.length > 0) {
     reminders.push(
       `Not answered (your turn ended first), so NOT refused by the user: ${unanswered
         .map((a) => `"${a.summary}"`)
-        .join(", ")}. If it is still needed, run it again and it will ask again.`,
+        .join(
+          ", ",
+        )}. If it is still needed and the user did not stop you, run it again and it will ask again.`,
     );
   }
-  const cards = ctx.repos.approvals
-    .list({ status: "pending" })
-    .filter((a) => a.botId === bot.id)
-    .slice(0, 3);
+  const cards = ctx.repos.approvals.list({ status: "pending", botId: bot.id }).slice(0, 3);
   if (cards.length > 0) {
     reminders.push(
       `Waiting for the user's approval: ${cards.map((c) => `"${c.summary}"`).join(", ")}. ` +

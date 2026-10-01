@@ -113,6 +113,8 @@ export async function bootstrapHarness(
     sessionStore: new RepoSessionStore(ctx),
     // C1: loops in the engines' own tools are recorded (shadow) to calibrate before acting.
     onToolLoop: (detection) => recordToolLoop(ctx, detection),
+    // K3: OPENBOT_TOOL_LOOPS=shadow only records loops in the engines' own tools; off ignores them.
+    nativeToolLoops: toolLoopMode(process.env.OPENBOT_TOOL_LOOPS),
   });
 
   // Filled once `integrateMcp` has run below; turns read it lazily.
@@ -467,7 +469,12 @@ class RepoRuleStore implements RuleStore {
  * them as interrupted so the UI stops showing them as "working" and their bots
  * accept new messages.
  */
-async function closeOrphanedTurns(ctx: CoreContext): Promise<void> {
+export function toolLoopMode(value: string | undefined): "off" | "shadow" | "on" {
+  const mode = value?.trim().toLowerCase();
+  return mode === "off" || mode === "shadow" ? mode : "on";
+}
+
+export async function closeOrphanedTurns(ctx: CoreContext): Promise<void> {
   for (const turn of ctx.repos.turns.listOpen()) {
     ctx.repos.turns.updateStatus(turn.id, "interrupted");
     await ctx.eventBus.publish({

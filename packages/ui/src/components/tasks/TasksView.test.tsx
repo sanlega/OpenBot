@@ -63,3 +63,16 @@ describe("TasksView (L3)", () => {
     expect(post).toHaveBeenCalledWith("/api/tasks/dlg_1/cancel", {});
   });
 });
+
+describe("TasksView when the harness does not answer", () => {
+  it("says it could not load and offers to try again", async () => {
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ tasks: [task({})] });
+    transport = { get, post: vi.fn() } as unknown as Transport;
+    render(<TasksView />);
+    await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Compare three CRM tools")).toBeTruthy();
+  });
+});

@@ -45,6 +45,8 @@ export interface EnqueueTurnInput extends TurnInput {
   prepareTurn?: (turnId: string) => Promise<Partial<Pick<TurnInput, "mcpServers">>>;
   /** Called when the turn is over, however it ended: clean up whatever `prepareTurn` set up. */
   finishTurn?: (turnId: string) => void | Promise<void>;
+  /** The delegated task this turn works on, so cancelling the task stops only its turns. */
+  taskId?: string;
   /** Per-run cap (routine runs): the turn is interrupted once its chain's usage exceeds it. */
   runBudget?: { usd?: number; tokens?: number };
 }
@@ -68,6 +70,7 @@ interface QueuedTurn {
 interface ActiveTurn {
   handle: TurnHandle;
   turnId: string;
+  taskId?: string;
 }
 
 export interface MailboxOptions {
@@ -128,11 +131,13 @@ export class Mailbox {
    * mid-turn (Claude, Codex); for the others, a queued prompt would start a new exchange.
    */
   private nudge(botId: string, engine: EngineId, text: string): void {
+    // Codex takes text into the running turn (turn/steer). Claude Code would read it as a new
+    // user message that can outlive the turn, so it is left out (its refusals carry the text in
+    // the permission prompt, and its loops are recorded only); ACP agents cannot take it at all.
     const driver = this.opts.drivers[engine];
     const live =
-      driver?.describe?.().capabilities.steer ??
-      (engine === "claude" || engine === "codex" || engine === "fake");
-    if (!live) return;
+      driver?.describe?.().capabilities.steer ?? (engine === "codex" || engine === "fake");
+    if (!live || engine === "claude") return;
     const active = this.active.get(botId);
     if (!active) return;
     // After the engine has its answer to the current call, not in the middle of it.
@@ -166,6 +171,21 @@ export class Mailbox {
     const active = this.active.get(botId);
     if (!active) return;
     await active.handle.interrupt();
+  }
+
+  /**
+   * L1: stops only what a Bot does for one task: its running turn if that turn is for the task,
+   * and the queued turns for it. Everything else it was doing or had queued goes on.
+   */
+  async cancelTask(botId: string, taskId: string): Promise<void> {
+    const queue = this.queues.get(botId) ?? [];
+    const kept = queue.filter((item) => item.input.taskId !== taskId);
+    for (const item of queue) {
+      if (item.input.taskId === taskId) item.resolve({ status: "refused", reason: "stopped" });
+    }
+    this.queues.set(botId, kept);
+    const active = this.active.get(botId);
+    if (active?.taskId === taskId) await active.handle.interrupt();
   }
 
   /** Interrupts the active turn (if any) and drains — refuses — every queued turn for this Bot. */
@@ -328,13 +348,13 @@ export class Mailbox {
         },
         requestApproval: (r: ToolApprovalRequest) =>
           watch
-            ? watch.whileWaitingOnUser(() => this.handleApprovalRequest(botId, input, r))
-            : this.handleApprovalRequest(botId, input, r),
+            ? watch.whileWaitingOnUser(() => this.handleApprovalRequest(botId, input, r, turnId))
+            : this.handleApprovalRequest(botId, input, r, turnId),
       };
       try {
         if (attempt === 1) mark({ engineStartedAt: nowIso() });
         handle = driver.startTurn(attemptInput, hooks);
-        const active: ActiveTurn = { handle, turnId };
+        const active: ActiveTurn = { handle, turnId, taskId: input.taskId };
         this.active.set(botId, active);
         watch?.start();
         result = await active.handle.done;
@@ -383,7 +403,7 @@ export class Mailbox {
       };
     }
     await this.finish(input, turnId);
-    this.opts.broker.abandonFor(botId, input.chainId);
+    this.opts.broker.abandonTurn(turnId);
     await Promise.all(pendingToolEffects);
     mark({ completedAt: nowIso() });
 
@@ -529,14 +549,19 @@ export class Mailbox {
         });
         const call = this.toolCalls.get(event.toolUseId);
         this.toolCalls.delete(event.toolUseId);
-        // The engine's own tools (shell, files) are watched in shadow: recorded, never acted on.
-        // OpenBot's tools are watched (and answered) by the MCP server itself.
+        // K3: the engine's own tools (shell, files) are watched too; a loop is recorded and, for
+        // engines that take text mid-turn, answered with a reminder. OpenBot's own tools are
+        // watched (and answered) by the MCP server itself.
         if (call && this.nativeLoops && !call.name.startsWith("mcp__openbot")) {
           const output =
             typeof event.output === "string" ? event.output : JSON.stringify(event.output ?? null);
           const action = this.nativeLoops.observe(turnId, call.name, call.input, output, botId);
           if (action !== "none") {
-            this.nudge(botId, input.engine, loopReminder(action, action === "retry_once" ? 2 : 3));
+            this.nudge(
+              botId,
+              input.engine,
+              loopReminder(action, this.nativeLoops.repetitions(turnId)),
+            );
           }
         }
         return;
@@ -619,6 +644,7 @@ export class Mailbox {
     botId: string,
     input: EnqueueTurnInput,
     r: ToolApprovalRequest,
+    turnId: string,
   ): Promise<"allow" | "deny"> {
     // OpenBot's own tools carry their own gates (spawn/notify gates, caps, dry-run simulation); the
     // engine must not put a card in front of the user for them (Claude gets the same via allowTools).
@@ -657,7 +683,7 @@ export class Mailbox {
       this.nudge(botId, input.engine, refusalMessage("blocked", decision.reason));
       return "deny";
     }
-    const answer = await this.opts.broker.waitForApproval(decision.approvalId as string);
+    const answer = await this.opts.broker.waitForApproval(decision.approvalId as string, turnId);
     if (answer === "deny" && this.active.has(botId)) {
       const card = this.opts.broker.approval?.(decision.approvalId as string);
       const expired = card?.resolution === "expired";

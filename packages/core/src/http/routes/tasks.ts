@@ -19,7 +19,7 @@ export function registerTaskRoutes(app: FastifyInstance, ctx: CoreContext): void
         ...d,
         requesterName: ctx.repos.bots.getById(d.requesterBotId)?.name,
         assigneeName: ctx.repos.bots.getById(d.assigneeBotId)?.name,
-        depth: tracker.depthOf(d.requesterBotId) + 1,
+        depth: d.depth ?? tracker.depthOf(d.requesterBotId) + 1,
       }));
     return { tasks };
   });
@@ -28,7 +28,7 @@ export function registerTaskRoutes(app: FastifyInstance, ctx: CoreContext): void
     if (!requireOwner(request, reply)) return;
     const { id } = request.params as { id: string };
     if (!ctx.repos.delegations.getById(id)) return reply.code(404).send({ error: "not_found" });
-    const cancelled = await delegationsOf(ctx).cancel(id, "you");
+    const cancelled = await delegationsOf(ctx).cancel(id, { name: "you" });
     if (cancelled.length === 0) {
       return reply.code(409).send({ error: "not_open", reason: "that task already ended" });
     }

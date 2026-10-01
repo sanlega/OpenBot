@@ -19,7 +19,7 @@ const OPEN = new Set(["submitted", "working", "input_required"]);
 const STATE_LABEL: Record<Delegation["state"], { label: string; tone: string }> = {
   submitted: { label: "Handed over", tone: "muted" },
   working: { label: "Working", tone: "accent" },
-  input_required: { label: "Waiting for you", tone: "warning" },
+  input_required: { label: "Waiting for an answer", tone: "warning" },
   completed: { label: "Done", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
   interrupted: { label: "Stopped", tone: "muted" },
@@ -36,34 +36,54 @@ export function TasksView() {
   const [open, setOpen] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const loadRef = useRef<() => void>(() => undefined);
+  const lastLoad = useRef(0);
+  const pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   loadRef.current = () => {
+    lastLoad.current = Date.now();
     void transport
       .get<{ tasks: TaskRow[] }>("/api/tasks")
-      .then((r) => setTasks(r.tasks ?? []))
-      .catch(() => setTasks((t) => t ?? []));
+      .then((r) => {
+        setTasks(r.tasks ?? []);
+        setLoadFailed(false);
+      })
+      .catch(() => {
+        setLoadFailed(true);
+        setTasks((t) => t ?? []);
+      });
   };
   useEffect(() => loadRef.current(), []);
-  // Live: events settle, then the board is read again.
+  // Live, but at most every 2 s: a streaming reply emits many events, and a debounce would keep
+  // the board from ever refreshing while a bot writes.
   useEffect(() => {
-    if (state.lastSeq === 0) return;
-    const timer = setTimeout(() => loadRef.current(), 700);
-    return () => clearTimeout(timer);
+    if (state.lastSeq === 0 || pending.current) return;
+    const wait = Math.max(0, 2_000 - (Date.now() - lastLoad.current));
+    pending.current = setTimeout(() => {
+      pending.current = undefined;
+      loadRef.current();
+    }, wait);
   }, [state.lastSeq]);
+  useEffect(() => () => clearTimeout(pending.current), []);
 
   const botById = useMemo(() => new Map(bots.map((b) => [b.id, b])), [bots]);
   const visible = (tasks ?? []).filter((t) => filter === "all" || OPEN.has(t.state));
   const openCount = (tasks ?? []).filter((t) => OPEN.has(t.state)).length;
 
   const cancel = async (id: string) => {
+    if (cancelling) return;
     setError(null);
-    setConfirming(null);
+    setCancelling(id);
     try {
       await transport.post(`/api/tasks/${id}/cancel`, {});
+      setConfirming(null);
       loadRef.current();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not cancel the task.");
+    } finally {
+      setCancelling(null);
     }
   };
 
@@ -104,6 +124,19 @@ export function TasksView() {
             <div className="feed-skeleton" aria-hidden>
               <span />
               <span />
+            </div>
+          ) : loadFailed && (tasks ?? []).length === 0 ? (
+            <div className="empty-block">
+              <ListChecks size={22} aria-hidden />
+              <p className="empty-title">Couldn’t load the tasks</p>
+              <p className="empty-text">Check the connection to OpenBot and try again.</p>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => loadRef.current()}
+              >
+                Try again
+              </button>
             </div>
           ) : visible.length === 0 ? (
             <div className="empty-block">
@@ -177,9 +210,10 @@ export function TasksView() {
                                 <button
                                   type="button"
                                   className="btn btn-danger btn-sm"
+                                  disabled={cancelling === t.id}
                                   onClick={() => void cancel(t.id)}
                                 >
-                                  Cancel task
+                                  {cancelling === t.id ? "Cancelling…" : "Cancel task"}
                                 </button>
                               </>
                             ) : (

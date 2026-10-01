@@ -478,7 +478,10 @@ export class McpMachineServiceAdapter {
     );
     if (decision.outcome === "allow") return undefined;
     if (decision.outcome === "ask" && decision.approvalId) {
-      const resolution = await this.runtime.broker.waitForApproval(decision.approvalId);
+      const resolution = await this.runtime.broker.waitForApproval(
+        decision.approvalId,
+        session.turnId,
+      );
       if (resolution === "allow") return undefined;
       return refused("the user did not allow this");
     }

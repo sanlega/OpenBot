@@ -324,61 +324,99 @@ describe("DelegationTracker", () => {
 });
 
 describe("cancel and depth (L1, L2)", () => {
-  it("cancelling a task cancels what its worker handed on, without waking anyone", async () => {
-    const { ctx, chief, worker, tracker, woken, open } = await setup();
-    const helper = bot("Helper");
-    ctx.repos.bots.create(helper);
+  function addBot(ctx: TestContext["ctx"], name: string): Bot {
+    const b = bot(name);
+    ctx.repos.bots.create(b);
     ctx.repos.threads.create({
       id: newId("thread"),
-      botId: helper.id,
+      botId: b.id,
       kind: "dm",
       createdAt: t!.clock.now().toISOString(),
     });
-    const parent = open("Research and write the report");
-    const child = open("Collect the numbers", worker, helper);
-    const stopped: string[] = [];
-    ctx.mailbox = { stopBot: async (id: string) => (stopped.push(id), { ok: true }) } as never;
+    return b;
+  }
+  function mailboxSpy(ctx: TestContext["ctx"]) {
+    const cancelled: Array<[string, string]> = [];
+    ctx.mailbox = {
+      cancelTask: async (botId: string, taskId: string) => {
+        cancelled.push([botId, taskId]);
+      },
+    } as never;
+    return cancelled;
+  }
 
-    const cancelled = await tracker.cancel(parent.id, "Chief");
+  it("cancels the task and the tasks handed out for it, and only their work", async () => {
+    const { ctx, chief, worker, tracker, woken, open } = await setup();
+    const helper = addBot(ctx, "Helper");
+    const other = addBot(ctx, "Other");
+    const parent = open("Research and write the report");
+    // The worker's running turn is for the parent: what it hands out is the parent's helper work.
+    tracker.bindTurn(worker.id, parent.id);
+    const child = open("Collect the numbers", worker, helper);
+    tracker.unbindTurn(worker.id, parent.id);
+    // Unrelated work the worker handed out for something else stays.
+    const unrelated = open("Book the room", worker, other);
+    expect(child.parentId).toBe(parent.id);
+    expect(unrelated.parentId).toBeUndefined();
+    const stopped = mailboxSpy(ctx);
+
+    const cancelled = await tracker.cancel(parent.id, { name: "Chief", botId: chief.id });
     expect(cancelled.map((d) => d.id)).toEqual([child.id, parent.id]);
     expect(tracker.get(parent.id)).toMatchObject({
       state: "interrupted",
       statusMessage: "cancelled by Chief",
       wakePending: false,
     });
-    expect(tracker.get(child.id)?.state).toBe("interrupted");
-    expect(stopped).toEqual([helper.id, worker.id]);
-    expect(woken).toEqual([]);
-    // Already over: nothing more to cancel.
-    expect(await tracker.cancel(parent.id, "Chief")).toEqual([]);
-    expect(chief).toBeDefined();
+    expect(tracker.get(unrelated.id)?.state).toBe("submitted");
+    // Only each task's own turns stop.
+    expect(stopped).toEqual([
+      [helper.id, child.id],
+      [worker.id, parent.id],
+    ]);
+    // The Chief cancelled its own task: nobody is woken. The worker asked for the child task and
+    // did not cancel it itself: it is told.
+    expect(woken.map((d) => d.id)).toEqual([child.id]);
+    expect(await tracker.cancel(parent.id, { name: "Chief", botId: chief.id })).toEqual([]);
   });
 
-  it("refuses a hand-off deeper than the limit", async () => {
+  it("tells the bot that asked when the user cancels its task", async () => {
+    const { ctx, tracker, woken, open } = await setup();
+    mailboxSpy(ctx);
+    const task = open("Deploy");
+    await tracker.cancel(task.id, { name: "you" });
+    expect(woken.map((d) => d.id)).toEqual([task.id]);
+    const card = ctx.repos.messages
+      .list({ threadId: task.ownerThreadId })
+      .find((m) => m.text.includes("stopped working on"));
+    expect(card?.text).toMatch(/it was cancelled by you/);
+  });
+
+  it("refuses a hand-off deeper than the limit, counting from the task being worked on", async () => {
     const { ctx, tracker, open, worker } = await setup();
-    const chain = [worker];
-    for (const name of ["B", "C", "D"]) {
-      const b = bot(name);
-      ctx.repos.bots.create(b);
-      ctx.repos.threads.create({
-        id: newId("thread"),
-        botId: b.id,
-        kind: "dm",
-        createdAt: t!.clock.now().toISOString(),
-      });
-      chain.push(b);
-    }
-    open("level 1");
-    open("level 2", chain[0], chain[1]);
-    open("level 3", chain[1], chain[2]);
-    expect(tracker.depthOf(chain[2]!.id)).toBe(3);
+    const [b, c, d] = ["B", "C", "D"].map((n) => addBot(ctx, n));
+    const l1 = open("level 1");
+    tracker.bindTurn(worker.id, l1.id);
+    const l2 = open("level 2", worker, b);
+    tracker.bindTurn(b!.id, l2.id);
+    const l3 = open("level 3", b, c);
+    expect([l1.depth, l2.depth, l3.depth]).toEqual([1, 2, 3]);
+    tracker.bindTurn(c!.id, l3.id);
     const r = tracker.open({
-      requesterBotId: chain[2]!.id,
-      assigneeBotId: chain[3]!.id,
+      requesterBotId: c!.id,
+      assigneeBotId: d!.id,
       chainId: "chn_1",
       text: "level 4",
     });
     expect(r).toMatchObject({ ok: false });
     expect(!r.ok && r.reason).toMatch(/do it yourself/);
+    // The same bot, asked directly by the user (no task bound to its turn), may hand off.
+    tracker.unbindTurn(c!.id, l3.id);
+    const direct = tracker.open({
+      requesterBotId: c!.id,
+      assigneeBotId: d!.id,
+      chainId: "chn_2",
+      text: "fresh",
+    });
+    expect(direct).toMatchObject({ ok: true, delegation: { depth: 1 } });
   });
 });

@@ -166,7 +166,10 @@ export class McpRuntimeServiceAdapter implements McpRuntimeService {
     if (decision.outcome === "ask" && decision.approvalId) {
       // The engine is blocked on this tool call until the user answers the card
       // (or it expires, which denies).
-      const resolution = await this.runtime.broker.waitForApproval(decision.approvalId);
+      const resolution = await this.runtime.broker.waitForApproval(
+        decision.approvalId,
+        session.turnId,
+      );
       if (resolution === "allow") return allowed({ behavior: resolution });
       const expired = this.ctx.repos.approvals.getById(decision.approvalId)?.status === "expired";
       return allowed({

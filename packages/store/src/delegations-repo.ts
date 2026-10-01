@@ -20,6 +20,8 @@ export class DelegationsRepo {
         requesterBotId: d.requesterBotId,
         assigneeBotId: d.assigneeBotId,
         ownerThreadId: d.ownerThreadId,
+        parentId: d.parentId,
+        depth: d.depth,
         title: d.title,
         state: d.state,
         statusMessage: d.statusMessage,
@@ -102,9 +104,15 @@ export class DelegationsRepo {
   }
 
   list(
-    filter: { requesterBotId?: string; assigneeBotId?: string; open?: boolean } = {},
+    filter: {
+      requesterBotId?: string;
+      assigneeBotId?: string;
+      parentId?: string;
+      open?: boolean;
+    } = {},
   ): Delegation[] {
     const conditions = [
+      filter.parentId ? eq(delegations.parentId, filter.parentId) : undefined,
       filter.requesterBotId ? eq(delegations.requesterBotId, filter.requesterBotId) : undefined,
       filter.assigneeBotId ? eq(delegations.assigneeBotId, filter.assigneeBotId) : undefined,
       filter.open ? inArray(delegations.state, OPEN_DELEGATION_STATES) : undefined,
@@ -135,6 +143,8 @@ function toDelegation(row: Row): Delegation {
     requesterBotId: row.requesterBotId,
     assigneeBotId: row.assigneeBotId,
     ownerThreadId: row.ownerThreadId,
+    ...(row.parentId ? { parentId: row.parentId } : {}),
+    ...(row.depth ? { depth: row.depth } : {}),
     title: row.title,
     state: row.state as DelegationState,
     statusMessage: row.statusMessage ?? undefined,

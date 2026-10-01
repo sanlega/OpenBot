@@ -299,10 +299,10 @@ export class ToolRouter {
       return refused("only the bot that handed out this task can cancel it");
     }
     const me = this.ctx.repos.bots.getById(session.botId);
-    const cancelled = await tracker.cancel(
-      task.id,
-      `${me?.name ?? session.botId}${input.reason ? ` (${input.reason.slice(0, 200)})` : ""}`,
-    );
+    const cancelled = await tracker.cancel(task.id, {
+      name: `${me?.name ?? session.botId}${input.reason ? ` (${input.reason.slice(0, 200)})` : ""}`,
+      botId: session.botId,
+    });
     if (cancelled.length === 0) return refused("that task already ended");
     return allowed({
       cancelled: cancelled.map((d) => ({ task_id: d.id, title: d.title })),
