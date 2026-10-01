@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
   CalendarClock,
+  ListChecks,
   MonitorSmartphone,
   PenSquare,
   Plug,
@@ -13,6 +14,7 @@ import { BotList } from "../roster/BotList.js";
 import { ThreadViewPanel } from "../thread/ThreadView.js";
 import { ActivityView, AuditView } from "../activity/ActivityViews.js";
 import { RoutinesView } from "../routines/RoutinesView.js";
+import { TasksView } from "../tasks/TasksView.js";
 import { ConnectorsView } from "../connectors/ConnectorsView.js";
 import { SettingsView } from "../settings/SettingsView.js";
 import { DevicesRemoteView } from "../devices/DevicesRemoteView.js";
@@ -28,6 +30,7 @@ interface AppShellProps {
 
 const NAV: Array<{ id: AppScreen; label: string; icon: ReactNode }> = [
   { id: "activity", label: "Activity", icon: <Activity size={16} /> },
+  { id: "tasks", label: "Tasks", icon: <ListChecks size={16} /> },
   { id: "routines", label: "Routines", icon: <CalendarClock size={16} /> },
   { id: "connectors", label: "Connectors", icon: <Plug size={16} /> },
   { id: "audit", label: "Audit", icon: <ShieldCheck size={16} /> },
@@ -89,6 +92,8 @@ export function AppShell({ showSetup = false }: AppShellProps) {
         return <ThreadViewPanel onBack={() => setMobileView("list")} />;
       case "activity":
         return <ActivityView />;
+      case "tasks":
+        return <TasksView />;
       case "audit":
         return <AuditView />;
       case "routines":

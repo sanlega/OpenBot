@@ -8,6 +8,7 @@ import type {
   CatalogEntry,
   ComputerImageStatus,
   ConnectionView,
+  Delegation,
   Memory,
   Message,
   OBEvent,
@@ -155,6 +156,27 @@ export class MockClientApiServer {
   private routines = structuredClone(SEED_ROUTINES);
   private routineRuns = structuredClone(SEED_ROUTINE_RUNS);
   private takeoverByBot = new Map<string, boolean>();
+  private tasks: Array<
+    Delegation & { requesterName?: string; assigneeName?: string; depth?: number }
+  > = [
+    {
+      id: "dlg_seed_1",
+      chainId: "chn_seed",
+      requesterBotId: SEED_BOTS[0]?.id ?? "bot_chief",
+      assigneeBotId: SEED_BOTS[1]?.id ?? "bot_worker",
+      ownerThreadId: "thr_seed",
+      title: "Compare three CRM tools and recommend one",
+      state: "working",
+      roundTrips: 1,
+      wakePending: false,
+      requesterName: SEED_BOTS[0]?.name,
+      assigneeName: SEED_BOTS[1]?.name,
+      depth: 1,
+      createdAt: "2026-09-30T09:00:00.000Z",
+      updatedAt: "2026-09-30T09:05:00.000Z",
+      lastEventAt: "2026-09-30T09:05:00.000Z",
+    },
+  ];
   private memories: Memory[] = [
     {
       id: "mem_seed_user",
@@ -752,6 +774,21 @@ export class MockClientApiServer {
       return sendJson(res, 200, {
         routing: { mode: "pinned", engine: route.engine, model: route.model },
       });
+    }
+    // L3: same shapes as packages/core/src/http/routes/tasks.ts.
+    if (method === "GET" && path === "/api/tasks") {
+      return sendJson(res, 200, { tasks: this.tasks });
+    }
+    if (method === "POST" && path.match(/^\/api\/tasks\/[^/]+\/cancel$/)) {
+      const id = path.split("/")[3]!;
+      const task = this.tasks.find((t) => t.id === id);
+      if (!task) return sendJson(res, 404, { error: "not_found" });
+      if (!["submitted", "working", "input_required"].includes(task.state)) {
+        return sendJson(res, 409, { error: "not_open" });
+      }
+      task.state = "interrupted";
+      task.statusMessage = "cancelled by you";
+      return sendJson(res, 200, { cancelled: [id] });
     }
     // C5: same shapes as packages/core/src/http/routes/memories.ts.
     if (method === "GET" && path.match(/^\/api\/bots\/[^/]+\/memories$/)) {

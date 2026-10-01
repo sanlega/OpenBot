@@ -33,6 +33,7 @@ const SIDE_EFFECT_TOOLS = new Set([
   "ask_user",
   "cancel_input",
   "save_login",
+  "cancel_task",
   "remember",
   "forget",
   "request_approval",
@@ -169,6 +170,11 @@ export class ToolRouter {
             }),
           ),
         });
+      case "cancel_task":
+        return this.cancelTask(
+          session,
+          parsed.data as { bot?: string; task_id?: string; reason?: string },
+        );
       case "list_logins":
         return allowed({ logins: await listLogins(this.ctx.vault) });
       case "save_login": {
@@ -273,6 +279,34 @@ export class ToolRouter {
       // The machine being down or slow is an answer for the engine, not a crashed tool call.
       return refused(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  /** L1: the requester (or the Chief of Staff) cancels a task it handed out, with its helpers'. */
+  private async cancelTask(
+    session: SessionContext,
+    input: { bot?: string; task_id?: string; reason?: string },
+  ): Promise<ToolResult<Record<string, unknown>>> {
+    const tracker = delegationsOf(this.ctx);
+    let task = input.task_id ? tracker.get(input.task_id) : undefined;
+    if (!task && input.bot) {
+      const worker = this.findBot(input.bot);
+      if (!worker) return refused(`bot not found: ${input.bot}`, "call list_bots for exact slugs");
+      task = this.ctx.repos.delegations.findOpenBetween(session.botId, worker.id);
+      if (!task && session.isChiefOfStaff) task = tracker.openFor(worker.id);
+    }
+    if (!task) return refused("no open task matches", "get_bot_status shows a bot's current task");
+    if (task.requesterBotId !== session.botId && !session.isChiefOfStaff) {
+      return refused("only the bot that handed out this task can cancel it");
+    }
+    const me = this.ctx.repos.bots.getById(session.botId);
+    const cancelled = await tracker.cancel(
+      task.id,
+      `${me?.name ?? session.botId}${input.reason ? ` (${input.reason.slice(0, 200)})` : ""}`,
+    );
+    if (cancelled.length === 0) return refused("that task already ended");
+    return allowed({
+      cancelled: cancelled.map((d) => ({ task_id: d.id, title: d.title })),
+    });
   }
 
   private async publishMemoryChange(

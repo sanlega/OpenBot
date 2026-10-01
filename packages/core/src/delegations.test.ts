@@ -322,3 +322,63 @@ describe("DelegationTracker", () => {
     expect(events.some((e) => e.type === "delegation.updated")).toBe(true);
   });
 });
+
+describe("cancel and depth (L1, L2)", () => {
+  it("cancelling a task cancels what its worker handed on, without waking anyone", async () => {
+    const { ctx, chief, worker, tracker, woken, open } = await setup();
+    const helper = bot("Helper");
+    ctx.repos.bots.create(helper);
+    ctx.repos.threads.create({
+      id: newId("thread"),
+      botId: helper.id,
+      kind: "dm",
+      createdAt: t!.clock.now().toISOString(),
+    });
+    const parent = open("Research and write the report");
+    const child = open("Collect the numbers", worker, helper);
+    const stopped: string[] = [];
+    ctx.mailbox = { stopBot: async (id: string) => (stopped.push(id), { ok: true }) } as never;
+
+    const cancelled = await tracker.cancel(parent.id, "Chief");
+    expect(cancelled.map((d) => d.id)).toEqual([child.id, parent.id]);
+    expect(tracker.get(parent.id)).toMatchObject({
+      state: "interrupted",
+      statusMessage: "cancelled by Chief",
+      wakePending: false,
+    });
+    expect(tracker.get(child.id)?.state).toBe("interrupted");
+    expect(stopped).toEqual([helper.id, worker.id]);
+    expect(woken).toEqual([]);
+    // Already over: nothing more to cancel.
+    expect(await tracker.cancel(parent.id, "Chief")).toEqual([]);
+    expect(chief).toBeDefined();
+  });
+
+  it("refuses a hand-off deeper than the limit", async () => {
+    const { ctx, tracker, open, worker } = await setup();
+    const chain = [worker];
+    for (const name of ["B", "C", "D"]) {
+      const b = bot(name);
+      ctx.repos.bots.create(b);
+      ctx.repos.threads.create({
+        id: newId("thread"),
+        botId: b.id,
+        kind: "dm",
+        createdAt: t!.clock.now().toISOString(),
+      });
+      chain.push(b);
+    }
+    open("level 1");
+    open("level 2", chain[0], chain[1]);
+    open("level 3", chain[1], chain[2]);
+    expect(tracker.depthOf(chain[2]!.id)).toBe(3);
+    const r = tracker.open({
+      requesterBotId: chain[2]!.id,
+      assigneeBotId: chain[3]!.id,
+      chainId: "chn_1",
+      text: "level 4",
+    });
+    expect(r).toMatchObject({ ok: false });
+    expect(!r.ok && r.reason).toMatch(/do it yourself/);
+  });
+});

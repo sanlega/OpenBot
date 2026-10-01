@@ -205,6 +205,10 @@ exports[`McpComposer > snapshots tool input schemas 1`] = `
     ],
   },
   {
+    "name": "cancel_task",
+    "required": [],
+  },
+  {
     "name": "report_done",
     "required": [
       "summary",

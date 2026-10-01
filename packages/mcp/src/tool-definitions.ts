@@ -444,6 +444,20 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
     },
   },
   {
+    name: "cancel_task",
+    description:
+      "Cancel a task you handed to another bot (send_message) that is no longer needed, by the bot's slug or the task id from get_bot_status. Its own helpers' tasks are cancelled too, and its work stops. You are not woken about it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bot: { type: "string", description: "The worker bot's slug or id" },
+        task_id: { type: "string" },
+        reason: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "report_done",
     description: "Report task completion for the Chief of Staff digest.",
     inputSchema: {

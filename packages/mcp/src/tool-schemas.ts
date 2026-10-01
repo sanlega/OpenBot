@@ -145,6 +145,13 @@ export const TOOL_INPUT_SCHEMAS: Record<string, z.ZodTypeAny> = {
     user_requested: z.boolean().default(false),
   }),
   list_logins: z.object({}),
+  cancel_task: z
+    .object({
+      bot: z.string().min(1).optional(),
+      task_id: z.string().min(1).optional(),
+      reason: z.string().max(500).optional(),
+    })
+    .refine((v) => v.bot || v.task_id, { message: "name the bot or the task_id" }),
   remember: z.object({
     fact: z.string().min(1).max(2000),
     tier: z.enum(["profile", "log", "note"]).optional(),

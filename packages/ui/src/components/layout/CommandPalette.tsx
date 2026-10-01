@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   CalendarClock,
+  ListChecks,
   MonitorSmartphone,
   PenSquare,
   Plug,
@@ -72,6 +73,7 @@ export function CommandPalette({
     });
     const screens: Array<[AppScreen, string, ReactNode, string?]> = [
       ["activity", "Activity", <Activity key="a" size={16} />, "inbox needs you feed"],
+      ["tasks", "Tasks", <ListChecks key="t" size={16} />, "delegation handoff work board"],
       ["routines", "Routines", <CalendarClock key="r" size={16} />, "schedule cron"],
       ["connectors", "Connectors", <Plug key="c" size={16} />, "apps integrations mcp"],
       ["audit", "Audit log", <ShieldCheck key="u" size={16} />, "approvals history"],

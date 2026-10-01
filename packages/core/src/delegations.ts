@@ -9,6 +9,11 @@ export const MAX_OPEN_PER_REQUESTER = 5;
 export const STALL_AFTER_MS = 10 * 60_000;
 /** Tasks one requester may hand to the same assignee per hour (bounds a fail-and-retry cycle). */
 export const MAX_PER_PAIR_PER_HOUR = 6;
+/**
+ * L2: how deep a chain of hand-offs may go (the Chief → a bot → its helper → one more). Deeper
+ * chains lose the user's intent and multiply cost; the last bot does the work itself.
+ */
+export const MAX_DELEGATION_DEPTH = 3;
 const MAX_RESULT_CHARS = 6000;
 
 /** How a turn on behalf of a delegation ended (a subset of the runtime's `TurnOutcome`). */
@@ -115,6 +120,13 @@ export class DelegationTracker {
       )!;
       return { ok: true, delegation: updated, continued: true };
     }
+    const depth = this.depthOf(input.requesterBotId) + 1;
+    if (depth > MAX_DELEGATION_DEPTH) {
+      return {
+        ok: false,
+        reason: `this task is already ${depth - 1} hand-offs away from the user; do it yourself instead of delegating further`,
+      };
+    }
     const recent = this.repo
       .list({ requesterBotId: input.requesterBotId, assigneeBotId: input.assigneeBotId })
       .filter((d) => now.getTime() - new Date(d.createdAt).getTime() < 3_600_000);
@@ -147,6 +159,55 @@ export class DelegationTracker {
     };
     this.repo.create(delegation);
     return { ok: true, delegation, continued: false };
+  }
+
+  /** How many open hand-offs separate this bot from the user (0: the user asked it directly). */
+  depthOf(botId: string): number {
+    let depth = 0;
+    let bot = botId;
+    const seen = new Set<string>();
+    for (;;) {
+      const parent = this.repo.findOpenForAssignee(bot);
+      if (!parent || seen.has(parent.id)) return depth;
+      seen.add(parent.id);
+      depth += 1;
+      bot = parent.requesterBotId;
+    }
+  }
+
+  /**
+   * L1: cancels an open task and, first, every task its worker handed on (a cancelled task's
+   * helpers have nobody to report to). The workers' turns are stopped; nobody is woken: whoever
+   * cancelled already knows.
+   */
+  async cancel(id: string, by: string): Promise<Delegation[]> {
+    const d = this.repo.getById(id);
+    if (!d || !OPEN.has(d.state)) return [];
+    const cancelled: Delegation[] = [];
+    for (const child of this.repo.list({ requesterBotId: d.assigneeBotId, open: true })) {
+      cancelled.push(...(await this.cancel(child.id, by)));
+    }
+    const now = this.now();
+    const updated = this.repo.update(
+      id,
+      {
+        state: "interrupted",
+        statusMessage: `cancelled by ${by}`,
+        wakePending: false,
+        wakeKind: "stopped",
+        lastEventAt: now.toISOString(),
+      },
+      now,
+    );
+    this.waits.delete(id);
+    this.pendingTurns.delete(id);
+    if (updated) {
+      cancelled.push(updated);
+      await this.announce(updated);
+    }
+    // Its work stops now (a turn it is running for this task, and what is queued).
+    await this.ctx.mailbox?.stopBot?.(d.assigneeBotId).catch(() => undefined);
+    return cancelled;
   }
 
   /** The delivery to the assignee failed: nothing was handed over. */
