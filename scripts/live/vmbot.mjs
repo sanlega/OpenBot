@@ -88,7 +88,11 @@ const bot = created.body.bot;
 const threadId = created.body.thread?.id;
 log("bot", bot?.id, created.status);
 
-const ws = new WebSocket(base.replace("http", "ws") + "/api/ws");
+const ws = new WebSocket(
+  base.replace("http", "ws") +
+    "/api/ws?key=" +
+    readFileSync(join(HOME, "local-owner.key"), "utf8").trim(),
+);
 await new Promise((r) => ws.addEventListener("open", r, { once: true }));
 ws.send(JSON.stringify({ type: "subscribe" }));
 const events = [];

@@ -13,11 +13,25 @@ export interface McpCosServiceDeps {
   caps: CapCounterService;
 }
 
+/** How many of the user's latest messages the spawn gate reads. */
+const RECENT_USER_MESSAGES = 5;
+
 export class McpCosServiceAdapter implements McpCosService {
   constructor(
     private readonly ctx: CoreContext,
     private readonly deps: McpCosServiceDeps,
   ) {}
+
+  /** The user's latest messages in the requesting bot's conversation, oldest first. */
+  private recentUserMessages(botId: string): string[] {
+    const thread = this.ctx.repos.threads.getByBotId(botId);
+    if (!thread) return [];
+    return this.ctx.repos.messages
+      .list({ threadId: thread.id })
+      .filter((m) => m.author.type === "user" && m.text.trim())
+      .slice(-RECENT_USER_MESSAGES)
+      .map((m) => m.text.slice(0, 2000));
+  }
 
   async createBot(
     session: SessionContext,
@@ -41,7 +55,9 @@ export class McpCosServiceAdapter implements McpCosService {
         userRequested: input.user_requested,
       },
       roster,
-      recentUserMessages: [],
+      // The spawn questions ask whether the user asked for a new bot in these: without them an
+      // explicit "create a bot X" could never count.
+      recentUserMessages: this.recentUserMessages(session.botId),
       cosCreatedBotCount: cosCreated.length,
       spawnsInLast24h: this.deps.caps.spawnsInLast24h(),
       lastSpawnAt: this.deps.caps.lastSpawnAt(),

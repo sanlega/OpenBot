@@ -88,7 +88,11 @@ async function newBot(name) {
 const a = await newBot("Notes");
 const b = await newBot("Planner");
 
-const ws = new WebSocket(base.replace("http", "ws") + "/api/ws");
+const ws = new WebSocket(
+  base.replace("http", "ws") +
+    "/api/ws?key=" +
+    readFileSync(join(HOME, "local-owner.key"), "utf8").trim(),
+);
 await new Promise((r) => ws.addEventListener("open", r, { once: true }));
 ws.send(JSON.stringify({ type: "subscribe" }));
 const events = [];

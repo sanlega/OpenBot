@@ -126,3 +126,69 @@ describe("McpCosServiceAdapter.createBot caps", () => {
     expect((await createBot()).allowed).toBe(true);
   });
 });
+
+describe("McpCosServiceAdapter.createBot asks Jev with the user's words", () => {
+  it("shows the spawn gate the user's latest messages in the Chief's chat", async () => {
+    harness = await createMcpTestHarness();
+    const caps = new CapCounterService(harness.clock);
+    let seenState: unknown;
+    const recordingJev: DecisionService = {
+      ...userRequestedJev,
+      async decide(request) {
+        seenState = request.state;
+        return userRequestedJev.decide(request);
+      },
+    };
+    const adapter = new McpCosServiceAdapter(harness.ctx, {
+      spawnGate: new SpawnGate({
+        decisions: recordingJev,
+        caps,
+        autonomyCaps: DEFAULT_AUTONOMY_CAPS,
+      }),
+      notifyGate: new NotifyGate({
+        decisions: recordingJev,
+        caps,
+        autonomyCaps: DEFAULT_AUTONOMY_CAPS,
+      }),
+      runtime: {} as Runtime,
+      caps,
+    });
+    const cos = makeBot({ name: "Chief", slug: "chief", isChiefOfStaff: true });
+    harness.ctx.repos.bots.create(cos);
+    const threadId = "thr_chief";
+    const at = harness.clock.now().toISOString();
+    harness.ctx.repos.threads.create({ id: threadId, botId: cos.id, kind: "dm", createdAt: at });
+    harness.ctx.repos.messages.create({
+      id: "msg_1",
+      threadId,
+      author: { type: "user" },
+      text: 'Create a bot "Researcher" that works in its virtual machine.',
+      attachments: [],
+      hop: 0,
+      createdAt: at,
+      proactive: false,
+      delivery: "delivered",
+      pushed: false,
+    });
+    const session: SessionContext = {
+      botId: cos.id,
+      turnId: "turn_test",
+      chainId: "chn_test",
+      mode: "live",
+      exp: Number.MAX_SAFE_INTEGER,
+      bot: cos,
+      isChiefOfStaff: true,
+    };
+    const result = await adapter.createBot(session, {
+      name: "Researcher",
+      description: "researches",
+      responsibility: "r",
+      why_not_existing: "w",
+      lifetime: "recurring",
+      boundary: ["b"],
+      user_requested: true,
+    });
+    expect(result.allowed).toBe(true);
+    expect(JSON.stringify(seenState)).toContain('Create a bot \\"Researcher\\"');
+  });
+});
