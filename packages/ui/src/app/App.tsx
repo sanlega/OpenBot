@@ -18,7 +18,8 @@ export interface OpenBotAppProps {
 
 export function OpenBotApp({ transport }: OpenBotAppProps) {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
-  const [unreachable, setUnreachable] = useState(false);
+  // "offline": nothing answers; "unpaired": the harness answers but doesn't know this device.
+  const [unreachable, setUnreachable] = useState<false | "offline" | "unpaired">(false);
   const [attempt, setAttempt] = useState(0);
 
   // The harness may still be starting (desktop) or be offline (phone): keep trying.
@@ -32,10 +33,13 @@ export function OpenBotApp({ transport }: OpenBotAppProps) {
         setUnreachable(false);
         setSetupComplete(Boolean(res.setup.completedAt));
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        setUnreachable(true);
-        retry = setTimeout(() => setAttempt((a) => a + 1), 2000);
+        const status = (err as { status?: number } | undefined)?.status;
+        const unpaired = status === 401 || status === 403;
+        setUnreachable(unpaired ? "unpaired" : "offline");
+        // Pairing takes a while (the owner has to show the code): check back less often.
+        retry = setTimeout(() => setAttempt((a) => a + 1), unpaired ? 5000 : 2000);
       });
     return () => {
       cancelled = true;
@@ -47,7 +51,16 @@ export function OpenBotApp({ transport }: OpenBotAppProps) {
     return (
       <div className="app-status" data-testid="app-connecting">
         <span className="app-status-mark" aria-hidden />
-        {unreachable ? (
+        {unreachable === "unpaired" ? (
+          <>
+            <h1>This device isn't paired</h1>
+            <p>
+              OpenBot is running, but only paired devices can use it from another computer or phone.
+              On the computer running OpenBot, open Devices, choose Pair a phone and scan the code
+              with your phone.
+            </p>
+          </>
+        ) : unreachable ? (
           <>
             <h1>Can't reach OpenBot</h1>
             <p>Make sure the OpenBot app or server is running. Retrying…</p>

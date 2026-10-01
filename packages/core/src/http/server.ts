@@ -35,6 +35,25 @@ export interface BuildServerOptions {
  * serve`) and `apps/desktop` (Electron `utilityProcess`) both call into, so
  * neither has to know how the route modules are wired together.
  */
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/** A state-changing request (or an event-stream upgrade) sent by another site's page. */
+export function isForeignOrigin(request: {
+  method: string;
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  const upgrade = String(request.headers.upgrade ?? "").toLowerCase() === "websocket";
+  if (SAFE_METHODS.has(request.method) && !upgrade) return false;
+  const origin = request.headers.origin;
+  if (typeof origin !== "string" || origin === "") return false; // not a browser page
+  if (origin.startsWith("file://")) return false; // the desktop app's fallback page
+  try {
+    return new URL(origin).host !== String(request.headers.host ?? "");
+  } catch {
+    return true; // "null" (sandboxed frames) and anything unparsable
+  }
+}
+
 export async function buildServer(
   ctx: CoreContext,
   options: BuildServerOptions = {},
@@ -74,13 +93,19 @@ export async function buildServer(
   // implicitly the owner with no token; a non-loopback request needs a valid
   // bearer token or gets no identity, which every route's `requireAuth`/
   // `requireOwner` then rejects with 401).
-  app.addHook("onRequest", async (request) => {
+  app.addHook("onRequest", async (request, reply) => {
     const hasSealedDeviceCredential =
       request.headers["x-openbot-device"] !== undefined ||
       request.headers["x-openbot-device-token"] !== undefined;
     request.device = hasSealedDeviceCredential
       ? await resolveSealedDeviceIdentity(ctx, request)
       : resolveDeviceIdentity(ctx, request);
+    // Loopback is the owner with no token, so a web page open in the owner's browser could
+    // otherwise change things (or open the event stream) on 127.0.0.1. Browsers name the page
+    // that sent a request in `Origin`; only OpenBot's own page may act as the local owner.
+    if (request.device?.deviceId === "local" && isForeignOrigin(request)) {
+      return reply.code(403).send({ error: "forbidden", reason: "cross-site request refused" });
+    }
   });
 
   registerHealthRoutes(app, ctx);

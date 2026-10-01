@@ -164,32 +164,40 @@ function resolveDecisionService(ctx: CoreContext): DecisionService {
 }
 
 /**
- * P1: detects the engines again and plugs newly ready ones into the same `drivers` map the
- * runtime and the turn builder hold (they see them at once). A driver that is already wired is
- * kept (its sessions and app-server stay); one that is no longer ready simply stops being offered.
+ * P1: detects the engines again and updates, in place, the `drivers` map the runtime and the
+ * turn builder hold (they see the change at once):
+ * - a driver that is already wired is reused, never rebuilt (Codex's app-server is shared by
+ *   every Codex driver, so a duplicate's dispose would end every running Codex turn);
+ * - a newly ready engine is added;
+ * - an engine that is no longer ready (or a removed custom agent) leaves the map, so routing no
+ *   longer picks it; a turn already running on it keeps its own handle and ends normally;
+ * - an edited custom agent gets a new driver (the old one is dropped, not disposed: a running
+ *   turn's process ends with that turn).
  */
 export async function redetectEngines(
   ctx: CoreContext,
   drivers: Partial<Record<EngineId, EngineDriver>>,
   detection: ProviderDetection = defaultDetection,
 ): Promise<EngineId[]> {
-  const fresh = await resolveEngineDrivers(ctx, detection);
-  for (const [id, driver] of Object.entries(fresh.drivers) as Array<[EngineId, EngineDriver]>) {
-    if (drivers[id]) {
-      if (drivers[id] !== driver) await driver.dispose().catch(() => undefined);
-    } else {
-      drivers[id] = driver;
-    }
+  const fresh = await resolveEngineDrivers(ctx, detection, drivers);
+  for (const id of Object.keys(drivers) as EngineId[]) {
+    if (!fresh.drivers[id]) delete drivers[id];
   }
+  Object.assign(drivers, fresh.drivers);
   ctx.availableEngines = fresh.availableEngines;
   ctx.engineStatuses = fresh.engineStatuses;
   ctx.engineDescriptors = fresh.engineDescriptors;
   return fresh.availableEngines;
 }
 
+/** What a driver was built from: an edited custom agent must get a new driver. */
+const driverSources = new WeakMap<EngineDriver, string>();
+
 async function resolveEngineDrivers(
   ctx: CoreContext,
   detection: ProviderDetection,
+  /** Drivers already wired (re-detection): reused when they still match, never duplicated. */
+  wired: Partial<Record<EngineId, EngineDriver>> = {},
 ): Promise<{
   drivers: Partial<Record<EngineId, EngineDriver>>;
   engineStatuses: Record<string, EngineStatus>;
@@ -197,9 +205,17 @@ async function resolveEngineDrivers(
   availableEngines: EngineId[];
 }> {
   const enginesDir = join(ctx.config.openbotHome, "engines");
-  const acpDrivers = (detection.acpProfiles?.(ctx.config.openbotHome) ?? []).map(
-    (profile) => new AcpDriver(profile, { enginesDir }),
+  const customSpecs = new Map(
+    readEnginePrefs(ctx.config.openbotHome).custom.map((e) => [`acp-${e.slug}`, e]),
   );
+  const acpDrivers = (detection.acpProfiles?.(ctx.config.openbotHome) ?? []).map((profile) => {
+    const source = JSON.stringify(customSpecs.get(profile.id) ?? profile.id);
+    const current = wired[profile.id];
+    if (current && driverSources.get(current) === source) return current as AcpDriver;
+    const driver = new AcpDriver(profile, { enginesDir });
+    driverSources.set(driver, source);
+    return driver;
+  });
   // Every CLI is probed at once: a slow or missing one must not hold up the rest.
   const [claudeStatus, codexStatus, ...acpStatuses] = await Promise.all([
     detection.detectClaude(),
@@ -218,7 +234,7 @@ async function resolveEngineDrivers(
 
   if (fakeFlag("OPENBOT_FAKE_ENGINES")) {
     return {
-      drivers: { fake: new FakeEngineDriver() },
+      drivers: { fake: wired.fake ?? new FakeEngineDriver() },
       engineStatuses,
       engineDescriptors,
       availableEngines: ["fake"],
@@ -229,11 +245,11 @@ async function resolveEngineDrivers(
   const availableEngines: EngineId[] = [];
 
   if (engineReady(claudeStatus!)) {
-    drivers.claude = new ClaudeDriver();
+    drivers.claude = wired.claude ?? new ClaudeDriver();
     availableEngines.push("claude");
   }
   if (engineReady(codexStatus!)) {
-    drivers.codex = new CodexDriver();
+    drivers.codex = wired.codex ?? new CodexDriver();
     availableEngines.push("codex");
   }
   acpDrivers.forEach((driver, i) => {

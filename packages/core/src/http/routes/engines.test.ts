@@ -107,6 +107,53 @@ describe("engine routes", () => {
     expect(listed.json()).toEqual({ engines: saved() });
   });
 
+  it("only the owner changes engines; another site's page can't act as the local owner", async () => {
+    const { app } = await setup();
+    let ran = 0;
+    testContext!.ctx.redetectEngines = async () => {
+      ran += 1;
+      return [];
+    };
+    const payload = { engines: [{ slug: "x", label: "X", command: "x", args: [] }] };
+    // Not on this computer and no device token.
+    const remote = { remoteAddress: "192.168.1.50" };
+    expect(
+      (await app.inject({ method: "PUT", url: "/api/engines/custom", payload, ...remote }))
+        .statusCode,
+    ).toBe(401);
+    expect(
+      (await app.inject({ method: "POST", url: "/api/engines/redetect", ...remote })).statusCode,
+    ).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/engines", ...remote })).statusCode).toBe(
+      401,
+    );
+    // A page from another site, through the owner's own browser.
+    const foreign = { origin: "https://evil.example", host: "127.0.0.1:4577" };
+    expect(
+      (await app.inject({ method: "POST", url: "/api/engines/redetect", headers: foreign }))
+        .statusCode,
+    ).toBe(403);
+    expect(ran).toBe(0);
+    // OpenBot's own page.
+    const own = { origin: "http://127.0.0.1:4577", host: "127.0.0.1:4577" };
+    expect(
+      (await app.inject({ method: "POST", url: "/api/engines/redetect", headers: own })).statusCode,
+    ).toBe(200);
+    expect(ran).toBe(1);
+  });
+
+  it("never runs a custom agent from a network share", async () => {
+    const { app } = await setup();
+    for (const command of ["\\\\host\\share\\agent.exe", "//host/share/agent", "https://x/agent"]) {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/engines/custom",
+        payload: { engines: [{ slug: "x", label: "X", command, args: [] }] },
+      });
+      expect(res.statusCode, command).toBe(400);
+    }
+  });
+
   it("rejects invalid custom engines", async () => {
     const { app } = await setup();
     for (const engines of [

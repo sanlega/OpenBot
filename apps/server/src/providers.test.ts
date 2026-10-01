@@ -243,6 +243,53 @@ describe("bootstrapProviders", () => {
       expect(result.drivers.claude).toBe(claude);
       expect(ctx.availableEngines).toEqual(["claude", "codex"]);
       expect(ctx.engineStatuses?.codex?.login.ok).toBe(true);
+
+      // Checking again never rebuilds (or disposes) a wired driver: Codex's app-server is shared.
+      const codexDriver = result.drivers.codex!;
+      const dispose = vi.spyOn(codexDriver, "dispose");
+      await ctx.redetectEngines!();
+      expect(result.drivers.codex).toBe(codexDriver);
+      expect(dispose).not.toHaveBeenCalled();
+
+      // An engine signed out leaves the map, so routing no longer picks it.
+      codex = missingEngine;
+      expect(await ctx.redetectEngines!()).toEqual(["claude"]);
+      expect(result.drivers.codex).toBeUndefined();
+      ctx.closeDb();
+    } finally {
+      process.env = prev;
+    }
+  });
+
+  it("an edited custom agent gets a new driver; an unchanged one is kept (P1)", async () => {
+    const prev = { ...process.env };
+    delete process.env.OPENBOT_FAKE_ENGINES;
+    process.env.OPENBOT_FAKE_JEV = "1";
+    try {
+      const ctx = await testContext();
+      const result = await bootstrapProviders(
+        ctx,
+        mockDetection({ acpProfiles: () => (ctx.customEngines?.list() ?? []).map(customProfile) }),
+      );
+      // The command is this Node binary, so `--version` answers.
+      await ctx.customEngines!.save([
+        { slug: "goose", label: "Goose", command: process.execPath, args: ["acp"] },
+      ]);
+      await ctx.redetectEngines!();
+      const first = result.drivers["acp-goose"];
+      expect(first).toBeInstanceOf(AcpDriver);
+      await ctx.redetectEngines!();
+      expect(result.drivers["acp-goose"]).toBe(first);
+
+      await ctx.customEngines!.save([
+        { slug: "goose", label: "Goose", command: process.execPath, args: ["acp", "--fast"] },
+      ]);
+      await ctx.redetectEngines!();
+      expect(result.drivers["acp-goose"]).not.toBe(first);
+
+      await ctx.customEngines!.save([]);
+      await ctx.redetectEngines!();
+      expect(result.drivers["acp-goose"]).toBeUndefined();
       ctx.closeDb();
     } finally {
       process.env = prev;

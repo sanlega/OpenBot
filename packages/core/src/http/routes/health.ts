@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { CoreContext, CustomEngineSpec } from "../../context.js";
+import { requireAuth, requireOwner } from "../auth.js";
 
 export const SERVER_VERSION = "0.1.18";
 
@@ -11,7 +12,8 @@ export function registerHealthRoutes(app: FastifyInstance, ctx: CoreContext): vo
     version: SERVER_VERSION,
   }));
 
-  app.get("/api/engines", async () => {
+  app.get("/api/engines", async (req, reply) => {
+    if (!requireAuth(req, reply)) return;
     const statuses = ctx.engineStatuses ?? {};
     const descriptors = ctx.engineDescriptors ?? {};
     const ids = [...new Set([...Object.keys(descriptors), ...Object.keys(statuses)])];
@@ -25,16 +27,22 @@ export function registerHealthRoutes(app: FastifyInstance, ctx: CoreContext): vo
   });
 
   // P1: "Check again" in Settings > Engines (after installing or signing in to a CLI).
-  app.post("/api/engines/redetect", async (_req, reply) => {
+  app.post("/api/engines/redetect", async (req, reply) => {
+    if (!requireOwner(req, reply)) return;
     if (!ctx.redetectEngines) return reply.code(501).send({ error: "not wired" });
     const available = await ctx.redetectEngines();
     return { available };
   });
 
   /** Owner-added ACP agents (D-031), wired at once by detecting the engines again. */
-  app.get("/api/engines/custom", async () => ({ engines: ctx.customEngines?.list() ?? [] }));
+  app.get("/api/engines/custom", async (req, reply) => {
+    if (!requireAuth(req, reply)) return;
+    return { engines: ctx.customEngines?.list() ?? [] };
+  });
 
   app.put("/api/engines/custom", async (req, reply) => {
+    // Saving starts the command (to detect it): owner only.
+    if (!requireOwner(req, reply)) return;
     if (!ctx.customEngines) return reply.code(501).send({ error: "custom engines not wired" });
     const parsed = parseCustomEngines((req.body as { engines?: unknown } | undefined)?.engines);
     if ("error" in parsed) return reply.code(400).send({ error: parsed.error });
@@ -50,7 +58,8 @@ export function registerHealthRoutes(app: FastifyInstance, ctx: CoreContext): vo
     };
   });
 
-  app.get("/api/models", async () => {
+  app.get("/api/models", async (req, reply) => {
+    if (!requireAuth(req, reply)) return;
     return { engines: (await ctx.listModels?.()) ?? [] };
   });
 }
@@ -71,6 +80,10 @@ function parseCustomEngines(value: unknown): { engines: CustomEngineSpec[] } | {
     if (slugs.has(slug)) return { error: `duplicate slug "${slug}"` };
     if (!label || label.length > 60) return { error: `engine "${slug}" needs a name` };
     if (!command) return { error: `engine "${slug}" needs a command` };
+    // A program on this computer (a name on PATH or a local path), never one on a network share.
+    if (/^(\\\\|\/\/)/.test(command) || /^[a-z][a-z0-9+.-]*:\/\//i.test(command)) {
+      return { error: `engine "${slug}" must run a program on this computer` };
+    }
     if (!args.every((a): a is string => typeof a === "string")) {
       return { error: `engine "${slug}" args must be strings` };
     }
