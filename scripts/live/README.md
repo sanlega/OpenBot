@@ -78,3 +78,38 @@ engine uses only `vm_*`/`browser_*` tools, its file lands in the host workspace,
 a file on the user's computer, and it answers from a page read with `browser_read`. Verified
 2026-10-01: vm 11/11, vmbot Claude 11/11 and Codex 11/11, drive variant c (0 cards, 1 form).
 Remove the test container and volume afterwards (`vm.mjs` does it itself).
+
+## Hardened box check (D-034)
+
+`box.mjs` runs its own container (`openbot-desktop-boxcheck`, ports 8798/6091, volume
+`openbot-browser-boxcheck`) from the locally built image and checks what the Grok Bot roadmap
+changed: bot commands run as `box` (uid 1000, no capabilities) and cannot read the daemon's
+token, the browser profiles, nor reach the daemon, DevTools, noVNC or the X display (which the
+desktop itself still uses); `sudo apt-get install` works through the helper, `apt-get remove`
+does not; the self-check passes; a browser and a VNC server killed with `kill -9` come back by
+themselves and the bot keeps working; a fork bomb does not take the desktop down; a sign-in kept
+in localStorage on one screen reaches another; no zombies; `docker stop` is quick.
+
+```sh
+docker build -f images/desktop/Dockerfile -t openbot-desktop:dev .
+pnpm build
+node scripts/live/box.mjs
+```
+
+Verified 2026-10-01: box 15/15, vm 11/11 on the same image.
+
+## Memory check (C5)
+
+`memory.mjs` starts the built harness on a copied home and creates two Bots on a real engine:
+bot A is told a fact about the user and saves it for every bot; the fact shows in the Client
+API ("What it knows"); bot B, with no shared session, answers with it; bot A forgets it on
+request and it is gone.
+
+```sh
+RUN_HOME=/tmp/openbot-copy node scripts/live/memory.mjs                    # Claude
+RUN_HOME=/tmp/openbot-copy RUN_ENGINE=codex node scripts/live/memory.mjs
+```
+
+`RUN_MODEL` (the engine's first listed model), `RUN_PORT` (4593), `RUN_TURN_MIN` (6). Copy the
+home with `tar --exclude=./codex-home/tmp` (a running Codex holds locks there). Verified
+2026-10-01: Claude 7/7, Codex 7/7.
