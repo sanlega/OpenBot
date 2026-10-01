@@ -356,6 +356,19 @@ export class DockerProvider implements ComputerProvider {
     await this.ensureStarted();
   }
 
+  /** B5: a filtered DevTools endpoint on this computer's loopback for a connector. */
+  async browserEndpoint(
+    botId: string,
+    options: { allowHosts?: string[]; mode?: "read" | "act" } = {},
+  ): Promise<string> {
+    await this.ensureStarted();
+    const client = this.controlClient();
+    if (!client.cdpGrant) throw new Error("this computer cannot share its browser");
+    const grant = await client.cdpGrant(botId, options);
+    this.lastActivity = this.now();
+    return `http://127.0.0.1:${this.options.controlPort ?? 8787}${grant.path}`;
+  }
+
   /** Stop the container after idle (plan: stop after idle). Test hook. */
   scheduleIdleStop(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);

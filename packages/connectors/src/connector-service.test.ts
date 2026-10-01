@@ -306,6 +306,44 @@ describe("per-Bot injection and tool classification", () => {
     ]);
   });
 
+  it("points Playwright at the bot's VM browser through the filtered proxy (B5)", async () => {
+    const { service, ctx } = await setup();
+    const asked: Array<{ botId: string; options: unknown }> = [];
+    ctx.computerProvider = {
+      id: "docker",
+      status: async () => ({ ready: true }),
+      ensureStarted: async () => undefined,
+      screen: async () => {
+        throw new Error("not used");
+      },
+      browserEndpoint: async (botId, options) => {
+        asked.push({ botId, options });
+        return "http://127.0.0.1:8787/cdp/abc";
+      },
+    };
+    const pw = await service.connect({
+      catalogId: "curated:playwright",
+      values: { ALLOWED_SITES: "shop.example, docs.example" },
+    });
+    const vmOnly = { ...makeBot([pw.id]), computer: "docker" as const };
+    const noComputer = makeBot([pw.id]);
+    for (const bot of [vmOnly, noComputer]) ctx.repos.bots.create(bot);
+
+    const [server] = await service.mcpServersForBot(vmOnly.id);
+    expect(server?.name).toBe("vm-browser");
+    expect(server?.args?.slice(-2)).toEqual(["--cdp-endpoint", "http://127.0.0.1:8787/cdp/abc"]);
+    expect(asked).toEqual([
+      { botId: vmOnly.id, options: { allowHosts: ["shop.example", "docs.example"], mode: "act" } },
+    ]);
+    // Its tools are the VM's browser, not this computer's: the broker lets them through.
+    expect(service.classifyTool(vmOnly.id, "mcp__vm-browser__browser_click")).toMatchObject({
+      vmBrowser: true,
+      sideEffect: true,
+    });
+    // A Bot with no computer still never gets one.
+    expect(await service.mcpServersForBot(noComputer.id)).toEqual([]);
+  });
+
   it("gives two connections of the same entry distinct server names", async () => {
     const { service, ctx } = await setup();
     const a = await service.connect({ catalogId: "curated:time", values: {} });

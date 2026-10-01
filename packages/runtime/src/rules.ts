@@ -112,7 +112,12 @@ function haystackOf(req: BrokerRequest): string {
  */
 export function builtinDenyReason(req: BrokerRequest): string | undefined {
   const haystack = haystackOf(req);
-  if (req.computerAccess && req.computerAccess !== "docker+local" && usesHostBrowser(req)) {
+  if (
+    req.computerAccess &&
+    req.computerAccess !== "docker+local" &&
+    !req.vmBrowser &&
+    usesHostBrowser(req)
+  ) {
     return "uses this computer's browser; this Bot's computer is the virtual machine (use computer_task)";
   }
   if (req.computerAccess === "docker" && req.kind === "tool" && HOST_WORK_TOOLS.has(req.action)) {

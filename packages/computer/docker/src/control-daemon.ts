@@ -23,6 +23,11 @@ export interface ControlDaemonClient {
   diagnose?(): Promise<BoxDiagnostics>;
   /** Takes a bot's screen lease away (the user took over its screen). */
   revoke?(botId: string): Promise<void>;
+  /** B5: a filtered DevTools path (`/cdp/<token>`) for a connector to drive a bot's browser. */
+  cdpGrant?(
+    botId: string,
+    options: { allowHosts?: string[]; mode?: "read" | "act" },
+  ): Promise<{ path: string; expiresAt: string }>;
 }
 
 export interface ControlDaemonOptions {
@@ -151,6 +156,27 @@ export class HttpControlDaemonClient implements ControlDaemonClient {
       body: JSON.stringify({ botId }),
       signal: AbortSignal.timeout(10_000),
     }).catch(() => undefined);
+  }
+
+  async cdpGrant(
+    botId: string,
+    options: { allowHosts?: string[]; mode?: "read" | "act" },
+  ): Promise<{ path: string; expiresAt: string }> {
+    const res = await call("browser access", () =>
+      fetch(`${this.options.baseUrl}/cdp/grant`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ botId, ...options }),
+        signal: AbortSignal.timeout(60_000),
+      }),
+    );
+    if (res.status === 404) {
+      throw new Error(
+        "this desktop image is too old to share its browser; update it in Settings > Computer",
+      );
+    }
+    if (!res.ok) throw await failure("browser access", res);
+    return (await res.json()) as { path: string; expiresAt: string };
   }
 
   async exec(request: {

@@ -60,9 +60,10 @@ Phase 3 — memory and updates
 - [x] C5 scoped memory (table + tools + prompt injection + UI)
 - [x] D2 defer box recreation while work runs
 - [x] D3 classified crash markers
-Also done: B2 localStorage replication, C9 playbooks, per-turn usage storage.
-Later / not in this pass: D1 hot daemon update, B5 CDP proxy, B6 UA/Web Bot Auth, C11 eval
-runner.
+Also done: B2 localStorage replication, C9 playbooks, per-turn usage storage, and B5 (D-035):
+connectors drive the VM browser through a filtered DevTools proxy (box.mjs 19/19,
+vmconnector.mjs 4/4 with real Claude and Codex).
+Later / not in this pass: D1 hot daemon update, B6 UA/Web Bot Auth, C11 eval runner.
 
 ## Risks
 - Docker Desktop kernels without iptables owner match: the firewall step must degrade to a
@@ -84,6 +85,5 @@ cap; Grok Bot's 1.5 s session-sync loop became a sync when a bot looks at its sc
 
 Next candidates, in order: release (republish the image: users only get the hardened box with
 a `v*` tag); D1 hot daemon update with rollback (useful only once images stop being republished
-per release, an owner decision); C11 eval runner on the real harness; B5 CDP proxy so
-connectors can use the VM browser; turning the native-tool loop detector from shadow to on after
+per release, an owner decision); C11 eval runner on the real harness; turning the native-tool loop detector from shadow to on after
 a week of `tool_loop` decisions; a UI for the latency and cache numbers in /api/usage.

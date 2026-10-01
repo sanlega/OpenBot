@@ -21,8 +21,12 @@ _Last updated: 2026-10-01 by Claude (Grok Bot roadmap implemented on branch `mai
   errors, typecheck, format, mh check); live `scripts/live/box.mjs` 15/15 and `vm.mjs` 11/11
   on a locally built image; `scripts/live/memory.mjs` 7/7 with real Claude and real Codex.
   **Next**: owner review, merge `main-2` into `main`, release (the image must be republished:
-  a `v*` tag) and replay `box.mjs`/`memory.mjs`/`vmbot.mjs` on the installed app. Not built:
-  D1, B5, B6, C11 (see the plan's outcome). Known: Codex/ACP refusals don't carry the
+  a `v*` tag) and replay `box.mjs`/`memory.mjs`/`vmbot.mjs`/`vmconnector.mjs` on the installed
+  app. **B5 added after (D-035)**: the curated Playwright connector now works for VM-only Bots
+  (server `vm-browser`, `--cdp-endpoint` to a filtered DevTools proxy in the daemon that never
+  hands out cookies/storage and can restrict sites via `ALLOWED_SITES`); verified box 19/19,
+  vmconnector 4/4 with real Claude and real Codex. Not built: D1, B6, C11 (see the plan's
+  outcome). Known: Codex/ACP refusals don't carry the
   anti-detour text (only Claude's permission prompt); the desktop Electron E2E was not run
   locally (needs `rebuild:native`; CI runs it).
 - **v0.1.17 RELEASED and installed on the Windows dev machine (2026-10-01)**: tag `v0.1.17`,

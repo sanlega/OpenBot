@@ -22,6 +22,11 @@ export interface BrokerRequest {
   inWorkspace?: boolean;
   /** The requesting Bot's computer access; lets the broker keep VM-only Bots off the host. */
   computerAccess?: "none" | "docker" | "docker+local";
+  /**
+   * B5: a browser-automation connector that drives the bot's browser in the virtual machine
+   * (through the filtered DevTools proxy), not a browser on the user's computer.
+   */
+  vmBrowser?: boolean;
   args?: Record<string, unknown>;
   summary: string;
   detail: string;

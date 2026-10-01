@@ -505,7 +505,19 @@ export const CURATED_CONNECTORS: readonly CuratedConnector[] = [
     description: "Drive a real browser through its accessibility tree: navigate, click, type.",
     kind: "local",
     auth: "none",
-    setup: { fields: [], docsUrl: "https://github.com/microsoft/playwright-mcp" },
+    setup: {
+      fields: [
+        {
+          key: "ALLOWED_SITES",
+          label: "Sites it may open (virtual machine bots)",
+          help: "Comma-separated, e.g. shop.example, docs.example. Empty means any site. A bot whose computer is the virtual machine drives its own browser there; it can never read sign-ins or stored data.",
+          secret: false,
+          optional: true,
+          placeholder: "any site",
+        },
+      ],
+      docsUrl: "https://github.com/microsoft/playwright-mcp",
+    },
     tools: [
       ...readTools(
         "browser_navigate",

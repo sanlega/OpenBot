@@ -113,3 +113,20 @@ RUN_HOME=/tmp/openbot-copy RUN_ENGINE=codex node scripts/live/memory.mjs
 `RUN_MODEL` (the engine's first listed model), `RUN_PORT` (4593), `RUN_TURN_MIN` (6). Copy the
 home with `tar --exclude=./codex-home/tmp` (a running Codex holds locks there). Verified
 2026-10-01: Claude 7/7, Codex 7/7.
+
+## Connectors on the VM browser (B5)
+
+`box.mjs` also drives a bot's VM browser with real Playwright (`connectOverCDP`) through the
+filtered DevTools proxy: it navigates and reads a page, `context.cookies()` is refused, a narrow
+read-only grant cannot open another site nor click, and a replaced grant's URL stops working.
+`vmconnector.mjs` runs the whole product path: built harness on a copied home, its own desktop
+container (`openbot-desktop-connectorcheck`, ports 8796/6093) from the local image, a VM-only
+Bot with the curated Playwright connector on a real engine; the bot must call
+`mcp__vm-browser__*` and answer from the page, which must be open inside the VM.
+
+```sh
+RUN_HOME=/tmp/openbot-copy node scripts/live/vmconnector.mjs                # Claude
+RUN_HOME=/tmp/openbot-copy RUN_ENGINE=codex node scripts/live/vmconnector.mjs
+```
+
+Verified 2026-10-01: box 19/19; vmconnector Claude 4/4 and Codex 4/4 (0 approval cards).

@@ -13,6 +13,7 @@ import { defaultExecIdentity, runExec, type ExecRequest } from "./exec.js";
 import { startPackageHelper } from "./apt-helper.js";
 import { liveDoctorDeps, runBoxDoctor } from "./box-doctor.js";
 import { TelemetryLog } from "./telemetry.js";
+import { CdpProxy } from "./cdp-proxy.js";
 import { stripMeta } from "@openbot/computer/observation";
 import type { Action } from "@openbot/contracts";
 
@@ -74,7 +75,10 @@ const sessions = new DisplaySessionManager({
     persistLiveTokens();
     // The screen went to another bot: whatever the old one still runs cannot click on it.
     const owner = displayOwner.get(display);
-    if (owner) leases.delete(owner);
+    if (owner) {
+      leases.delete(owner);
+      cdp.revoke(owner);
+    }
     displayOwner.delete(display);
   },
 });
@@ -132,7 +136,14 @@ process.on("unhandledRejection", (reason) => {
 // Bots install system packages through this socket (images/desktop/box-apt.sh).
 if (identity.uid !== undefined) startPackageHelper("/run/openbot/apt.sock");
 
+/** B5: filtered DevTools for connectors, one capability URL per bot (no bearer token). */
+const cdp = new CdpProxy({
+  debugPortFor: async (botId) => sessions.debugPort(botId),
+  onRefused: (event) => telemetry.record({ kind: "cdp_refused", ...event }),
+});
+
 const server = createServer(async (req, res) => {
+  if (await cdp.handleHttp(req, res)) return;
   const auth = req.headers.authorization ?? "";
   if (!sameSecret(auth, `Bearer ${TOKEN}`)) return unauthorized(res);
 
@@ -188,8 +199,33 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/screens/revoke") {
     const body = await parseBody(req).catch(() => ({}) as Record<string, unknown>);
-    if (typeof body.botId === "string") leases.delete(body.botId);
+    if (typeof body.botId === "string") {
+      leases.delete(body.botId);
+      cdp.revoke(body.botId);
+    }
     return json(res, 200, { ok: true });
+  }
+
+  // B5: a connector may drive this bot's VM browser through the filtered proxy.
+  if (req.method === "POST" && url.pathname === "/cdp/grant") {
+    const body = await parseBody(req).catch(() => ({}) as Record<string, unknown>);
+    const botId = typeof body.botId === "string" ? body.botId : "";
+    if (!botId) return json(res, 400, { ok: false, reason: "botId is required" });
+    const allowHosts = Array.isArray(body.allowHosts)
+      ? body.allowHosts.filter((h): h is string => typeof h === "string" && h.length > 0)
+      : ["*"];
+    const mode = body.mode === "read" ? "read" : "act";
+    try {
+      await sessions.ensureReady(botId);
+      rememberOwner(botId);
+    } catch (error) {
+      return json(res, 500, { ok: false, reason: errorText(error) });
+    }
+    const grant = cdp.grant(botId, { allowHosts, mode });
+    return json(res, 200, {
+      path: `/cdp/${grant.token}`,
+      expiresAt: new Date(grant.expires).toISOString(),
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/observe") {
@@ -288,6 +324,10 @@ function rememberOwner(botId: string): void {
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+server.on("upgrade", (req, socket, head) => {
+  if (!cdp.handleUpgrade(req, socket, head)) socket.destroy();
+});
 
 server.listen(PORT, "0.0.0.0", () => {
   telemetry.record({ kind: "boot_stage", stage: "daemon_listening", protocol: DAEMON_PROTOCOL });

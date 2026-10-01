@@ -74,6 +74,15 @@ describe("a Bot whose computer is the virtual machine stays off the host's brows
     ).toBeUndefined();
   });
 
+  it("lets a connector through when it drives the bot's VM browser (B5)", () => {
+    expect(
+      builtinDenyReason(req({ action: "mcp__vm-browser__browser_click", vmBrowser: true })),
+    ).toBeUndefined();
+    expect(builtinDenyReason(req({ action: "mcp__playwright__browser_click" }))).toMatch(
+      /this computer's browser/,
+    );
+  });
+
   it("does not enforce anything when the request doesn't say which computer the Bot has", () => {
     expect(
       builtinDenyReason(req({ computerAccess: undefined, action: "browser_navigate" })),

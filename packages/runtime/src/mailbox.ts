@@ -614,6 +614,7 @@ export class Mailbox {
       readOnly: classified.readOnly,
       inWorkspace: classified.inWorkspace,
       computerAccess: input.bot.computer,
+      ...(classified.vmBrowser ? { vmBrowser: true } : {}),
       args: classified.args ?? ((r.input ?? {}) as Record<string, unknown>),
       summary: classified.summary ?? `${r.toolName} requested by ${botId}`,
       detail: classified.detail ?? JSON.stringify(r.input ?? {}),

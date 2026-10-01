@@ -38,6 +38,8 @@ export interface ConnectorToolClass {
   sideEffect: boolean;
   readOnly: boolean;
   summary: string;
+  /** B5: the connector drives the bot's browser in the virtual machine, not on this computer. */
+  vmBrowser?: boolean;
 }
 
 export type ConnectorErrorCode =

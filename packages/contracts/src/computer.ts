@@ -76,6 +76,14 @@ export interface ComputerProvider {
   diagnose?(): Promise<BoxDiagnostics>;
   /** A fresh machine that keeps files and sign-ins (the first recovery to try; D-034). */
   recreate?(): Promise<void>;
+  /**
+   * B5: a filtered DevTools endpoint (http URL) for a browser-automation connector to drive this
+   * bot's browser in the machine. It cannot read sign-ins, storage or other sites' data.
+   */
+  browserEndpoint?(
+    botId: string,
+    options?: { allowHosts?: string[]; mode?: "read" | "act" },
+  ): Promise<string>;
 }
 
 /** One self-check of the bots' machine: PASS/FAIL and what it found. */

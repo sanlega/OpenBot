@@ -18,6 +18,10 @@ import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import { createDockerProvider } from "../../packages/computer/docker/dist/index.js";
 
+// Real Playwright (the e2e package's), to drive the VM browser the way a connector would.
+const { chromium } = createRequire(new URL("../../e2e/package.json", import.meta.url))(
+  "@playwright/test",
+);
 const requireFromDocker = createRequire(
   new URL("../../packages/computer/docker/package.json", import.meta.url),
 );
@@ -218,6 +222,61 @@ try {
     aSignedIn && /Signed in as user-42/.test(bPage.text ?? ""),
     `A: ${aSignedIn}, B: ${(bPage.text ?? "").slice(0, 40)}`,
   );
+
+  // 5c. A connector (real Playwright) drives the bot's VM browser through the filtered proxy (B5).
+  const endpoint = await vm.browserEndpoint("bot_box_a", { allowHosts: ["*"], mode: "act" });
+  const pw = await chromium.connectOverCDP(endpoint);
+  const ctxPw = pw.contexts()[0];
+  const tab = await ctxPw.newPage();
+  await tab.goto("https://example.com/");
+  // example.com changes its wording: check the title and that the page text can be read.
+  const title = await tab.title();
+  const body = await tab.evaluate("document.body.innerText.slice(0, 60)");
+  check(
+    "a connector drives the VM browser through the proxy",
+    /example/i.test(title) && body.length > 0,
+    `${title} | ${body.replace(/\s+/g, " ")}`,
+  );
+  let cookiesRefused = false;
+  try {
+    await ctxPw.cookies();
+  } catch (error) {
+    cookiesRefused = /OpenBot/.test(String(error));
+  }
+  check("the connector cannot read the browser's sign-ins", cookiesRefused);
+  await tab.close().catch(() => undefined);
+  await pw.close().catch(() => undefined);
+
+  const narrow = await vm.browserEndpoint("bot_box_a", {
+    allowHosts: ["example.com"],
+    mode: "read",
+  });
+  const pw2 = await chromium.connectOverCDP(narrow);
+  const tab2 = await pw2.contexts()[0].newPage();
+  let offSite = "";
+  try {
+    await tab2.goto("https://www.wikipedia.org/");
+    offSite = "opened";
+  } catch (error) {
+    offSite = String(error).includes("OpenBot") ? "refused" : String(error).slice(0, 80);
+  }
+  let clicked = "";
+  try {
+    await tab2.goto("https://example.com/");
+    await tab2.mouse.click(10, 10);
+    clicked = "clicked";
+  } catch (error) {
+    clicked = String(error).includes("OpenBot") ? "refused" : String(error).slice(0, 80);
+  }
+  check(
+    "a narrow, read-only grant keeps the connector on its site and off the mouse",
+    offSite === "refused" && clicked === "refused",
+    `other site: ${offSite}, click: ${clicked}`,
+  );
+  await pw2.close().catch(() => undefined);
+  // The old capability URL died with the new grant.
+  const stale = await fetch(`${endpoint}/json/version`).then((r) => r.status);
+  check("a replaced grant stops working", stale === 404, `status ${stale}`);
 
   // 6. No zombies, quick stop.
   const zombies = Number((await rootExec("ps -eo stat= | grep -c '^Z' || true")).trim() || 0);

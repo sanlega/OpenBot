@@ -198,7 +198,7 @@ export class DefaultConnectorService implements ConnectorService {
 
   async mcpServersForBot(botId: string): Promise<McpServerSpec[]> {
     const specs: McpServerSpec[] = [];
-    for (const { connection, serverName } of this.botServers(botId)) {
+    for (const { connection, serverName, viaVm } of this.botServers(botId)) {
       const raw = await this.ctx.vault.get(connectionMcpConfigKey(connection.id));
       if (!raw) continue;
       const config = StoredConfig.parse(JSON.parse(raw));
@@ -209,7 +209,17 @@ export class DefaultConnectorService implements ConnectorService {
         const value = await this.ctx.vault.get(connectionEnvKey(connection.id, key));
         if (value) values[key] = value;
       }
-      specs.push(renderServer(serverName, template, values));
+      const spec = renderServer(serverName, template, values);
+      if (viaVm) {
+        // B5: the connector drives this bot's browser in the virtual machine, through the
+        // filtered DevTools proxy (it cannot read sign-ins or storage there).
+        const endpoint = await this.ctx.computerProvider
+          ?.browserEndpoint?.(botId, { allowHosts: allowedSites(values), mode: "act" })
+          .catch(() => undefined);
+        if (!endpoint) continue;
+        spec.args = [...(spec.args ?? []), "--cdp-endpoint", endpoint];
+      }
+      specs.push(spec);
     }
     return specs;
   }
@@ -223,7 +233,7 @@ export class DefaultConnectorService implements ConnectorService {
       servers.map((s) => s.serverName),
     );
     if (!match) return undefined;
-    const { connection } = servers.find((s) => s.serverName === match.server)!;
+    const { connection, viaVm } = servers.find((s) => s.serverName === match.server)!;
     const curatedTools = curatedById(connection.appId)?.tools;
     const known = curatedTools
       ? curatedTools.find((t) => t.name === match.tool)?.write
@@ -237,26 +247,40 @@ export class DefaultConnectorService implements ConnectorService {
       sideEffect: write,
       readOnly: !write,
       summary: `${connection.displayName}: ${match.tool}`,
+      ...(viaVm ? { vmBrowser: true } : {}),
     };
   }
 
   /** The Bot's connected connections with the MCP server name each gets in its turns. */
-  private botServers(botId: string): Array<{ connection: Connection; serverName: string }> {
+  private botServers(
+    botId: string,
+  ): Array<{ connection: Connection; serverName: string; viaVm?: boolean }> {
     const bot = this.ctx.repos.bots.getById(botId);
     if (!bot) return [];
     const used = new Set<string>(RESERVED_SERVER_NAMES);
-    const out: Array<{ connection: Connection; serverName: string }> = [];
+    const out: Array<{ connection: Connection; serverName: string; viaVm?: boolean }> = [];
     for (const connectionId of bot.connectors) {
       const connection = this.ctx.repos.connections.getById(connectionId);
       if (!connection || connection.status !== "connected") continue;
       // A browser-automation server opens a browser on the owner's computer. A Bot whose computer
       // is the virtual machine never gets one: its browser work goes through computer_task.
-      if (bot.computer !== "docker+local" && drivesHostBrowser(connection)) continue;
-      const base = serverBaseName(connection.appId);
+      let viaVm = false;
+      if (bot.computer !== "docker+local" && drivesHostBrowser(connection)) {
+        // B5: one that can attach to a DevTools endpoint drives the bot's VM browser instead.
+        if (
+          bot.computer !== "docker" ||
+          !canUseVmBrowser(connection) ||
+          !this.ctx.computerProvider?.browserEndpoint
+        ) {
+          continue;
+        }
+        viaVm = true;
+      }
+      const base = viaVm ? "vm-browser" : serverBaseName(connection.appId);
       let name = base;
       for (let i = 2; used.has(name); i++) name = `${base}_${i}`;
       used.add(name);
-      out.push({ connection, serverName: name });
+      out.push({ connection, serverName: name, ...(viaVm ? { viaVm } : {}) });
     }
     return out;
   }
@@ -352,6 +376,20 @@ export type { ConnectorService, ConnectorSetupField };
 /** Playwright, Puppeteer, Selenium, Browserbase-style local servers: they drive a browser on this computer. */
 const HOST_BROWSER_SERVER_RE =
   /playwright|puppeteer|selenium|chrome-devtools|browser-?use|webdriver/i;
+
+/** Browser-automation servers that can attach to an existing browser (`--cdp-endpoint`). */
+export function canUseVmBrowser(connection: Pick<Connection, "appId">): boolean {
+  return connection.appId === `${CURATED_PREFIX}playwright`;
+}
+
+/** Sites a VM-browser connector may open: its `ALLOWED_SITES` setup value, or any site. */
+export function allowedSites(values: Record<string, string>): string[] {
+  const sites = (values.ALLOWED_SITES ?? "")
+    .split(/[\s,]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return sites.length > 0 ? sites : ["*"];
+}
 
 export function drivesHostBrowser(connection: Pick<Connection, "appId" | "displayName">): boolean {
   const template = curatedById(connection.appId)?.template;
