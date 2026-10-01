@@ -1,3 +1,4 @@
+import { detectBotWall } from "./bot-wall.js";
 import type {
   Action,
   ActionOp,
@@ -343,7 +344,8 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     detail?: string,
   ): Promise<FastLoopResult | undefined> => {
     await screen.takeover(true);
-    const reason = detail ?? blockerReason(kind);
+    // A named anti-bot wall says more than "this step needs you" (B7).
+    const reason = detail ?? detectBotWall(observation)?.reason ?? blockerReason(kind);
     onStep?.({
       step: steps,
       observation,
@@ -785,6 +787,8 @@ const SIGN_IN_RE =
 
 /** What kind of step the page is asking a person for. */
 export function classifyBlocker(observation: Observation): BlockerKind {
+  const wall = detectBotWall(observation);
+  if (wall && !wall.clearsAlone) return "captcha";
   const text = observation.elements.map((el) => `${el.role} ${el.label}`).join(" | ");
   if (CAPTCHA_RE.test(text)) return "captcha";
   if (CODE_RE.test(text)) return "code";

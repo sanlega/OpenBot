@@ -1,3 +1,4 @@
+import { newId } from "@openbot/contracts";
 import type {
   Action,
   ComputerProvider,
@@ -7,7 +8,7 @@ import type {
   Screen,
 } from "@openbot/contracts";
 import { loginForUrl, resolveSecretRef, type CoreContext } from "@openbot/core";
-import { isSensitiveLabel, type ComputerActionBroker } from "@openbot/computer";
+import { detectBotWall, isSensitiveLabel, type ComputerActionBroker } from "@openbot/computer";
 import { classifyToolCall, type Runtime } from "@openbot/runtime";
 import type { SessionContext, ToolResult } from "../types.js";
 import { allowed, refused } from "../types.js";
@@ -23,6 +24,8 @@ export interface PageView {
   elements: Array<{ ref: string; role: string; label: string; value?: string }>;
   /** Where the whole text is when the page is longer than `text` (a file in the machine). */
   fullText?: { path: string; bytes: number; lines: number };
+  /** An anti-bot wall in front of the page (B7). */
+  blocked?: { family: string; reason: string; timesBefore: number };
   /** What the step did, when it was an action. */
   did?: string;
 }
@@ -77,10 +80,56 @@ export class McpMachineServiceAdapter {
       await sleep(SETTLE_MS);
     }
     const page = await this.read(session.botId, screen);
-    const fullText = await this.spillPageText(session, this.lastRead.get(session.botId));
+    const observation = this.lastRead.get(session.botId);
+    const fullText = await this.spillPageText(session, observation);
+    const blocked = observation ? this.noteBotWall(session, observation) : undefined;
     return allowed({
-      page: { ...page, ...(did ? { did } : {}), ...(fullText ? { fullText } : {}) },
+      page: {
+        ...page,
+        ...(did ? { did } : {}),
+        ...(fullText ? { fullText } : {}),
+        ...(blocked ? { blocked } : {}),
+      },
     });
+  }
+
+  /**
+   * B7: a page behind an anti-bot wall is named ("Cloudflare blocked the page") and counted per
+   * site in the decisions log, so a site that always blocks is known before a bot tries again.
+   */
+  private noteBotWall(
+    session: SessionContext,
+    observation: Observation,
+  ): { family: string; reason: string; timesBefore: number } | undefined {
+    const wall = detectBotWall(observation);
+    if (!wall) return undefined;
+    let timesBefore = 0;
+    try {
+      timesBefore = this.ctx.repos.decisions
+        .list({ purpose: "bot_blocked", limit: 500 })
+        .filter((d) => d.answers.host === wall.host).length;
+      this.ctx.repos.decisions.create({
+        id: newId("decision"),
+        purpose: "bot_blocked",
+        provider: "heuristic",
+        model: "bot-wall-detector",
+        stateHash: `${wall.host ?? "?"}:${wall.family}`,
+        answers: { host: wall.host, family: wall.family, botId: session.botId },
+        band: "auto",
+        outcome: "n/a",
+        createdAt: this.ctx.clock.now().toISOString(),
+      });
+    } catch {
+      // Counting is best effort.
+    }
+    return {
+      family: wall.family,
+      reason:
+        timesBefore > 0
+          ? `${wall.reason} This site blocked bots ${timesBefore} time${timesBefore === 1 ? "" : "s"} before: do not keep retrying it.`
+          : wall.reason,
+      timesBefore,
+    };
   }
 
   /**

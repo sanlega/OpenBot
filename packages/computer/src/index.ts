@@ -1,4 +1,5 @@
 export * from "./observation/index.js";
+export * from "./bot-wall.js";
 export * from "./broker.js";
 export * from "./candidates.js";
 export * from "./computer-agent.js";

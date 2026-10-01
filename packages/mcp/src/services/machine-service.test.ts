@@ -252,3 +252,31 @@ describe("long pages (C7)", () => {
     expect(commands.at(-1)!.stdin).toContain("line 899 of a long article");
   });
 });
+
+describe("anti-bot walls (B7)", () => {
+  it("names the wall and counts how often the site blocked before", async () => {
+    const { call } = await setup();
+    const provider = harness!.ctx.computerProvider!;
+    const screen = provider.screen.bind(provider);
+    provider.screen = async (botId) => {
+      const real = await screen(botId);
+      return {
+        ...real,
+        observe: async (o) => ({
+          ...(await real.observe(o)),
+          url: "https://shop.example/",
+          text: "hcaptcha: please prove you are human",
+        }),
+        act: (a) => real.act(a),
+        liveView: () => real.liveView(),
+        takeover: (on) => real.takeover(on),
+      };
+    };
+    type Blocked = { page: { blocked?: { family: string; reason: string; timesBefore: number } } };
+    const first = await call<Blocked>("browser_read", {});
+    expect(first.page.blocked).toMatchObject({ family: "hcaptcha", timesBefore: 0 });
+    const second = await call<Blocked>("browser_read", {});
+    expect(second.page.blocked?.timesBefore).toBe(1);
+    expect(second.page.blocked?.reason).toMatch(/blocked bots 1 time before/);
+  });
+});
