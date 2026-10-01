@@ -55,3 +55,26 @@ RUN_HOME=/tmp/openbot-copy RUN_ENGINE=cursor RUN_MODEL=auto node scripts/live/en
 `RUN_ENGINE` (opencode), `RUN_MODEL` (ollama/qwen3:8b), `RUN_PORT` (4592), `RUN_TURN_MIN` (8).
 LM Studio on another port: `OPENBOT_LMSTUDIO_URL=http://127.0.0.1:1235` (on the dev machine a
 Windows service holds 1234). Verified 2026-09-30: all three 9/9.
+
+## Virtual machine checks (D-032/D-033)
+
+Both run a **second** desktop container next to an installed app's (`openbot-desktop-livecheck`,
+ports 8797/6090, volume `openbot-browser-livecheck`), from a locally built image:
+
+```sh
+docker build -f images/desktop/Dockerfile -t openbot-desktop:dev .
+pnpm build
+node scripts/live/vm.mjs                                     # the machine itself (11 checks)
+RUN_HOME=/tmp/openbot-copy RUN_ENGINE=claude node scripts/live/vmbot.mjs
+RUN_HOME=/tmp/openbot-copy RUN_ENGINE=codex node scripts/live/vmbot.mjs
+VM_IMAGE=openbot-desktop:dev RUN_HOME=/tmp/openbot-copy SITE_PORT=4611 SITE_VARIANT=c node scripts/live/drive.mjs
+```
+
+`vm.mjs`: commands with developer tools in `/workspace`, files in the host workspace, `pip
+install --user` kept across a new container, page text, a "Leave site?" dialog that must not
+block navigation, a sign-in on a real site (the-internet.herokuapp.com, public test account)
+shared between two bots and kept across a new container. `vmbot.mjs`: a VM-only Bot on a real
+engine uses only `vm_*`/`browser_*` tools, its file lands in the host workspace, it cannot read
+a file on the user's computer, and it answers from a page read with `browser_read`. Verified
+2026-10-01: vm 11/11, vmbot Claude 11/11 and Codex 11/11, drive variant c (0 cards, 1 form).
+Remove the test container and volume afterwards (`vm.mjs` does it itself).

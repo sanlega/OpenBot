@@ -31,23 +31,31 @@ polished product overall.
 - open-dots, akeru-bot, botato: smaller; nothing we lack beyond the above.
 
 ## Tasks
-- [ ] T1 CDP robustness: per-call timeout, auto-accept `beforeunload`/alert dialogs, a
+- [x] T1 CDP robustness: per-call timeout, auto-accept `beforeunload`/alert dialogs, a
       navigation that times out still continues if the page is there.
-- [ ] T2 Fast loop anti-loop: repeated-action and revisited-state detection, scroll budget per
+- [x] T2 Fast loop anti-loop: repeated-action and revisited-state detection, scroll budget per
       page, click budget per element, a no-progress budget; escalations say why and what the
       page shows. Tests reproduce the logged loops.
-- [ ] T3 Read goals: a goal that only asks to read/report finishes at once with the page text.
-- [ ] T4 Direct browser tools for the engine (`browser_open`, `browser_read`, `browser_click`,
+- [x] T3 Read goals: a goal that only asks to read/report finishes at once with the page text.
+- [x] T4 Direct browser tools for the engine (`browser_open`, `browser_read`, `browser_click`,
       `browser_type`, `browser_key`, `browser_scroll`) on the bot's VM screen, refs from the
       last read, stale refs rejected, broker checks. `computer_task` stays for longer flows.
-- [ ] T5 VM-only bots: no host shell/files. Claude `--tools` without Bash/Edit/Write/Read...;
+- [x] T5 VM-only bots: no host shell/files. Claude `--tools` without Bash/Edit/Write/Read...;
       Codex features `shell_tool`/`unified_exec`/browser/computer off; OpenBot MCP gives
       `vm_shell`, `vm_read_file`, `vm_write_file`, `vm_list_files` in the container. ACP engines:
       decide (fence or refuse VM-only).
-- [ ] T6 Shared sign-ins verified live (LinkedIn-style flow across two bots, after takeover);
+- [x] T6 Shared sign-ins verified live (LinkedIn-style flow across two bots, after takeover);
       fix what fails.
-- [ ] T7 Bots: rename; delete with confirmation, the Chief keeps a summary of what the bot did.
-- [ ] T8 Settings: reset conversations (with confirmation), also per bot "clear chat".
-- [ ] T9 Delegated permission: a Full Chief passes Full to the work it delegates (D-xxx).
-- [ ] T10 UX pass in the real app (screenshots), fix what looks off.
+- [x] T7 Bots: rename; delete with confirmation, the Chief keeps a summary of what the bot did.
+- [x] T8 Settings: reset conversations (with confirmation), also per bot "clear chat".
+- [-] T9 Delegated permission: dropped for now; since D-028 new Bots are Full by default.
+- [x] T10 UX pass in the real app (screenshots), fix what looks off.
 - [ ] T11 Full pipeline, live replay, release (owner's OK for publishing).
+
+## Outcome (2026-10-01)
+All done except T9 (dropped) and T11's release, which waits for the owner. Also done on the way:
+replies keep only the text after the last tool call; long vm_shell output goes to
+`/workspace/.tool-output`; GitHub CLI in the image; VM-only Bots are routed to Claude/Codex; a
+sign-in race (browser not up yet) fixed; Chief-created slugs unique; activity labels for the new
+tools; profile computer choice explained. Verification: unit 1251, E2E 23/23, lint 0 errors,
+format, mh check, live vm 11/11, vmbot Claude/Codex 11/11, drive variant c.
