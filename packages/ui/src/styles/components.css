@@ -637,3 +637,9 @@ kbd {
   background: var(--danger);
   filter: brightness(1.08);
 }
+
+/* A typed confirmation: the explanation and the field get room between them. */
+.dialog-confirm .dialog-text {
+  display: grid;
+  gap: var(--space-3);
+}

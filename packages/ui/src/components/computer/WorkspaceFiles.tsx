@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, File, Folder, Terminal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronRight, File, Folder, FolderOpen, RefreshCw, Terminal } from "lucide-react";
 import { useOpenBot } from "../../state/context.js";
 import { relativeTime } from "../activity/format.js";
+import { MessageText } from "../thread/MessageText.js";
 
 interface Entry {
   name: string;
@@ -33,10 +34,21 @@ interface Command {
   timedOut?: boolean;
 }
 
+/** How often, at most, the open folder is read again while bots work. */
+const REFRESH_MS = 3000;
+
 export function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** How a command ended, in the words the other status pills use. */
+export function commandOutcome(c: Command): { label: string; tone: string } | null {
+  if (c.timedOut) return { label: "Timed out", tone: "warning" };
+  if (c.exitCode === undefined) return null;
+  if (c.exitCode === 0) return { label: "Done", tone: "success" };
+  return { label: `Failed (exit ${c.exitCode ?? "?"})`, tone: "danger" };
 }
 
 /**
@@ -47,31 +59,43 @@ export function WorkspaceFiles({ botId }: { botId: string }) {
   const { transport, state } = useOpenBot();
   const [path, setPath] = useState("");
   const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloads, setReloads] = useState(0);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [commands, setCommands] = useState<Command[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const lastRead = useRef(0);
+  const shownPath = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setEntries(null);
+    // A new folder starts from "Loading…"; a refresh of the same one keeps the list on screen.
+    if (shownPath.current !== path) setEntries(null);
+    lastRead.current = Date.now();
     transport
       .get<{ entries: Entry[] }>(`/api/workspace/files?path=${encodeURIComponent(path)}`)
       .then((r) => {
-        if (!cancelled) {
-          setEntries(Array.isArray(r.entries) ? r.entries : []);
-          setError(null);
-        }
+        if (cancelled) return;
+        shownPath.current = path;
+        setEntries(Array.isArray(r.entries) ? r.entries : []);
+        setLoadFailed(false);
       })
       .catch(() => {
-        if (!cancelled) {
-          setEntries([]);
-          setError("Couldn't read this folder.");
-        }
+        if (cancelled) return;
+        setLoadFailed(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [transport, path]);
+  }, [transport, path, reloads]);
+
+  // Files a bot writes show up while you watch: the folder is read again as events arrive.
+  useEffect(() => {
+    if (!state?.lastSeq) return;
+    const wait = Math.max(0, REFRESH_MS - (Date.now() - lastRead.current));
+    const timer = setTimeout(() => setReloads((n) => n + 1), wait);
+    return () => clearTimeout(timer);
+  }, [state?.lastSeq]);
 
   // The latest commands, refreshed as the bot works.
   useEffect(() => {
@@ -84,32 +108,56 @@ export function WorkspaceFiles({ botId }: { botId: string }) {
     return () => clearTimeout(timer);
   }, [transport, botId, state?.lastSeq]);
 
+  const go = (next: string) => {
+    setPreview(null);
+    setOpenError(null);
+    setPath(next);
+  };
+
   const openFile = async (name: string) => {
     const file = path ? `${path}/${name}` : name;
     try {
       setPreview(
         await transport.get<Preview>(`/api/workspace/file?path=${encodeURIComponent(file)}`),
       );
+      setOpenError(null);
     } catch {
-      setError(`Couldn't open ${name}.`);
+      setOpenError(`Couldn't open ${name}. It may be in use; try again in a moment.`);
     }
   };
 
   const crumbs = path ? path.split("/") : [];
+  const isMarkdown = preview ? /\.(md|markdown)$/i.test(preview.path) : false;
 
   return (
     <>
       <section className="settings-card" aria-label="Workspace files">
-        <div className="settings-card-header">
-          <h3>Files</h3>
-          <p>
-            The workspace this bot shares with you and the other bots (<code>/workspace</code> in
-            the virtual machine).
-          </p>
+        <div className="settings-card-header files-header">
+          <div>
+            <h3>Files</h3>
+            <p>
+              The workspace this bot shares with you and the other bots (<code>/workspace</code> in
+              the virtual machine).
+            </p>
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Refresh files"
+            title="Refresh"
+            onClick={() => setReloads((n) => n + 1)}
+          >
+            <RefreshCw size={15} />
+          </button>
         </div>
         <nav className="files-crumbs" aria-label="Folder">
-          <button type="button" className="files-crumb" onClick={() => setPath("")}>
-            workspace
+          <button
+            type="button"
+            className="files-crumb"
+            aria-current={crumbs.length === 0 ? "page" : undefined}
+            onClick={() => go("")}
+          >
+            <FolderOpen size={13} aria-hidden /> workspace
           </button>
           {crumbs.map((part, i) => (
             <span key={`${i}-${part}`} className="files-crumb-wrap">
@@ -117,56 +165,72 @@ export function WorkspaceFiles({ botId }: { botId: string }) {
               <button
                 type="button"
                 className="files-crumb"
-                onClick={() => setPath(crumbs.slice(0, i + 1).join("/"))}
+                aria-current={i === crumbs.length - 1 ? "page" : undefined}
+                onClick={() => go(crumbs.slice(0, i + 1).join("/"))}
               >
                 {part}
               </button>
             </span>
           ))}
         </nav>
-        {error ? (
-          <div className="set-row-error" role="alert">
-            {error}
+        {loadFailed && entries === null ? (
+          <div className="screen-error" role="alert">
+            Couldn&apos;t read this folder.
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setReloads((n) => n + 1)}
+            >
+              Try again
+            </button>
           </div>
-        ) : null}
-        {entries === null ? (
+        ) : entries === null ? (
           <p className="field-help">Loading…</p>
         ) : entries.length === 0 ? (
           <p className="field-help">This folder is empty.</p>
         ) : (
           <ul className="files-list">
-            {entries.map((e) => (
-              <li key={e.name}>
-                <button
-                  type="button"
-                  className="files-row"
-                  disabled={e.kind === "link" && e.target !== "dir" && e.target !== "file"}
-                  title={
-                    e.kind === "link" && e.target !== "dir" && e.target !== "file"
-                      ? "A link to somewhere outside the workspace"
-                      : undefined
-                  }
-                  onClick={() =>
-                    opensAs(e) === "file"
-                      ? void openFile(e.name)
-                      : (setPreview(null), setPath(path ? `${path}/${e.name}` : e.name))
-                  }
-                >
-                  {opensAs(e) === "dir" ? (
-                    <Folder size={15} aria-hidden />
-                  ) : (
-                    <File size={15} aria-hidden />
-                  )}
-                  <span className="files-name">{e.name}</span>
-                  <span className="files-meta">
-                    {e.kind === "file" ? sizeLabel(e.size) : ""}
-                    <time dateTime={e.modifiedAt}>{relativeTime(e.modifiedAt)}</time>
-                  </span>
-                </button>
-              </li>
-            ))}
+            {entries.map((e) => {
+              const as = opensAs(e);
+              return (
+                <li key={e.name}>
+                  <button
+                    type="button"
+                    className="files-row"
+                    disabled={!as}
+                    title={!as ? "A link to somewhere outside the workspace" : undefined}
+                    onClick={() =>
+                      as === "file"
+                        ? void openFile(e.name)
+                        : go(path ? `${path}/${e.name}` : e.name)
+                    }
+                  >
+                    {as === "dir" ? (
+                      <Folder size={15} aria-hidden />
+                    ) : (
+                      <File size={15} aria-hidden />
+                    )}
+                    <span className="files-name">{e.name}</span>
+                    <span className="files-meta">
+                      {e.kind === "file" ? sizeLabel(e.size) : ""}
+                      <time dateTime={e.modifiedAt}>{relativeTime(e.modifiedAt)}</time>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
+        {loadFailed && entries !== null ? (
+          <p className="field-help" role="status">
+            Couldn&apos;t refresh this folder; the list may be out of date.
+          </p>
+        ) : null}
+        {openError ? (
+          <div className="screen-error" role="alert">
+            {openError}
+          </div>
+        ) : null}
         {preview ? (
           <div className="files-preview">
             <div className="files-preview-head">
@@ -184,6 +248,10 @@ export function WorkspaceFiles({ botId }: { botId: string }) {
               <p className="field-help">
                 This file isn&apos;t text, so it can&apos;t be shown here.
               </p>
+            ) : isMarkdown ? (
+              <div className="files-markdown">
+                <MessageText text={preview.text ?? ""} markdown />
+              </div>
             ) : (
               <pre className="files-text">{preview.text}</pre>
             )}
@@ -200,22 +268,21 @@ export function WorkspaceFiles({ botId }: { botId: string }) {
             <p>What this bot ran in the virtual machine, newest first.</p>
           </div>
           <ul className="files-commands">
-            {commands.map((c, i) => (
-              <li key={`${c.at}-${i}`}>
-                <Terminal size={13} aria-hidden />
-                <code className="files-command">{c.command}</code>
-                <span className="files-meta">
-                  {c.timedOut ? (
-                    <span className="pill pill-warning">timed out</span>
-                  ) : c.exitCode === undefined ? null : (
-                    <span className={`pill pill-${c.exitCode === 0 ? "success" : "danger"}`}>
-                      {c.exitCode === 0 ? "ok" : `exit ${c.exitCode ?? "?"}`}
-                    </span>
-                  )}
-                  <time dateTime={c.at}>{relativeTime(c.at)}</time>
-                </span>
-              </li>
-            ))}
+            {commands.map((c, i) => {
+              const outcome = commandOutcome(c);
+              return (
+                <li key={`${c.at}-${i}`}>
+                  <Terminal size={13} aria-hidden />
+                  <code className="files-command">{c.command}</code>
+                  <span className="files-meta">
+                    {outcome ? (
+                      <span className={`pill pill-${outcome.tone}`}>{outcome.label}</span>
+                    ) : null}
+                    <time dateTime={c.at}>{relativeTime(c.at)}</time>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}

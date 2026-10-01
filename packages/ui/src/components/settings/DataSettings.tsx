@@ -32,7 +32,7 @@ export function DataSettings() {
         >
           <button
             type="button"
-            className="btn btn-danger-solid btn-sm"
+            className="btn btn-danger btn-sm"
             onClick={() => {
               setDone(null);
               setConfirming(true);
@@ -93,7 +93,7 @@ function ResetRow() {
       >
         <button
           type="button"
-          className="btn btn-danger-solid btn-sm"
+          className="btn btn-danger btn-sm"
           onClick={() => {
             setDone(null);
             setWord("");
@@ -109,6 +109,7 @@ function ResetRow() {
           confirmLabel="Reset OpenBot"
           danger
           confirmDisabled={word.trim().toUpperCase() !== "RESET"}
+          initialFocus="field"
           onConfirm={reset}
           onClose={() => setConfirming(false)}
         >

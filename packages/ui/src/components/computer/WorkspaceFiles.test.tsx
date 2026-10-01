@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Transport } from "../../transport/types.js";
-import { WorkspaceFiles, sizeLabel } from "./WorkspaceFiles.js";
+import { WorkspaceFiles, commandOutcome, sizeLabel } from "./WorkspaceFiles.js";
 
 let transport: Transport;
 vi.mock("../../state/context.js", () => ({
@@ -41,9 +41,10 @@ describe("WorkspaceFiles (N2)", () => {
     render(<WorkspaceFiles botId="bot_a" />);
     await userEvent.click(await screen.findByText("reports"));
     await userEvent.click(await screen.findByText("plan.md"));
-    expect(await screen.findByText("# Plan")).toBeTruthy();
+    // Markdown files are shown formatted.
+    expect(await screen.findByRole("heading", { name: "Plan" })).toBeTruthy();
     expect(await screen.findByText("npm run build")).toBeTruthy();
-    expect(screen.getByText("exit 2")).toBeTruthy();
+    expect(screen.getByText("Failed (exit 2)")).toBeTruthy();
     // Back to the top through the breadcrumb.
     await userEvent.click(screen.getByRole("button", { name: "workspace" }));
     expect(await screen.findByText("reports")).toBeTruthy();
@@ -67,7 +68,7 @@ describe("WorkspaceFiles (N2)", () => {
     transport = { get } as unknown as Transport;
     render(<WorkspaceFiles botId="bot_a" />);
     await userEvent.click(await screen.findByText("latest.md"));
-    expect(await screen.findByText("# L")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "L" })).toBeTruthy();
     expect(screen.getByText("escape").closest("button")).toBeDisabled();
   });
 
@@ -77,5 +78,41 @@ describe("WorkspaceFiles (N2)", () => {
       "2.0 KB",
       "5.0 MB",
     ]);
+  });
+});
+
+describe("WorkspaceFiles states", () => {
+  it("shows one error with Try again when a folder can't be read, never 'empty'", async () => {
+    let fail = true;
+    const get = vi.fn(async (path: string) => {
+      if (path.startsWith("/api/workspace/files")) {
+        if (fail) throw new Error("GET /api/workspace/files failed: 500");
+        return {
+          entries: [{ name: "a.txt", kind: "file", size: 1, modifiedAt: "2026-10-01T10:00:00Z" }],
+        };
+      }
+      return { commands: [] };
+    });
+    transport = { get } as unknown as Transport;
+    render(<WorkspaceFiles botId="bot_a" />);
+    expect(await screen.findByText(/Couldn't read this folder/)).toBeTruthy();
+    expect(screen.queryByText("This folder is empty.")).toBeNull();
+    fail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("a.txt")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /workspace/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("names how each command ended like the other status pills", () => {
+    expect(commandOutcome({ command: "x", at: "", exitCode: 0 })).toEqual({
+      label: "Done",
+      tone: "success",
+    });
+    expect(commandOutcome({ command: "x", at: "", timedOut: true })?.label).toBe("Timed out");
+    expect(commandOutcome({ command: "x", at: "", exitCode: 1 })?.label).toBe("Failed (exit 1)");
+    expect(commandOutcome({ command: "x", at: "" })).toBeNull();
   });
 });

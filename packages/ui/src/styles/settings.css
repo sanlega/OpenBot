@@ -895,7 +895,15 @@ a.pair-url:hover {
 }
 
 .speed-first {
+  display: grid;
+  justify-items: end;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--text);
+}
+
+.speed-first-label {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--text-2);
 }

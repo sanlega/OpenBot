@@ -30,4 +30,26 @@ describe("Reset OpenBot (M2)", () => {
       await screen.findByText(/OpenBot was reset: 2 bots, 10 messages and 3 memories/),
     ).toBeTruthy();
   });
+
+  it("starts in the field, Enter confirms once RESET is typed, and Tab stays in the dialog", async () => {
+    const post = vi.fn(async () => ({ ok: true, bots: 0, messages: 0, memories: 0 }));
+    transport = { post } as unknown as Transport;
+    render(<DataSettings />);
+    await userEvent.click(screen.getByRole("button", { name: "Reset…" }));
+    const field = screen.getByLabelText("Type RESET to confirm");
+    expect(document.activeElement).toBe(field);
+    const dialog = screen.getByRole("alertdialog", { name: "Reset OpenBot?" });
+    expect(dialog).toHaveAccessibleDescription(/can.t be undone/);
+    // Enter does nothing while the word is wrong.
+    await userEvent.type(field, "nope{Enter}");
+    expect(post).not.toHaveBeenCalled();
+    // Tab cycles inside the dialog: field -> Cancel -> (confirm is disabled) -> field.
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(field);
+    await userEvent.clear(field);
+    await userEvent.type(field, "RESET{Enter}");
+    expect(post).toHaveBeenCalledWith("/api/reset", { confirm: "RESET" });
+  });
 });

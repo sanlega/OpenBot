@@ -1214,6 +1214,9 @@
 }
 
 .files-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   border: 0;
   background: transparent;
   padding: 2px 4px;
@@ -1221,6 +1224,19 @@
   font: inherit;
   color: var(--text-2);
   cursor: pointer;
+}
+
+/* The folder you are in. */
+.files-crumb[aria-current="page"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.files-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .files-crumb:hover {
@@ -1303,6 +1319,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.files-markdown {
+  max-height: 420px;
+  overflow: auto;
+  padding: var(--space-3);
 }
 
 .files-text {

@@ -24,7 +24,8 @@ export function seconds(ms: number | undefined): string {
  */
 export function SpeedCard() {
   const { transport, bots } = useOpenBot();
-  const [rows, setRows] = useState<Record<string, LatencySummary> | null>(null);
+  // undefined while loading; null when it could not be read.
+  const [rows, setRows] = useState<Record<string, LatencySummary | null> | null>(null);
   const active = bots.filter((b) => !b.archivedAt);
   const ids = active.map((b) => b.id).join(",");
 
@@ -34,8 +35,8 @@ export function SpeedCard() {
       active.map(async (bot) => {
         const res = await transport
           .get<{ latency?: LatencySummary }>(`/api/usage?botId=${encodeURIComponent(bot.id)}`)
-          .catch(() => ({ latency: undefined }));
-        return [bot.id, res.latency ?? { turns: 0 }] as const;
+          .catch(() => null);
+        return [bot.id, res ? (res.latency ?? { turns: 0 }) : null] as const;
       }),
     ).then((pairs) => {
       if (!cancelled) setRows(Object.fromEntries(pairs));
@@ -48,29 +49,35 @@ export function SpeedCard() {
 
   if (active.length === 0) return null;
   return (
-    <SettingsGroup title="Speed (latest turns)">
+    <SettingsGroup>
       {active.map((bot) => {
-        const s = rows?.[bot.id];
+        const s = rows === null ? undefined : rows[bot.id];
+        const measured = s && s.turns > 0;
         return (
           <SettingRow
             key={bot.id}
             leading={<BotAvatar bot={bot} size={28} motion="none" />}
             label={bot.name}
             help={
-              !s
-                ? "…"
-                : s.turns === 0
-                  ? "No measured turns yet."
-                  : `Getting ready ${seconds(s.medianSetupMs)} · whole turn ${seconds(s.medianTotalMs)}${
-                      s.cacheReuse !== undefined
-                        ? ` · ${Math.round(s.cacheReuse * 100)}% of input reused from cache`
-                        : ""
-                    } · ${s.turns} ${s.turns === 1 ? "turn" : "turns"}`
+              s === undefined
+                ? "Measuring…"
+                : s === null
+                  ? "Couldn't load its timings."
+                  : s.turns === 0
+                    ? "No measured turns yet."
+                    : `Ready to work in ${seconds(s.medianSetupMs)} · whole answer ${seconds(s.medianTotalMs)}${
+                        s.cacheReuse !== undefined
+                          ? ` · ${Math.round(s.cacheReuse * 100)}% reused (cheaper and faster)`
+                          : ""
+                      } · last ${s.turns} ${s.turns === 1 ? "turn" : "turns"}`
             }
           >
-            <span className="speed-first" title="Median time to its first words">
-              {s && s.turns > 0 ? seconds(s.medianFirstTextMs) : "–"}
-            </span>
+            {measured ? (
+              <span className="speed-first">
+                <span className="speed-first-label">First words</span>
+                {seconds(s.medianFirstTextMs)}
+              </span>
+            ) : null}
           </SettingRow>
         );
       })}

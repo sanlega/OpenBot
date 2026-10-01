@@ -36,9 +36,21 @@ describe("SpeedCard (M3)", () => {
     render(<SpeedCard />);
     expect(await screen.findByText("4.2 s")).toBeTruthy();
     expect(
-      screen.getByText(/whole turn 21 s · 82% of input reused from cache · 12 turns/),
+      screen.getByText(/whole answer 21 s · 82% reused \(cheaper and faster\) · last 12 turns/),
     ).toBeTruthy();
     expect(screen.getByText("No measured turns yet.")).toBeTruthy();
+    expect(screen.getByText("First words")).toBeTruthy();
+  });
+
+  it("says when timings couldn't be loaded instead of 'no turns'", async () => {
+    transport = {
+      get: vi.fn(async () => {
+        throw new Error("GET /api/usage failed: 500");
+      }),
+    } as unknown as Transport;
+    render(<SpeedCard />);
+    expect((await screen.findAllByText("Couldn't load its timings.")).length).toBe(2);
+    expect(screen.queryByText("No measured turns yet.")).toBeNull();
   });
 
   it("formats durations", () => {
