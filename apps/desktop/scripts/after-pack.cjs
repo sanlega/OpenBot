@@ -12,6 +12,9 @@ const { join } = require("node:path");
 
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== "darwin") return;
+  // A Developer ID certificate is configured: electron-builder signs (and notarizes) the app
+  // properly after this hook; an ad-hoc signature here would only be replaced.
+  if (process.env.CSC_LINK) return;
   const app = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
   const entitlements = join(__dirname, "..", "resources", "entitlements.mac.plist");
   execFileSync(

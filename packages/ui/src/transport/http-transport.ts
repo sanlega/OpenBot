@@ -98,6 +98,8 @@ export class HttpTransport implements Transport {
       throw error;
     }
     if (!res.ok) {
+      // A refused key (replaced, or a newer #key= link pasted): ask for it again next time.
+      if (res.status === 401) this.knownLocalKey = undefined;
       const error = new Error(`${method} ${path} failed: ${res.status}`) as Error & {
         status?: number;
         body?: unknown;

@@ -203,7 +203,7 @@ Bot's model list (Settings > Engines shows what was found). OpenBot gives Ollama
 cut the agent's instructions) and loads LM Studio models with the same context. Other
 addresses: `OLLAMA_HOST`, `OPENBOT_LMSTUDIO_URL`; context size: `OPENBOT_LOCAL_CONTEXT`.
 Small models (8-9B) handle short tool-using tasks; Jev routes heavier work elsewhere.
-Engines are detected at start-up: restart OpenBot after installing or signing in to one.
+Engines are detected at start-up; after installing or signing in to one, press **Check again** in Settings > Engines (no restart needed).
 
 <table>
   <tr>
