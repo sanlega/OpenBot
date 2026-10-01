@@ -1,8 +1,27 @@
 # Project state
 
-_Last updated: 2026-09-30 by Claude (v0.1.15 installed)_
+_Last updated: 2026-10-01 by Claude (VM-first bots on branch sanlega/add-local-and-cli, not released)_
 
 ## In progress
+- **VM-first bots, loop-proof computer control, bot management UX (2026-10-01, D-033, plan
+  `.ai/memory/plans/2026-10-01-polish-vm-loops.md`), on branch `sanlega/add-local-and-cli`
+  (pushed; `main` has everything before it), NOT released**. Done: a Bot with
+  `computer: "docker"` has no host shell/files (Claude `--tools`, Codex features off, broker
+  backstop) and works through `vm_shell`/`vm_*_file` (daemon `/exec`) and `browser_*` tools
+  (refs + page text); Jev loop guards (repeats, scroll budget, revisited states, no progress,
+  read-only goals, slow navigation, CDP timeouts and dialogs); sign-ins handed over only after a
+  screen's browser is up (this was the "signed in on one bot, not on the other" bug); replies are
+  the text after the last tool call; sidebar menu to rename / clear chat / delete (confirm),
+  Settings > Data clears every chat, the Chief remembers removed bots; Chief-created slugs are
+  unique. Research: `.ai/resources/2026-10-01-grok-bot-box-and-clones.md` (Grok Bot's box and the
+  clones). **Verified live**: `scripts/live/vm.mjs` 11/11 against the real container (commands,
+  files, installs, Leave-site dialog, sign-in shared between bots on a real site and kept across a
+  new container); `scripts/live/vmbot.mjs` 11/11 with real Claude and real Codex (VM tools only,
+  host file unreadable, page read with browser_read); `drive.mjs` variant c: right person, 0
+  cards, 1 form, ~1.5 min. Full unit suite green. **Next**: delegated Full access (T9), UX pass
+  with screenshots (T10), E2E, then release v0.1.17 (owner's OK) — the desktop image must be
+  republished (`/exec` endpoint, new tools in the image); an old image answers 404 and the tools
+  say to update it in Settings.
 - **v0.1.16 (2026-09-30, D-032), installed**: shared VM for real (one set of sign-ins via
   `SharedCookieJar`, profiles on the `openbot-browser` volume, workspace mounted at `/workspace`,
   downloads to `workspace/downloads`) and the macOS app ad-hoc signed (CI verifies the signature
