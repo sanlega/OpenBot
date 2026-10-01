@@ -20,6 +20,13 @@ import type { DeliveryService } from "./delivery.js";
 import type { EventSink } from "./event-sink.js";
 import type { TurnStore } from "./turn-store.js";
 import { classifyToolCall } from "./tool-classifier.js";
+import {
+  DEFAULT_STALL_WATCH,
+  STALL_RESUME_REMINDER,
+  StallWatch,
+  type StallWatchOptions,
+} from "./stall-watch.js";
+import { ToolLoopDetector, type LoopDetection } from "./tool-loop-detector.js";
 
 export interface EnqueueTurnInput extends TurnInput {
   engine: EngineId;
@@ -73,6 +80,10 @@ export interface MailboxOptions {
   messages?: MessageStore;
   /** When set, a turn without an explicit `sessionId` resumes the Bot's last engine session. */
   sessions?: SessionStore;
+  /** C8: how long a quiet engine may run before it is stopped and resumed once; `false` turns it off. */
+  stallWatch?: Partial<StallWatchOptions> | false;
+  /** C1: records loops in the engine's own tool calls (shadow mode: nothing is stopped). */
+  onToolLoop?: (detection: LoopDetection) => void;
 }
 
 const NO_REPLY_RE = /^NO_REPLY[.!]?$/i;
@@ -95,8 +106,15 @@ function defaultClassify(r: ToolApprovalRequest, workspaceDir?: string): Partial
 export class Mailbox {
   private readonly queues = new Map<string, QueuedTurn[]>();
   private readonly active = new Map<string, ActiveTurn>();
+  /** Tool calls in flight, by tool-use id (for the loop detector). */
+  private readonly toolCalls = new Map<string, { name: string; input: unknown }>();
+  private readonly nativeLoops: ToolLoopDetector | undefined;
 
-  constructor(private readonly opts: MailboxOptions) {}
+  constructor(private readonly opts: MailboxOptions) {
+    this.nativeLoops = opts.onToolLoop
+      ? new ToolLoopDetector("shadow", opts.onToolLoop)
+      : undefined;
+  }
 
   submit(input: EnqueueTurnInput): Promise<TurnOutcome> {
     return new Promise((resolve) => {
@@ -230,36 +248,88 @@ export class Mailbox {
     let toolCallCount = 0;
     const pendingToolEffects: Promise<void>[] = [];
 
-    const hooks: TurnHooks = {
-      emit: (e: EngineEvent) => {
-        if (e.type === "tool_started") {
-          toolCallCount += 1;
-          if (replyText.trim()) lastSaid = replyText;
-          replyText = "";
-        }
-        this.handleEngineEvent({ botId, input, turnId, event: e, pendingToolEffects }, (t) => {
-          replyText += t;
-        });
-      },
-      requestApproval: (r: ToolApprovalRequest) => this.handleApprovalRequest(botId, input, r),
-    };
+    const watchOptions =
+      this.opts.stallWatch === false
+        ? undefined
+        : { ...DEFAULT_STALL_WATCH, ...(this.opts.stallWatch ?? {}) };
 
-    let result: Awaited<ReturnType<typeof driver.startTurn>["done"]>;
-    try {
-      const active: ActiveTurn = { handle: driver.startTurn(turnInput, hooks), turnId };
-      this.active.set(botId, active);
-      result = await active.handle.done;
-    } catch (error) {
-      // An engine that throws (bad model, lost process, RPC error) fails this
-      // turn; it must never leave the Bot's queue stuck behind it.
-      result = {
-        sessionId: turnInput.sessionId ?? "",
-        isError: true,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        usage: { inputTokens: 0, outputTokens: 0 },
+    let result!: Awaited<ReturnType<typeof driver.startTurn>["done"]>;
+    let attemptInput = turnInput;
+    for (let attempt = 1; ; attempt += 1) {
+      let stalled = false;
+      let handle: TurnHandle | undefined;
+      const watch = watchOptions
+        ? new StallWatch(watchOptions, () => {
+            stalled = true;
+            void handle?.interrupt();
+          })
+        : undefined;
+      const hooks: TurnHooks = {
+        emit: (e: EngineEvent) => {
+          watch?.activity(e as { type: string; toolUseId?: string });
+          if (e.type === "tool_started") {
+            toolCallCount += 1;
+            if (replyText.trim()) lastSaid = replyText;
+            replyText = "";
+          }
+          this.handleEngineEvent({ botId, input, turnId, event: e, pendingToolEffects }, (t) => {
+            replyText += t;
+          });
+        },
+        requestApproval: (r: ToolApprovalRequest) =>
+          watch
+            ? watch.whileWaitingOnUser(() => this.handleApprovalRequest(botId, input, r))
+            : this.handleApprovalRequest(botId, input, r),
       };
-    } finally {
-      this.active.delete(botId);
+      try {
+        handle = driver.startTurn(attemptInput, hooks);
+        const active: ActiveTurn = { handle, turnId };
+        this.active.set(botId, active);
+        watch?.start();
+        result = await active.handle.done;
+      } catch (error) {
+        // An engine that throws (bad model, lost process, RPC error) fails this
+        // turn; it must never leave the Bot's queue stuck behind it.
+        result = {
+          sessionId: attemptInput.sessionId ?? "",
+          isError: true,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          usage: { inputTokens: 0, outputTokens: 0 },
+        };
+      } finally {
+        watch?.stop();
+        this.active.delete(botId);
+      }
+      if (!stalled) break;
+      const minutes = Math.round((watchOptions?.quietMs ?? 0) / 60_000);
+      if (attempt >= 2) {
+        // Stalled again after a resume: say so plainly instead of hanging the Bot's queue.
+        result = {
+          ...result,
+          isError: true,
+          errorMessage: `engine_stalled: the engine made no progress for about ${minutes} minutes, twice; try again or switch engines`,
+        };
+        break;
+      }
+      this.opts.events.emit({
+        ts: this.opts.clock.now().toISOString(),
+        type: "error",
+        botId,
+        chainId: input.chainId,
+        turnId,
+        payload: {
+          message: `The engine made no progress for about ${minutes} minutes; OpenBot stopped it and is resuming once.`,
+          authFailure: false,
+        },
+      });
+      // Resume the same engine session with a reminder; without a session, start over.
+      const resumeId = result.sessionId || attemptInput.sessionId;
+      attemptInput = {
+        ...turnInput,
+        sessionId: resumeId || undefined,
+        text: resumeId ? STALL_RESUME_REMINDER : `${STALL_RESUME_REMINDER}\n\n${turnInput.text}`,
+        attachments: resumeId ? [] : turnInput.attachments,
+      };
     }
     await this.finish(input, turnId);
     await Promise.all(pendingToolEffects);
@@ -384,8 +454,9 @@ export class Mailbox {
         if (event.toolName === MESSAGE_USER_TOOL || event.toolName === SEND_MESSAGE_TOOL) {
           ctx.pendingToolEffects.push(this.deliverTool(botId, input, event));
         }
+        this.toolCalls.set(event.toolUseId, { name: event.toolName, input: event.input });
         return;
-      case "tool_completed":
+      case "tool_completed": {
         this.opts.events.emit({
           ts: now,
           type: "tool.completed",
@@ -394,7 +465,17 @@ export class Mailbox {
           turnId,
           payload: { toolUseId: event.toolUseId, output: event.output, isError: event.isError },
         });
+        const call = this.toolCalls.get(event.toolUseId);
+        this.toolCalls.delete(event.toolUseId);
+        // The engine's own tools (shell, files) are watched in shadow: recorded, never acted on.
+        // OpenBot's tools are watched (and answered) by the MCP server itself.
+        if (call && this.nativeLoops && !call.name.startsWith("mcp__openbot")) {
+          const output =
+            typeof event.output === "string" ? event.output : JSON.stringify(event.output ?? null);
+          this.nativeLoops.observe(turnId, call.name, call.input, output, botId);
+        }
         return;
+      }
       case "usage": {
         const usd = event.usd ?? 0;
         const tokens = event.inputTokens + event.outputTokens;

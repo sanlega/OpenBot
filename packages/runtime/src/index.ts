@@ -18,7 +18,7 @@ import { ChainManager, InMemoryChainStore, type ChainLimits, type ChainStore } f
 import { DeliveryService } from "./delivery.js";
 import { InMemoryEventSink, type EventSink } from "./event-sink.js";
 import { LoopGuards, type LoopGuardOptions } from "./guards.js";
-import { Mailbox } from "./mailbox.js";
+import { Mailbox, type MailboxOptions } from "./mailbox.js";
 import { InMemoryMessageStore, type MessageStore } from "./message-store.js";
 import { PassthroughNotifyGate, type NotifyGate } from "./notify-gate.js";
 import { InMemoryRuleStore, type RuleStore } from "./rules.js";
@@ -35,6 +35,10 @@ export interface RuntimeOptions {
   clock?: SchedulingClock;
   chainLimits?: ChainLimits;
   approvalTimeoutMs?: number;
+  /** C8: inactivity watchdog for engine turns (`false` turns it off). */
+  stallWatch?: MailboxOptions["stallWatch"];
+  /** C1: records loops in the engines' own tool calls (shadow). */
+  onToolLoop?: MailboxOptions["onToolLoop"];
   loopGuards?: Pick<
     LoopGuardOptions,
     "maxMessagesPerPairPerWindow" | "pairWindowMs" | "maxRepeatedContent"
@@ -127,6 +131,8 @@ export function createRuntime(opts: RuntimeOptions): Runtime {
     clock,
     messages,
     sessions,
+    stallWatch: opts.stallWatch,
+    onToolLoop: opts.onToolLoop,
   });
 
   return {
@@ -160,6 +166,8 @@ export * from "./delivery.js";
 export * from "./event-sink.js";
 export * from "./guards.js";
 export * from "./mailbox.js";
+export * from "./stall-watch.js";
+export * from "./tool-loop-detector.js";
 export * from "./message-store.js";
 export * from "./notify-gate.js";
 export * from "./prompt.js";

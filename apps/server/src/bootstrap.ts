@@ -12,6 +12,7 @@ import {
 import {
   createMcpServices,
   integrateMcp,
+  recordToolLoop,
   type McpToolServices,
   type SessionTokenService,
 } from "@openbot/mcp";
@@ -108,6 +109,8 @@ export async function bootstrapHarness(
     turnStore: new RepoTurnStore(ctx),
     ruleStore: new RepoRuleStore(ctx),
     sessionStore: new RepoSessionStore(ctx),
+    // C1: loops in the engines' own tools are recorded (shadow) to calibrate before acting.
+    onToolLoop: (detection) => recordToolLoop(ctx, detection),
   });
 
   // Filled once `integrateMcp` has run below; turns read it lazily.

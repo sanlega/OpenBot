@@ -6,7 +6,7 @@ export { SessionTokenService, generateSessionSecret } from "./session-token.js";
 export { McpComposer, removeTokenFileIfUnchanged } from "./composer.js";
 export { integrateMcp, type IntegrateMcpOptions } from "./integrate.js";
 export { registerInternalToolRoutes, type InternalToolsOptions } from "./http/register.js";
-export { createToolRouter, ToolRouter } from "./handlers.js";
+export { createToolRouter, recordToolLoop, ToolRouter } from "./handlers.js";
 export {
   OPENBOT_TOOL_DEFINITIONS,
   BASE_TOOLS,

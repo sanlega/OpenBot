@@ -673,3 +673,72 @@ describe("Mailbox finishTurn", () => {
     expect(outcome.status).toBe("completed");
   });
 });
+
+describe("Mailbox stall watch (C8)", () => {
+  /** An engine that goes quiet: its turn only ends when interrupted (or replies when told to). */
+  class QuietDriver implements EngineDriver {
+    readonly id = "fake";
+    readonly inputs: TurnInput[] = [];
+    constructor(private readonly answerOn: (input: TurnInput) => boolean) {}
+    async detect(): Promise<EngineStatus> {
+      return { installed: true, login: { ok: true }, apiKey: { ok: true } };
+    }
+    async validateKey() {
+      return { ok: true };
+    }
+    async listModels(): Promise<ModelInfo[]> {
+      return [];
+    }
+    startTurn(input: TurnInput, hooks: TurnHooks): TurnHandle {
+      this.inputs.push(input);
+      hooks.emit({ type: "session_started", sessionId: "sess_q" });
+      let finish: (r: TurnResult) => void = () => undefined;
+      const done = new Promise<TurnResult>((resolve) => (finish = resolve));
+      if (this.answerOn(input)) {
+        hooks.emit({ type: "text_delta", text: "picked it up again" });
+        finish(turnResult({ sessionId: "sess_q" }));
+      }
+      return {
+        steer: async () => {},
+        interrupt: async () =>
+          finish(turnResult({ sessionId: "sess_q", isError: true, errorMessage: "interrupted" })),
+        done,
+      };
+    }
+    async dispose() {}
+  }
+
+  const fastWatch = { tickMs: 5, quietMs: 20, toolQuietMs: 20 };
+
+  it("stops a quiet engine and resumes its session once with a reminder", async () => {
+    const driver = new QuietDriver((input) => input.text.includes("stalled"));
+    const events = new InMemoryEventSink();
+    const runtime = createRuntime({
+      decisions: new FakeDecisionService(),
+      drivers: { fake: driver },
+      events,
+      stallWatch: fastWatch,
+    });
+    const outcome = await runtime.mailbox.submit(makeInput(runtime));
+    expect(outcome.status).toBe("completed");
+    expect(outcome.text).toBe("picked it up again");
+    expect(driver.inputs).toHaveLength(2);
+    expect(driver.inputs[1]!.sessionId).toBe("sess_q");
+    expect(driver.inputs[1]!.text).toContain("previous attempt stalled");
+  });
+
+  it("fails with engine_stalled when the resumed turn stalls too", async () => {
+    const driver = new QuietDriver(() => false);
+    const runtime = createRuntime({
+      decisions: new FakeDecisionService(),
+      drivers: { fake: driver },
+      stallWatch: fastWatch,
+    });
+    const outcome = await runtime.mailbox.submit(makeInput(runtime));
+    expect(outcome.status).toBe("failed");
+    expect(outcome.reason).toMatch(/^engine_stalled/);
+    expect(driver.inputs).toHaveLength(2);
+    // The bot's queue is free again.
+    expect(runtime.mailbox.isBusy("bot_a")).toBe(false);
+  });
+});

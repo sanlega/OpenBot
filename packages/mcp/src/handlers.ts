@@ -6,6 +6,7 @@ import {
   type Message,
 } from "@openbot/contracts";
 import { delegationsOf, getLogin, listLogins, saveLogin, type CoreContext } from "@openbot/core";
+import { loopReminder, stableJson, ToolLoopDetector, type LoopDetection } from "@openbot/runtime";
 import type { McpToolServices } from "./services/interfaces.js";
 import { TOOL_INPUT_SCHEMAS } from "./tool-schemas.js";
 import { COS_ONLY_TOOLS } from "./tool-definitions.js";
@@ -40,12 +41,38 @@ const SIDE_EFFECT_TOOLS = new Set([
 const SIMULATES_ITSELF = new Set(["send_message", "message_user", "create_bot", "computer_task"]);
 
 export class ToolRouter {
+  /** C1: OpenBot's own tools answer a repeated identical call with a loop reminder. */
+  private readonly loops: ToolLoopDetector;
+
   constructor(
     private readonly ctx: CoreContext,
     private readonly services: McpToolServices,
-  ) {}
+  ) {
+    this.loops = new ToolLoopDetector("on", (d) => recordToolLoop(ctx, d));
+  }
 
   async dispatch(
+    toolName: string,
+    rawInput: unknown,
+    session: SessionContext,
+  ): Promise<ToolResult<Record<string, unknown>>> {
+    const result = await this.dispatchTool(toolName, rawInput, session);
+    const action = this.loops.observe(
+      session.turnId,
+      toolName,
+      rawInput ?? {},
+      stableJson(result),
+      session.botId,
+    );
+    if (action === "none") return result;
+    const reminder = loopReminder(action, action === "retry_once" ? 2 : 3);
+    // The reminder rides with the result: a refused call keeps its reason, an allowed one its data.
+    return result.allowed
+      ? { ...result, loop_warning: reminder }
+      : { ...result, suggestion: [result.suggestion, reminder].filter(Boolean).join(" ") };
+  }
+
+  private async dispatchTool(
     toolName: string,
     rawInput: unknown,
     session: SessionContext,
@@ -371,6 +398,25 @@ export class ToolRouter {
           }
         : {}),
     };
+  }
+}
+
+/** Every detected loop is a row in the decisions log (purpose `tool_loop`), like Jev's gates. */
+export function recordToolLoop(ctx: CoreContext, d: LoopDetection): void {
+  try {
+    ctx.repos.decisions.create({
+      id: newId("decision"),
+      purpose: "tool_loop",
+      provider: "heuristic",
+      model: "tool-loop-detector",
+      stateHash: `${d.turnId}:${d.tool}`,
+      answers: { ...d },
+      band: "auto",
+      outcome: "n/a",
+      createdAt: ctx.clock.now().toISOString(),
+    });
+  } catch {
+    // The audit row is best effort; the reminder still reaches the model.
   }
 }
 
