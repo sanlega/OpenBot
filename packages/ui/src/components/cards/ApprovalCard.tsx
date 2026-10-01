@@ -41,17 +41,20 @@ export function proposedRule(
   if (SHELL_TOOLS.has(tool) && command) {
     return {
       match: { tool, args: { command } },
-      label: "Allow this exact command for this bot from now on",
+      label: "Always allow runs this exact command without asking again.",
     };
   }
   const file = typeof input?.file_path === "string" ? input.file_path : undefined;
   if (FILE_TOOLS.has(tool) && file) {
     return {
       match: { tool, args: { file_path: file } },
-      label: `Allow ${tool} on ${file} for this bot from now on`,
+      label: `Always allow lets this bot change ${file} without asking again.`,
     };
   }
-  return { match: { tool }, label: `Allow ${tool} for this bot from now on` };
+  return {
+    match: { tool },
+    label: "Always allow lets this bot do this kind of action without asking again.",
+  };
 }
 
 export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
@@ -101,7 +104,11 @@ export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
           Risk: {approval.risk < 0.34 ? "low" : approval.risk < 0.67 ? "medium" : "high"}
         </p>
       ) : null}
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="approval-actions">
         <button
           type="button"
@@ -117,20 +124,25 @@ export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
             className="btn btn-secondary"
             disabled={busy}
             onClick={() => void alwaysAllow()}
-            title={rule?.label}
+            aria-describedby={`${approval.id}-scope`}
           >
             Always allow
           </button>
         ) : null}
         <button
           type="button"
-          className="btn btn-danger"
+          className="btn btn-ghost"
           disabled={busy}
           onClick={() => onResolve("deny")}
         >
           Deny
         </button>
       </div>
+      {tool && openbot && rule ? (
+        <p className="approval-scope" id={`${approval.id}-scope`}>
+          {rule.label}
+        </p>
+      ) : null}
     </article>
   );
 }

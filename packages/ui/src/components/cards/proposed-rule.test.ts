@@ -16,3 +16,14 @@ describe("proposedRule (C2)", () => {
     });
   });
 });
+
+describe("what Always allow says it allows", () => {
+  it("is plain words, never a tool's internal name", () => {
+    expect(proposedRule("Bash", { command: "npm test" }).label).toBe(
+      "Always allow runs this exact command without asking again.",
+    );
+    expect(proposedRule("Write", { file_path: "notes.md" }).label).toContain("change notes.md");
+    const generic = proposedRule("mcp__linear__create_issue", {}).label;
+    expect(generic).not.toMatch(/mcp__|Bash|Write/);
+  });
+});

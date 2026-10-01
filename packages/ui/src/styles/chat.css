@@ -831,7 +831,7 @@
 .approval-risk {
   margin: 0;
   font-size: var(--text-sm);
-  color: var(--warning);
+  color: var(--warning-text);
 }
 
 .approval-actions {
@@ -1051,4 +1051,11 @@
 .turn-plan li[data-status="completed"] .turn-plan-mark {
   border-color: var(--success);
   color: var(--success);
+}
+
+/* What "Always allow" would allow, said before it is pressed. */
+.approval-scope {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-2);
 }

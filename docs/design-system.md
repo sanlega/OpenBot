@@ -27,18 +27,19 @@ Colors are CSS custom properties on `:root`. Dark is the default; light applies
 from `prefers-color-scheme: light` or `data-theme="light"` on `<html>`
 (`data-theme="dark"` forces dark). Never hard-code colors in components.
 
-| Token                                                        | Use                                         |
-| ------------------------------------------------------------ | ------------------------------------------- |
-| `--bg`                                                       | App background, inputs inside cards         |
-| `--bg-sidebar`                                               | Sidebar                                     |
-| `--surface-1`                                                | Cards, bot bubbles' containers, composer    |
-| `--surface-2` / `--surface-3`                                | Hover, selected rows, secondary buttons     |
-| `--border` / `--border-strong`                               | Hairlines; hovered or emphasized borders    |
-| `--text` / `--text-2` / `--text-3`                           | Primary, secondary, tertiary text           |
-| `--accent`, `--accent-hover`, `--accent-fg`, `--accent-soft` | Primary actions, selection, focus           |
-| `--user-bubble`, `--user-bubble-fg`                          | The user's own messages                     |
-| `--success(-soft)`, `--warning(-soft)`, `--danger(-soft)`    | Status: done, needs you, failed/destructive |
-| `--cos`                                                      | Chief of Staff accents                      |
+| Token                                                                | Use                                                                        |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `--bg`                                                               | App background, inputs inside cards                                        |
+| `--bg-sidebar`                                                       | Sidebar                                                                    |
+| `--surface-1`                                                        | Cards, bot bubbles' containers, composer                                   |
+| `--surface-2` / `--surface-3`                                        | Hover, selected rows, secondary buttons                                    |
+| `--border` / `--border-strong`                                       | Hairlines; hovered or emphasized borders                                   |
+| `--text` / `--text-2` / `--text-3`                                   | Primary, secondary, tertiary text                                          |
+| `--accent`, `--accent-hover`, `--accent-fg`, `--accent-soft`         | Primary actions, selection, focus                                          |
+| `--user-bubble`, `--user-bubble-fg`                                  | The user's own messages                                                    |
+| `--success(-soft)`, `--warning(-soft)`, `--danger(-soft)`            | Status: done, needs you, failed/destructive                                |
+| `--success-text`, `--warning-text`, `--danger-text`, `--accent-text` | Status colours as small text (pills): 4.5:1 on the surfaces in both themes |
+| `--cos`                                                              | Chief of Staff accents                                                     |
 
 Scale tokens:
 

@@ -309,7 +309,7 @@ body {
 
 .pill-warning {
   background: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-text);
 }
 
 .pill-muted {
@@ -319,17 +319,17 @@ body {
 
 .pill-success {
   background: var(--success-soft);
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .pill-danger {
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .pill-accent {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sidebar-nav {
