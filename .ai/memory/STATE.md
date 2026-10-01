@@ -1,8 +1,18 @@
 # Project state
 
-_Last updated: 2026-10-01 by Claude (Grok Bot roadmap implemented on branch `main-2`, not released)_
+_Last updated: 2026-10-01 by Claude (v0.1.18 released and installed: Grok Bot roadmap + B5)_
 
 ## In progress
+- **v0.1.18 RELEASED and installed on the Windows dev machine (2026-10-01)**: `main-2` fast-
+  forwarded into `main`, CI green on all three OSes (desktop E2E included), tag `v0.1.18`,
+  release workflow green (5 installers + SHA256SUMS + GHCR `:v0.1.18`), Windows installer hash
+  verified, installed silently with no turn or task running; the app reports 0.1.18, migrations
+  0004/0005 applied to the real database, and its VM was replaced once by the `:v0.1.18`
+  container (self-check 10/10 from the installed app). Replayed on the released image and the
+  release's code: `box.mjs` 19/19, `vm.mjs` 11/11, `memory.mjs` 7/7 Claude and Codex,
+  `vmconnector.mjs` 4/4 Claude and Codex, `vmbot.mjs` 11/11 Claude and Codex. **Next**: the
+  owner uses it for real (memory, Playwright connector on VM bots, Settings > Computer >
+  Health); backlog D1, B6, C11 and the rest of the plan's outcome.
 - **Grok Bot roadmap (2026-10-01, D-034, plan `.ai/memory/plans/2026-10-01-grok-bot-box-roadmap.md`),
   committed on branch `main-2` (worktree), NOT merged to `main`, NOT released.** Source: the
   owner's "Hoja de ruta de OpenBot" (Grok Bot's VM internals). Done: hardened box (tini, `box`
