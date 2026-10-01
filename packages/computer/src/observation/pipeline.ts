@@ -39,7 +39,10 @@ export async function runObservationPipeline(
 
   // auto: dom → ax (cdp then atspi) → ocr
   const dom = await withCdp(port, (client) => observeDom(client), cdpTimeoutMs);
-  if (dom.elements.length >= MIN_ELEMENTS) return dom;
+  // Any control the DOM read found beats the accessibility tree: DOM elements carry their
+  // position, so they can be clicked; a page with one button used to fall through to the AX
+  // tree, whose elements have none, and a click on them did nothing.
+  if (dom.elements.length >= 1) return dom;
 
   // The page's text comes from the DOM read even when another stage lists the controls.
   const withText = (result: ObservationResult): ObservationResult =>

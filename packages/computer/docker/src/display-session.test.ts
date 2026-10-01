@@ -73,6 +73,22 @@ describe("DisplaySessionManager", () => {
     expect(commands).toEqual([]);
   });
 
+  it("says a click failed when the element has no position, instead of pressing Return", async () => {
+    const { sessions, commands, pageActions } = setup();
+    const page = searchPage as ObservationResult & { _meta: Array<Record<string, unknown>> };
+    const original = page._meta[0];
+    page._meta[0] = { index: 0, role: "a", label: "Home" };
+    try {
+      await sessions.observe("bot_1");
+      const result = await sessions.act("bot_1", { op: "click", target: 0 });
+      expect(result).toMatchObject({ ok: false, reason: expect.stringMatching(/no position/) });
+      expect(commands).toEqual([]);
+      expect(pageActions).toEqual([]);
+    } finally {
+      page._meta[0] = original!;
+    }
+  });
+
   it("refuses to type into an element it never observed", async () => {
     const { sessions, commands } = setup();
     await sessions.observe("bot_1");

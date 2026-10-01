@@ -15,6 +15,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
+import { createServer } from "node:http";
 import { createDockerProvider } from "../../packages/computer/docker/dist/index.js";
 
 const requireFromDocker = createRequire(
@@ -57,6 +58,15 @@ async function rootExec(cmd) {
   // Docker multiplexes stdout/stderr with binary frame headers: keep printable text only.
   return [...out].filter((ch) => ch.charCodeAt(0) > 8).join("");
 }
+
+// An app that keeps its sign-in in localStorage (like Notion or Linear), not in a cookie.
+const app = createServer((req, res) => {
+  res.writeHead(200, { "content-type": "text/html" });
+  res.end(`<!doctype html><title>Notes app</title><h1 id="s"></h1>
+<button onclick="localStorage.setItem('session', 'user-42'); document.getElementById('s').textContent = 'Signed in as user-42'">Sign in</button>
+<script>document.getElementById("s").textContent = localStorage.getItem("session") ? "Signed in as user-42" : "Signed out";</script>`);
+});
+await new Promise((r) => app.listen(4721, "0.0.0.0", r));
 
 const vm = createDockerProvider({
   image,
@@ -186,6 +196,29 @@ try {
     /documentation examples/i.test(page.text ?? ""),
   );
 
+  // 5b. A sign-in kept in localStorage on one screen reaches another screen (B2).
+  const appUrl = "http://host.docker.internal:4721/";
+  await a.act({ op: "navigate", url: appUrl });
+  page = await a.observe();
+  const signIn = page.elements.find((el) => /sign in/i.test(el.label));
+  if (signIn) await a.act({ op: "click", target: signIn.index });
+  await sleep(1_000);
+  page = await a.observe();
+  const aSignedIn = /Signed in as user-42/.test(page.text ?? "");
+  const b = await vm.screen("bot_box_b");
+  await b.act({ op: "navigate", url: appUrl });
+  let bPage = await b.observe();
+  // The first look seeds the session and reloads; the page then reads it.
+  for (let i = 0; i < 3 && !/Signed in/.test(bPage.text ?? ""); i++) {
+    await sleep(3_500);
+    bPage = await b.observe();
+  }
+  check(
+    "a sign-in kept in localStorage on one screen reaches another",
+    aSignedIn && /Signed in as user-42/.test(bPage.text ?? ""),
+    `A: ${aSignedIn}, B: ${(bPage.text ?? "").slice(0, 40)}`,
+  );
+
   // 6. No zombies, quick stop.
   const zombies = Number((await rootExec("ps -eo stat= | grep -c '^Z' || true")).trim() || 0);
   check("no zombie processes pile up", zombies === 0, `${zombies} zombies`);
@@ -197,6 +230,7 @@ try {
 } catch (error) {
   check("no unexpected error", false, String(error?.stack ?? error));
 } finally {
+  app.close();
   if (!process.env.VM_KEEP) {
     await removeContainer().catch(() => undefined);
     await docker

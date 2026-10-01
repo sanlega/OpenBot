@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cdpCookies, DisplaySessionManager } from "./display-session.js";
+import { cdpCookies, cdpStorage, DisplaySessionManager } from "./display-session.js";
 import { createLiveViewUrl } from "./live-view-url.js";
 import { defaultExecIdentity, runExec, type ExecRequest } from "./exec.js";
 import { startPackageHelper } from "./apt-helper.js";
@@ -61,6 +61,8 @@ const sessions = new DisplaySessionManager({
         profileRoot: BROWSER_DIR,
         cookies: cdpCookies,
         cookieFile: join(BROWSER_DIR, "shared-cookies.json"),
+        storage: cdpStorage,
+        storageFile: join(BROWSER_DIR, "shared-storage.json"),
       }
     : {}),
   ...(existsSync(WORKSPACE) ? { downloadDir: join(WORKSPACE, "downloads") } : {}),

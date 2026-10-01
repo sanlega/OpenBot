@@ -27,6 +27,10 @@ import {
   type SupervisorEvent,
 } from "./desktop-supervisor.js";
 import { cdpAnswers, rfbGreets } from "./probes.js";
+import { SharedLocalStorage, type PageStorage, type StorageAccess } from "./storage-share.js";
+
+/** How often one screen's localStorage is synced at most (it costs a page call per screen). */
+const STORAGE_SYNC_EVERY_MS = 3_000;
 
 export interface DisplaySessionOptions {
   maxScreens?: number;
@@ -54,6 +58,10 @@ export interface DisplaySessionOptions {
   cookies?: CookieAccess;
   /** Where the shared sign-ins are saved. */
   cookieFile?: string;
+  /** Reads and seeds each screen's page localStorage (B2); with it, app sessions are shared too. */
+  storage?: StorageAccess;
+  /** Where the shared localStorage is saved. */
+  storageFile?: string;
   /**
    * Resolves once a screen's browser answers on its DevTools port (stubbed in tests). Sign-ins are
    * handed over through that port, so a bot must not look or act before it is up.
@@ -148,6 +156,8 @@ interface SessionState {
   ready: Promise<void>;
   /** Set once the browser answered on its DevTools port. */
   browserUp?: boolean;
+  /** When this screen's localStorage was last brought up to date. */
+  storageSyncedAt?: number;
 }
 
 /**
@@ -160,6 +170,7 @@ export class DisplaySessionManager {
   private readonly navigateTab: (debugPort: number, url: string) => Promise<boolean>;
   private readonly pageInput: PageInput;
   private readonly jar: SharedCookieJar | undefined;
+  private readonly storage: SharedLocalStorage | undefined;
   private readonly waitForBrowser: (debugPort: number) => Promise<void>;
 
   constructor(private readonly options: DisplaySessionOptions = {}) {
@@ -173,6 +184,9 @@ export class DisplaySessionManager {
       ? new SharedCookieJar(options.cookies, options.cookieFile, undefined, (report) =>
           options.onTelemetry?.(report),
         )
+      : undefined;
+    this.storage = options.storage
+      ? new SharedLocalStorage(options.storage, options.storageFile)
       : undefined;
   }
 
@@ -212,7 +226,7 @@ export class DisplaySessionManager {
 
   /** Before a bot looks or acts: its browser gets every sign-in (or sign-out) made on any screen. */
   private async shareSignIns(session: SessionState): Promise<void> {
-    if (!this.jar) return;
+    if (!this.jar && !this.storage) return;
     // A browser that just started is not listening yet: syncing then failed silently, and the
     // bot's first page loaded signed out (the "signed in on one bot, not on the other" bug).
     if (!session.browserUp) {
@@ -220,7 +234,14 @@ export class DisplaySessionManager {
       session.browserUp = true;
     }
     const ports = [...this.sessions.values()].map((s) => s.debugPort);
-    await this.jar.sync(session.debugPort, ports).catch(() => undefined);
+    await this.jar?.sync(session.debugPort, ports).catch(() => undefined);
+    // localStorage sessions (B2): at most every few seconds per screen, it costs a page call each.
+    const now = Date.now();
+    if (this.storage && now - (session.storageSyncedAt ?? 0) > STORAGE_SYNC_EVERY_MS) {
+      session.storageSyncedAt = now;
+      const result = await this.storage.sync(session.debugPort, ports).catch(() => undefined);
+      if (result?.reloaded) session.lastObservation = undefined;
+    }
   }
 
   /** Chromium's own preferences for a screen's profile: downloads land in the shared workspace. */
@@ -259,6 +280,7 @@ export class DisplaySessionManager {
         old.supervisor?.stop();
         this.sessions.delete(id);
         this.jar?.forget(old.debugPort);
+        this.storage?.forget(old.debugPort);
         this.options.onEvict?.(old.display);
       }
     }
@@ -439,8 +461,12 @@ export class DisplaySessionManager {
       await this.shell.run("xdotool", ["click", "1"], env);
       return { ok: true };
     }
-    await this.shell.run("xdotool", ["key", "Return"], env);
-    return { ok: true };
+    // No position on screen (an accessibility-tree element): pressing Return wherever the focus
+    // happens to be is not a click, so say it did not work instead of reporting success.
+    return {
+      ok: false,
+      reason: `element ${target} has no position on screen; read the page again and pick another`,
+    };
   }
 
   private discard(botId: string, session: SessionState): void {
@@ -517,6 +543,8 @@ export class DisplaySessionManager {
           this.prepareProfile(display);
           // A new browser on this screen: it has to receive the shared sign-ins from scratch.
           this.jar?.forget(session.debugPort);
+          this.storage?.forget(session.debugPort);
+          session.storageSyncedAt = undefined;
           session.browserUp = false;
           session.lastObservation = undefined;
         },
@@ -565,6 +593,42 @@ async function removeStale(paths: string[]): Promise<void> {
   const { rm } = await import("node:fs/promises");
   for (const path of paths) await rm(path, { force: true }).catch(() => undefined);
 }
+
+/** Each screen's page localStorage, over the DevTools port of its browser (B2). */
+export const cdpStorage: StorageAccess = {
+  async read(debugPort) {
+    const raw = await withCdp(
+      debugPort,
+      (c) =>
+        c.evaluate<string | null>(
+          "(() => { try { return JSON.stringify({ origin: location.origin, items: Object.fromEntries(Object.entries(localStorage)) }); } catch { return null; } })()",
+        ),
+      3_000,
+    );
+    return raw ? (JSON.parse(raw) as PageStorage) : undefined;
+  },
+  async write(debugPort, origin, items) {
+    const script = `(() => { if (location.origin !== ${JSON.stringify(origin)}) return false; const items = ${JSON.stringify(items)}; for (const [k, v] of Object.entries(items)) { if (!localStorage.getItem(k)) localStorage.setItem(k, v); } return true; })()`;
+    await withCdp(debugPort, (c) => c.evaluate(script), 3_000);
+  },
+  async reload(debugPort) {
+    await withCdp(
+      debugPort,
+      async (c) => {
+        await c.evaluate("location.reload()").catch(() => undefined);
+        // Wait for the reloaded page before the bot reads it.
+        const started = Date.now();
+        await sleep(300);
+        while (Date.now() - started < 8_000) {
+          const state = await c.evaluate<string>("document.readyState").catch(() => undefined);
+          if (state === "interactive" || state === "complete") return;
+          await sleep(200);
+        }
+      },
+      5_000,
+    );
+  },
+};
 
 /** Each screen's cookies, over the DevTools port of its browser. */
 export const cdpCookies: CookieAccess = {
