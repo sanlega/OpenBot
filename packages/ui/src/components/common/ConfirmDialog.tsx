@@ -7,6 +7,8 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   /** Red confirm button for what can't be undone. */
   danger?: boolean;
+  /** Keeps the confirm button off until the person did what the dialog asks (typed a word). */
+  confirmDisabled?: boolean;
   /** Runs the action; a thrown error is shown in the dialog and it stays open. */
   onConfirm: () => Promise<void>;
   onClose: () => void;
@@ -18,6 +20,7 @@ export function ConfirmDialog({
   children,
   confirmLabel,
   danger = false,
+  confirmDisabled = false,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
@@ -25,9 +28,13 @@ export function ConfirmDialog({
   const [error, setError] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
+  // Safe default: the focused button is Cancel, so Enter never deletes by accident. Once, when the
+  // dialog opens: re-focusing on every render stole the focus from a field being typed in.
   useEffect(() => {
-    // Safe default: the focused button is Cancel, so Enter never deletes by accident.
     cancelRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !busy) onClose();
     };
@@ -85,7 +92,7 @@ export function ConfirmDialog({
               <button
                 type="button"
                 className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
-                disabled={busy}
+                disabled={busy || confirmDisabled}
                 onClick={() => void confirm()}
               >
                 {busy ? "Working…" : confirmLabel}

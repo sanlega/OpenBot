@@ -442,6 +442,16 @@ export class MockClientApiServer {
       const removed = SEED_THREADS.reduce((sum, t) => sum + clear(t.id), 0);
       return sendJson(res, 200, { ok: true, removed, threads: SEED_THREADS.length });
     }
+    // M2: same shape as packages/core/src/http/routes/reset.ts (the mock keeps its seed bots).
+    if (method === "POST" && path === "/api/reset") {
+      const body = await readJson<{ confirm?: string }>(req);
+      if (body.confirm !== "RESET") return sendJson(res, 400, { error: "invalid_request" });
+      const messages = SEED_THREADS.reduce((sum, t) => sum + clear(t.id), 0);
+      const memories = this.memories.length;
+      this.memories = [];
+      this.tasks = [];
+      return sendJson(res, 200, { ok: true, bots: 0, messages, memories, routines: 0, tasks: 0 });
+    }
     if (method === "GET" && path === "/api/approvals") {
       return sendJson(res, 200, {
         approvals: this.approvals.filter((a) => a.status === "pending"),

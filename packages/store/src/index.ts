@@ -22,3 +22,4 @@ export * from "./settings-repo.js";
 export * from "./setup-state-repo.js";
 export * from "./delegations-repo.js";
 export * from "./memories-repo.js";
+export * from "./reset.js";

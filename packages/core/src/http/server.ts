@@ -18,6 +18,7 @@ import { registerRoutineRoutes } from "./routes/routines.js";
 import { registerRemoteAndAuditRoutes } from "./routes/remote-and-audit.js";
 import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
+import { registerResetRoutes } from "./routes/reset.js";
 import { registerWebSocketRoute } from "../ws.js";
 
 export interface BuildServerOptions {
@@ -95,6 +96,7 @@ export async function buildServer(
   registerRemoteAndAuditRoutes(app, ctx);
   registerMemoryRoutes(app, ctx);
   registerTaskRoutes(app, ctx);
+  registerResetRoutes(app, ctx);
   registerWebSocketRoute(app, ctx);
 
   if (options.wireRemote !== false) {
