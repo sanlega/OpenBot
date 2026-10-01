@@ -185,14 +185,21 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
       </label>
       <label className="field">
         <span className="field-label">Computer</span>
+        <span className="field-help">
+          {computer === "docker"
+            ? "Works only inside the virtual machine: its shell, files and browser are there, never on this computer."
+            : computer === "docker+local"
+              ? "Uses the virtual machine and can also run commands and edit files on this computer."
+              : "No computer: it can chat, search the web and use connectors, but has no shell, files or browser."}
+        </span>
         <select
           aria-label="Computer"
           value={computer}
           onChange={(e) => setComputer(e.target.value as Bot["computer"])}
         >
+          <option value="docker">Virtual machine (recommended)</option>
+          <option value="docker+local">Virtual machine + this computer</option>
           <option value="none">None</option>
-          <option value="docker">Docker</option>
-          <option value="docker+local">Docker + this computer</option>
         </select>
       </label>
       <label className="field field-checkbox">

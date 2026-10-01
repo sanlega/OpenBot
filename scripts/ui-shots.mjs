@@ -71,5 +71,14 @@ await shot("08-phone-delete", async (p) => {
   await p.getByRole("menuitem", { name: "Delete bot" }).click();
 }, { width: 390, height: 844 });
 
+await shot("09-computer-tab", async (p) => {
+  await rows(p).nth(1).locator(".bot-item").click();
+  await p.getByRole("button", { name: "Computer", exact: true }).click();
+});
+await shot("10-profile", async (p) => {
+  await rows(p).nth(1).locator(".bot-item").click();
+  await p.getByRole("button", { name: "Profile", exact: true }).click();
+});
+
 await browser.close();
 process.exit(0);
