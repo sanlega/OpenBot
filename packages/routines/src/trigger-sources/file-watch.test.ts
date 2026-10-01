@@ -135,9 +135,15 @@ describe("FileWatchTriggerSource", () => {
     await writeFile(join(watchDir, "b.txt"), "two");
     await writeFile(join(watchDir, "c.txt"), "three");
 
-    await new Promise((r) => setTimeout(r, 200));
+    // macOS delivers file events late (FSEvents): wait for the trigger instead of a fixed time,
+    // then give a second one the chance to show up, which it must not.
+    const list = () => harness!.ctx.repos.triggerEvents.listByRoutine(routine.id);
+    for (let waited = 0; list().length === 0 && waited < 5_000; waited += 50) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    await new Promise((r) => setTimeout(r, 300));
 
-    const events = harness.ctx.repos.triggerEvents.listByRoutine(routine.id);
+    const events = list();
     expect(events.length).toBe(1);
     expect(events[0]?.matched).toBe(true);
   });
