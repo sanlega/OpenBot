@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.17 — 2026-10-01
+
+- **Bots whose computer is the virtual machine now work only there.** They no longer get a
+  shell, files or a browser on your own computer: they run commands, read and write files and
+  browse inside the virtual machine, where `/workspace` is your OpenBot workspace (the same
+  files you see). The virtual machine now has git, the GitHub CLI, Python with pip, Node and
+  build tools, and what bots install there is kept. A bot that should also work on your
+  computer can be set to "Virtual machine + this computer" in its profile.
+- **Bots read and click web pages themselves**, step by step, and see the page's text, instead
+  of starting one automatic task after another. The automatic computer tasks no longer go in
+  circles (repeated clicks, endless scrolling), a "describe this page" task finishes at once,
+  and a "Leave site?" dialog no longer blocks the next page.
+- **Fixed: a site signed in on one bot's screen showing signed out on another's.** The first
+  page a bot opened could load before the shared sign-ins reached its browser.
+- **Rename, clear or delete a bot** from the "⋯" button (or a right-click) on its row in the
+  sidebar, each with a confirmation. A deleted bot's files stay in the workspace and the Chief
+  of Staff keeps a note of what it did. **Settings > Data** clears every conversation at once.
+- A bot's reply is now just its answer, without the running commentary it wrote while working
+  (that stays in the turn's activity).
+- Fixed the Chief of Staff failing to create a bot with the name of one you had deleted.
+- The virtual machine updates itself to this version the first time a bot uses it (sign-ins
+  and files are kept; software bots installed with apt must be installed again).
+
 ## 0.1.16 — 2026-09-30
 
 - Bots share the virtual machine properly: a site one bot signs in to is signed in for every

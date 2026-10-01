@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { CoreContext, CustomEngineSpec } from "../../context.js";
 
-export const SERVER_VERSION = "0.1.16";
+export const SERVER_VERSION = "0.1.17";
 
 export function registerHealthRoutes(app: FastifyInstance, ctx: CoreContext): void {
   app.get("/health", async () => ({ status: "ok" }));
