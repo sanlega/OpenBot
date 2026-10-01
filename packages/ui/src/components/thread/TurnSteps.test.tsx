@@ -24,3 +24,40 @@ describe("TurnSteps", () => {
     expect(screen.getByRole("alert").textContent).toContain("session limit");
   });
 });
+
+describe("TurnSteps plan (N3)", () => {
+  it("shows the engine's latest plan with its progress", () => {
+    const turn: TurnActivity = {
+      id: "turn_1",
+      botId: "bot_a",
+      startedAt: new Date(Date.now() - 5000).toISOString(),
+      status: "running",
+      text: "",
+      steps: [
+        {
+          id: "s1",
+          tool: "TodoWrite",
+          status: "done",
+          input: { todos: [{ content: "Old plan", status: "pending" }] },
+        },
+        {
+          id: "s2",
+          tool: "update_plan",
+          status: "done",
+          input: {
+            todos: [
+              { content: "Read the repo", status: "completed" },
+              { content: "Fix the bug", status: "in_progress" },
+              { content: "Run the tests", status: "pending" },
+            ],
+          },
+        },
+      ],
+    };
+    render(<TurnSteps turn={turn} />);
+    expect(screen.getByText(/plan 1\/3/)).toBeTruthy();
+    expect(screen.getByText("Plan · 1 of 3 done")).toBeTruthy();
+    expect(screen.getByText("Fix the bug")).toBeTruthy();
+    expect(screen.queryByText("Old plan")).toBeNull();
+  });
+});

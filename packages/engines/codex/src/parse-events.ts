@@ -17,6 +17,8 @@ export interface CodexParseState {
   usageReported?: { input: number; output: number };
   /** Agent-message items whose text already arrived as deltas (so `item/completed` doesn't repeat it). */
   streamedItems?: Set<string>;
+  /** Plan updates seen this turn (N3), to give each its own step id. */
+  planUpdates?: number;
 }
 
 export function createCodexParseState(): CodexParseState {
@@ -101,6 +103,28 @@ export function handleCodexNotification(
       state.text += text;
       hooks.emit({ type: "text_delta", text });
     }
+    return;
+  }
+
+  // N3: Codex's plan (its todo list) is shown in the turn like Claude's TodoWrite.
+  if (method === "turn/plan/updated") {
+    const plan = Array.isArray(params.plan) ? (params.plan as Array<Record<string, unknown>>) : [];
+    const todos = plan
+      .map((p) => ({
+        content: String(p.step ?? p.content ?? "").slice(0, 300),
+        status:
+          p.status === "completed"
+            ? "completed"
+            : p.status === "inProgress" || p.status === "in_progress"
+              ? "in_progress"
+              : "pending",
+      }))
+      .filter((t) => t.content);
+    if (todos.length === 0) return;
+    state.planUpdates = (state.planUpdates ?? 0) + 1;
+    const toolUseId = `plan-${state.turnId ?? "turn"}-${state.planUpdates}`;
+    hooks.emit({ type: "tool_started", toolName: "update_plan", input: { todos }, toolUseId });
+    hooks.emit({ type: "tool_completed", toolUseId, output: "", isError: false });
     return;
   }
 

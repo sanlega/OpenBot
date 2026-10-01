@@ -269,3 +269,31 @@ describe("handleCodexNotification with the current Codex CLI", () => {
     expect(reported.reduce((sum, e) => sum + e.outputTokens, 0)).toBe(50);
   });
 });
+
+describe("Codex plan updates (N3)", () => {
+  it("become an update_plan step with the todo list", () => {
+    const { events } = run([
+      note("turn/plan/updated", {
+        threadId: THREAD,
+        turnId: "t1",
+        plan: [
+          { step: "Read the repo", status: "completed" },
+          { step: "Fix the bug", status: "inProgress" },
+          { step: "Run the tests", status: "pending" },
+        ],
+      }),
+    ]);
+    expect(events[0]).toMatchObject({
+      type: "tool_started",
+      toolName: "update_plan",
+      input: {
+        todos: [
+          { content: "Read the repo", status: "completed" },
+          { content: "Fix the bug", status: "in_progress" },
+          { content: "Run the tests", status: "pending" },
+        ],
+      },
+    });
+    expect(events[1]).toMatchObject({ type: "tool_completed" });
+  });
+});

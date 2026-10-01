@@ -21,6 +21,63 @@ import type { TurnActivity, TurnStep } from "../../state/reducer.js";
 
 const OPENBOT_PREFIX = "mcp__openbot__";
 
+export interface PlanItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+}
+
+/**
+ * N3: the engine's own todo list (Claude's TodoWrite, Codex's plan), latest version: what the
+ * bot plans to do and how far along it is.
+ */
+export function latestPlan(steps: TurnStep[]): PlanItem[] | undefined {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i]!;
+    if (step.tool !== "TodoWrite" && step.tool !== "update_plan") continue;
+    const todos = (step.input as { todos?: unknown } | undefined)?.todos;
+    if (!Array.isArray(todos)) continue;
+    const items = todos
+      .map((t) => {
+        const item = t as { content?: unknown; status?: unknown };
+        const status: PlanItem["status"] =
+          item.status === "completed"
+            ? "completed"
+            : item.status === "in_progress"
+              ? "in_progress"
+              : "pending";
+        return { content: String(item.content ?? "").trim(), status };
+      })
+      .filter((t) => t.content);
+    if (items.length) return items;
+  }
+  return undefined;
+}
+
+function PlanChecklist({ items }: { items: PlanItem[] }) {
+  const done = items.filter((i) => i.status === "completed").length;
+  return (
+    <div className="turn-plan" aria-label={`Plan: ${done} of ${items.length} done`}>
+      <div className="turn-plan-title">
+        Plan · {done} of {items.length} done
+      </div>
+      <ol>
+        {items.map((item, i) => (
+          <li key={`${i}-${item.content}`} data-status={item.status}>
+            <span className="turn-plan-mark" aria-hidden>
+              {item.status === "completed" ? (
+                <Check size={12} />
+              ) : item.status === "in_progress" ? (
+                <Loader2 size={12} className="spin" />
+              ) : null}
+            </span>
+            <span>{item.content}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 /**
  * What the Bot did before answering, folded by default like a "thinking" block.
  * Engines do not expose their raw reasoning, so this shows the steps it took.
@@ -45,6 +102,8 @@ export function TurnSteps({
   );
   const steps = turn.steps.length;
   const current = turn.steps[steps - 1];
+  const plan = latestPlan(turn.steps);
+  const planDone = plan?.filter((i) => i.status === "completed").length ?? 0;
   // A computer task can keep going (or wait for text) after the turn replied.
   const openTask = running
     ? undefined
@@ -52,9 +111,11 @@ export function TurnSteps({
   const summary = waiting
     ? "Waiting for your approval"
     : running
-      ? current
-        ? stepTitle(current)
-        : "Thinking…"
+      ? plan
+        ? `${current ? stepTitle(current) : "Working"} · plan ${planDone}/${plan.length}`
+        : current
+          ? stepTitle(current)
+          : "Thinking…"
       : turn.status === "failed"
         ? `Couldn't finish · ${formatDuration(seconds)}`
         : openTask
@@ -83,6 +144,7 @@ export function TurnSteps({
         <span className={running && !waiting ? "shimmer" : undefined}>{summary}</span>
         {steps > 0 ? <ChevronRight size={14} className="turn-chevron" aria-hidden /> : null}
       </summary>
+      {plan ? <PlanChecklist items={plan} /> : null}
       {steps > 0 ? (
         <ol className="turn-step-list">
           {turn.steps.map((step) => (
@@ -146,6 +208,7 @@ const TOOL_LABELS: Record<string, string> = {
   WebSearch: "Searched the web",
   WebFetch: "Opened",
   TodoWrite: "Updated its plan",
+  update_plan: "Updated its plan",
   // OpenBot's virtual-machine tools (D-033).
   vm_shell: "Ran in the VM",
   vm_read_file: "Read",
@@ -180,7 +243,7 @@ function iconFor(tool: string): ReactNode {
   if (["Bash", "shell", "exec_command"].includes(tool)) return <Terminal size={size} />;
   if (["Grep", "Glob", "WebSearch", "ToolSearch"].includes(tool)) return <Search size={size} />;
   if (tool === "WebFetch") return <Globe size={size} />;
-  if (tool === "TodoWrite") return <ListTodo size={size} />;
+  if (tool === "TodoWrite" || tool === "update_plan") return <ListTodo size={size} />;
   if (tool.endsWith("send_message") || tool.endsWith("message_user")) {
     return <MessageSquare size={size} />;
   }
