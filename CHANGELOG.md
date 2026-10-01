@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.1.19 — 2026-10-01
+
+- **Tasks screen.** See every job a bot handed to another bot, where it stands and what came
+  back. Cancel one (and everything it handed on), or jump to the conversation where a bot is
+  waiting for your answer. Hand-offs stop after three levels.
+- **Computer > Files**: browse and preview the files your bots share (Markdown shown
+  formatted), and see the commands a bot ran in its virtual machine.
+- **See the plan.** When the engine keeps a to-do list (Claude, Codex), the turn shows it as a
+  checklist with its progress.
+- **Settings**: defaults for new bots (engine, permissions, computer); **Speed**, how fast each
+  bot starts answering; **Reset OpenBot** to start over (typed confirmation; keys, logins and
+  files are kept); and **Check again** in Engines: an engine you install or sign in to is
+  picked up without restarting.
+- **A warmer first run**: the Chief of Staff says hello once, with ideas to try.
+- **Bots handle refusals and loops on every engine**: after you deny something they no longer
+  look for a way around it, and a card nobody answered is not taken as a "no".
+- **Safer local access.** Only OpenBot itself can act as you on this computer: other programs,
+  other user accounts and web pages can no longer use its local address to control it, and bots
+  cannot call it from their commands. The desktop app needs nothing from you. If you open
+  OpenBot in a browser with `openbot serve`, use the link it prints (it ends in `#key=…`);
+  browsers reaching it through Tailscale or a Cloudflare tunnel now need to be paired, like the
+  phone app.
+- A device that isn't paired now says so (instead of "Can't reach OpenBot"), and an open
+  window reconnects by itself when OpenBot restarts.
+- Clearer everywhere: errors are plain sentences, status colours are readable in light and dark
+  mode, dates use one language, deleting a memory can be undone, and dialogs work fully from
+  the keyboard.
+- For developers: `pnpm eval` runs versioned checks of what bots do (`evals/`), on the fake
+  engine or your real ones; release builds are signed when signing certificates are configured.
+
 ## 0.1.18 — 2026-10-01
 
 - **Bots remember.** A bot keeps what it learns across conversations: your preferences and
