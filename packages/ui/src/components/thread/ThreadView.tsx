@@ -9,6 +9,7 @@ import { dayLabel, sameDay } from "../common/time.js";
 import { ComputerPanel } from "../computer/ComputerPanel.js";
 import { DigestMessage } from "../digest/DigestMessage.js";
 import { BotConnectorsCard } from "../profile/BotConnectorsCard.js";
+import { BotMemoryPanel } from "../profile/BotMemoryPanel.js";
 import { BotProfileEditor } from "../profile/BotProfileEditor.js";
 import { BotWhyPanel } from "../profile/BotWhyPanel.js";
 import { Composer } from "./Composer.js";
@@ -160,6 +161,15 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
         <button
           type="button"
           className="tab"
+          data-active={panel === "memory"}
+          aria-current={panel === "memory" ? "page" : undefined}
+          onClick={() => setPanel("memory")}
+        >
+          Memory
+        </button>
+        <button
+          type="button"
+          className="tab"
           data-active={panel === "profile"}
           aria-current={panel === "profile" ? "page" : undefined}
           onClick={() => setPanel("profile")}
@@ -248,6 +258,14 @@ export function ThreadViewPanel({ onBack }: ThreadViewProps) {
         <div className="thread-scroll">
           <div className="panel-page panel-page-wide">
             <ComputerPanel botId={bot.id} />
+          </div>
+        </div>
+      ) : null}
+
+      {panel === "memory" ? (
+        <div className="thread-scroll">
+          <div className="panel-page">
+            <BotMemoryPanel botId={bot.id} />
           </div>
         </div>
       ) : null}

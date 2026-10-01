@@ -9,7 +9,12 @@ import {
   type ModelInfo,
   type TurnInput,
 } from "@openbot/contracts";
-import { delegationsOf, type CoreContext, type TurnMailbox } from "@openbot/core";
+import {
+  delegationsOf,
+  memoryPromptBlock,
+  type CoreContext,
+  type TurnMailbox,
+} from "@openbot/core";
 import {
   buildCosSystemPrompt,
   type AutonomyCaps,
@@ -252,7 +257,10 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
 
   function systemPromptFor(bot: Bot): string {
     const vmOnly = bot.computer === "docker" ? `\n\n${COMPUTER_VM_ONLY_BLOCK}` : "";
-    const computer = bot.computer !== "none" ? `\n\n${COMPUTER_RULE_BLOCK}${vmOnly}` : "";
+    // C5: what the Bot remembers (its own facts and the user's), within a budget.
+    const memory = `\n\n${memoryPromptBlock(ctx, bot)}`;
+    const computer =
+      (bot.computer !== "none" ? `\n\n${COMPUTER_RULE_BLOCK}${vmOnly}` : "") + memory;
     if (!bot.isChiefOfStaff) return `${bot.description}\n\n${NON_COS_RULE_BLOCK}${computer}`;
     const roster = ctx.repos.bots.list();
     return `${bot.description}\n\n${buildCosSystemPrompt({

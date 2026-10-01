@@ -8,6 +8,7 @@ import type {
   CatalogEntry,
   ComputerImageStatus,
   ConnectionView,
+  Memory,
   Message,
   OBEvent,
   Thread,
@@ -154,6 +155,17 @@ export class MockClientApiServer {
   private routines = structuredClone(SEED_ROUTINES);
   private routineRuns = structuredClone(SEED_ROUTINE_RUNS);
   private takeoverByBot = new Map<string, boolean>();
+  private memories: Memory[] = [
+    {
+      id: "mem_seed_user",
+      scope: "user",
+      botId: SEED_BOTS[0]?.id ?? "bot_chief",
+      tier: "profile",
+      content: "Prefers short answers with a table when comparing options",
+      createdAt: "2026-09-30T09:00:00.000Z",
+      updatedAt: "2026-09-30T09:00:00.000Z",
+    },
+  ];
   private customEngines: Array<{ slug: string; label: string; command: string; args: string[] }> =
     [];
   private computerImage: ComputerImageStatus = {
@@ -740,6 +752,28 @@ export class MockClientApiServer {
       return sendJson(res, 200, {
         routing: { mode: "pinned", engine: route.engine, model: route.model },
       });
+    }
+    // C5: same shapes as packages/core/src/http/routes/memories.ts.
+    if (method === "GET" && path.match(/^\/api\/bots\/[^/]+\/memories$/)) {
+      const botId = path.split("/")[3]!;
+      return sendJson(res, 200, {
+        memories: this.memories.filter((m) => m.scope === "user" || m.botId === botId),
+      });
+    }
+    if (method === "PATCH" && path.match(/^\/api\/memories\/[^/]+$/)) {
+      const id = path.split("/")[3]!;
+      const body = await readJson<{ content?: string }>(req);
+      const memory = this.memories.find((m) => m.id === id);
+      if (!memory || !body.content?.trim()) return sendJson(res, 404, { error: "not_found" });
+      memory.content = body.content.trim();
+      return sendJson(res, 200, { memory });
+    }
+    if (method === "DELETE" && path.match(/^\/api\/memories\/[^/]+$/)) {
+      const id = path.split("/")[3]!;
+      const before = this.memories.length;
+      this.memories = this.memories.filter((m) => m.id !== id);
+      if (this.memories.length === before) return sendJson(res, 404, { error: "not_found" });
+      return sendJson(res, 200, { ok: true });
     }
     if (method === "GET" && path.match(/^\/api\/bots\/[^/]+\/why$/)) {
       const botId = path.split("/")[3]!;

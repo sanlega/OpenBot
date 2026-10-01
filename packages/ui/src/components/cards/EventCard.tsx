@@ -69,6 +69,7 @@ const EVENT_LABELS: Record<EventType, string> = {
   "connector.disconnected": "App disconnected",
   "setup.changed": "Setup changed",
   "engine.status": "Engine status",
+  "memory.changed": "Memory updated",
   error: "Something went wrong",
 };
 

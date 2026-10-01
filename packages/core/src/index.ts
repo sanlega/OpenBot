@@ -71,3 +71,4 @@ export {
   type ConnectorErrorCode,
   type ConnectorToolClass,
 } from "./connector-service.js";
+export * from "./memory.js";

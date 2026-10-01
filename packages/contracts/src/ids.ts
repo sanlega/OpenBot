@@ -25,6 +25,7 @@ export const ID_PREFIXES = {
   capCounter: "capctr_",
   inputRequest: "inp_",
   delegation: "dlg_",
+  memory: "mem_",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

@@ -179,6 +179,43 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
     },
   },
   {
+    name: "remember",
+    description:
+      "Save a fact you will need in later conversations: the user's preferences and standing instructions, who people are, how you do this job, decisions taken. One short line. tier: 'profile' (durable, always in your prompt), 'log' (what happened; the latest are shown), 'note' (found with recall). scope: 'bot' (default, yours) or 'user' (a fact about the user every bot should know). Never save passwords, keys or codes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact: { type: "string" },
+        tier: { type: "string", enum: ["profile", "log", "note"] },
+        scope: { type: "string", enum: ["bot", "user"] },
+      },
+      required: ["fact"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "forget",
+    description:
+      "Forget a remembered fact that is wrong or outdated, by its exact text (as shown in your memory or by recall).",
+    inputSchema: {
+      type: "object",
+      properties: { fact: { type: "string" } },
+      required: ["fact"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "recall",
+    description:
+      "Search your memory (yours and the user's facts, every tier, including notes not shown in your prompt) by words.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "list_logins",
     description:
       "Websites the user has saved a login for (site and username only; you never see passwords). Check this before asking the user for a password: a saved login is typed into the virtual machine automatically when a computer_task reaches that site's sign-in form.",

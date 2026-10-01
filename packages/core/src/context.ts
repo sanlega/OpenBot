@@ -18,6 +18,7 @@ import {
   ApprovalsRepo,
   InputRequestsRepo,
   DelegationsRepo,
+  MemoriesRepo,
   BotsRepo,
   CapCountersRepo,
   ChainsRepo,
@@ -56,6 +57,7 @@ export interface CoreRepos {
   approvals: ApprovalsRepo;
   inputRequests: InputRequestsRepo;
   delegations: DelegationsRepo;
+  memories: MemoriesRepo;
   rules: RulesRepo;
   devices: DevicesRepo;
   connections: ConnectionsRepo;
@@ -264,6 +266,7 @@ export async function createCoreContext(
       approvals: new ApprovalsRepo(db),
       inputRequests: new InputRequestsRepo(db),
       delegations: new DelegationsRepo(db),
+      memories: new MemoriesRepo(db),
       rules: new RulesRepo(db),
       devices: new DevicesRepo(db),
       connections: new ConnectionsRepo(db),

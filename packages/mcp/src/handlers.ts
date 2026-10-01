@@ -3,9 +3,20 @@ import {
   type Bot,
   type InputField,
   type InputRequest,
+  type MemoryScope,
+  type MemoryTier,
   type Message,
 } from "@openbot/contracts";
-import { delegationsOf, getLogin, listLogins, saveLogin, type CoreContext } from "@openbot/core";
+import {
+  delegationsOf,
+  forgetFact,
+  getLogin,
+  listLogins,
+  recallFacts,
+  rememberFact,
+  saveLogin,
+  type CoreContext,
+} from "@openbot/core";
 import { loopReminder, stableJson, ToolLoopDetector, type LoopDetection } from "@openbot/runtime";
 import type { McpToolServices } from "./services/interfaces.js";
 import { TOOL_INPUT_SCHEMAS } from "./tool-schemas.js";
@@ -22,6 +33,8 @@ const SIDE_EFFECT_TOOLS = new Set([
   "ask_user",
   "cancel_input",
   "save_login",
+  "remember",
+  "forget",
   "request_approval",
   "computer_task",
   "computer_steer",
@@ -118,6 +131,44 @@ export class ToolRouter {
           session,
           parsed.data as { title: string; intro?: string; fields: InputField[] },
         );
+      case "remember": {
+        const input = parsed.data as { fact: string; tier?: MemoryTier; scope?: MemoryScope };
+        const saved = rememberFact(this.ctx, {
+          botId: session.botId,
+          fact: input.fact,
+          tier: input.tier,
+          scope: input.scope,
+          chainId: session.chainId,
+        });
+        if (!saved.ok) return refused(saved.reason);
+        await this.publishMemoryChange(session, "remembered", saved.memory.id);
+        return allowed({
+          remembered: saved.memory.content,
+          scope: saved.memory.scope,
+          tier: saved.memory.tier,
+          ...(saved.existed ? { note: "you already knew this" } : {}),
+          ...(saved.memory.scope === "user"
+            ? { tell_user: "Say in one short line that every bot will know this from now on." }
+            : {}),
+        });
+      }
+      case "forget": {
+        const result = forgetFact(this.ctx, session.botId, (parsed.data as { fact: string }).fact);
+        if (!result.ok) return refused(result.reason, "call recall to find the exact text");
+        await this.publishMemoryChange(session, "forgotten", result.forgotten.id);
+        return allowed({ forgotten: result.forgotten.content });
+      }
+      case "recall":
+        return allowed({
+          facts: recallFacts(this.ctx, session.botId, (parsed.data as { query: string }).query).map(
+            (m) => ({
+              fact: m.content,
+              tier: m.tier,
+              scope: m.scope,
+              learned: m.createdAt.slice(0, 10),
+            }),
+          ),
+        });
       case "list_logins":
         return allowed({ logins: await listLogins(this.ctx.vault) });
       case "save_login": {
@@ -222,6 +273,22 @@ export class ToolRouter {
       // The machine being down or slow is an answer for the engine, not a crashed tool call.
       return refused(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  private async publishMemoryChange(
+    session: SessionContext,
+    change: "remembered" | "forgotten",
+    memoryId: string,
+  ): Promise<void> {
+    await this.ctx.eventBus
+      .publish({
+        type: "memory.changed",
+        botId: session.botId,
+        chainId: session.chainId,
+        turnId: session.turnId,
+        payload: { change, memoryId },
+      })
+      .catch(() => undefined);
   }
 
   private async askUser(

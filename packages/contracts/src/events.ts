@@ -66,6 +66,7 @@ export const EventType = z.enum([
   "connector.disconnected",
   "setup.changed",
   "engine.status",
+  "memory.changed",
   "error",
 ]);
 export type EventType = z.infer<typeof EventType>;

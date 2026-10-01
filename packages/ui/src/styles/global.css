@@ -707,3 +707,72 @@ a {
   color: var(--text);
   white-space: pre-wrap;
 }
+
+/* ---------- Bot memory ("What it knows") ---------- */
+
+.memory-group h4 {
+  margin: 12px 0 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.memory-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.memory-text {
+  overflow-wrap: anywhere;
+}
+
+.memory-meta {
+  grid-column: 1;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.memory-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.memory-edit {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+}
+
+.memory-edit input {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .memory-item {
+    grid-template-columns: 1fr;
+  }
+  .memory-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

@@ -145,6 +145,13 @@ export const TOOL_INPUT_SCHEMAS: Record<string, z.ZodTypeAny> = {
     user_requested: z.boolean().default(false),
   }),
   list_logins: z.object({}),
+  remember: z.object({
+    fact: z.string().min(1).max(2000),
+    tier: z.enum(["profile", "log", "note"]).optional(),
+    scope: z.enum(["bot", "user"]).optional(),
+  }),
+  forget: z.object({ fact: z.string().min(1).max(2000) }),
+  recall: z.object({ query: z.string().max(500) }),
   save_login: z.object({
     site: z.string().min(1),
     username: z.string().optional(),

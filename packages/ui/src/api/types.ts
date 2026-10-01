@@ -240,4 +240,4 @@ export interface SettingsPatch {
 export type AppScreen =
   "bots" | "activity" | "audit" | "routines" | "connectors" | "settings" | "devices" | "computer";
 
-export type ThreadPanel = "chat" | "computer" | "profile";
+export type ThreadPanel = "chat" | "computer" | "memory" | "profile";

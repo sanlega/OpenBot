@@ -386,3 +386,21 @@ export const delegations = sqliteTable(
     index("delegations_state_idx").on(t.state),
   ],
 );
+
+/** C5: Bots' persistent memory (scoped facts, see `Memory` in contracts). */
+export const memories = sqliteTable(
+  "memories",
+  {
+    id: text("id").primaryKey(),
+    scope: text("scope").notNull(),
+    botId: text("bot_id").notNull(),
+    tier: text("tier").notNull(),
+    content: text("content").notNull(),
+    sourceChainId: text("source_chain_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    /** Forgotten facts stay for the audit trail but are never shown to a Bot again. */
+    forgottenAt: integer("forgotten_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("memories_bot_id_idx").on(t.botId), index("memories_scope_idx").on(t.scope)],
+);

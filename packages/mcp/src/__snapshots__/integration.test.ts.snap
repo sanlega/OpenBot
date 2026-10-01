@@ -72,6 +72,24 @@ exports[`McpComposer > snapshots tool input schemas 1`] = `
     ],
   },
   {
+    "name": "remember",
+    "required": [
+      "fact",
+    ],
+  },
+  {
+    "name": "forget",
+    "required": [
+      "fact",
+    ],
+  },
+  {
+    "name": "recall",
+    "required": [
+      "query",
+    ],
+  },
+  {
     "name": "list_logins",
     "required": [],
   },

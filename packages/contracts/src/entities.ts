@@ -483,3 +483,26 @@ export const Delegation = z.object({
   lastEventAt: isoTimestamp(),
 });
 export type Delegation = z.infer<typeof Delegation>;
+
+/**
+ * C5: what a Bot remembers across sessions. `bot`: about itself and how it does its job;
+ * `user`: durable facts about the owner, shared by every Bot. `profile` facts are always in the
+ * Bot's prompt; `log` entries (what happened) only the latest; `note` is found with recall.
+ */
+export const MemoryScope = z.enum(["bot", "user"]);
+export type MemoryScope = z.infer<typeof MemoryScope>;
+export const MemoryTier = z.enum(["profile", "log", "note"]);
+export type MemoryTier = z.infer<typeof MemoryTier>;
+
+export const Memory = z.object({
+  id: z.string(),
+  scope: MemoryScope,
+  /** The Bot that wrote it (and, for `bot` scope, the Bot it belongs to). */
+  botId: z.string(),
+  tier: MemoryTier,
+  content: z.string().min(1).max(2000),
+  sourceChainId: z.string().optional(),
+  createdAt: isoTimestamp(),
+  updatedAt: isoTimestamp(),
+});
+export type Memory = z.infer<typeof Memory>;
