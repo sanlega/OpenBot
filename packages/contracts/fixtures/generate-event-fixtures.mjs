@@ -82,6 +82,7 @@ const payloads = {
   "connector.disconnected": { payload: { connectionId: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV" } },
   "setup.changed": { payload: { step: "claude", ok: true } },
   "engine.status": { payload: { engine: "claude", installed: true, loginOk: true } },
+  "memory.changed": { payload: { change: "remembered", memoryId: "mem_01ARZ3NDEKTSV4RRFFQ69G5FAV" } },
   error: { payload: { message: "boom", code: "internal" } },
 };
 
