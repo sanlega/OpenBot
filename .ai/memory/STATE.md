@@ -1,8 +1,30 @@
 # Project state
 
-_Last updated: 2026-10-01 by Claude (v0.1.17 released and installed)_
+_Last updated: 2026-10-01 by Claude (Grok Bot roadmap implemented on branch `main-2`, not released)_
 
 ## In progress
+- **Grok Bot roadmap (2026-10-01, D-034, plan `.ai/memory/plans/2026-10-01-grok-bot-box-roadmap.md`),
+  committed on branch `main-2` (worktree), NOT merged to `main`, NOT released.** Source: the
+  owner's "Hoja de ruta de OpenBot" (Grok Bot's VM internals). Done: hardened box (tini, `box`
+  user with no capabilities for bots' commands, CapDrop/no-new-privileges/limits, loopback
+  firewall closing daemon/DevTools/VNC/noVNC to bots, root-only X sockets, apt through a
+  root-only helper, machine-id + owner time zone), a supervisor per screen (restart with
+  backoff, crashloop, down reason, RFB/DevTools probes, single Chromium launcher), `/doctor` +
+  Settings > Computer > Health ("Run self-check", "Refresh the computer"), `/telemetry`, `/logs`,
+  screen leases, cookie jar fixes (partitionKey, Google rotating cookies, prefix rules) and
+  localStorage shared per origin, stall watch per turn (resume once, then `engine_stalled`),
+  tool-loop detector, harness reminders, anti-detour refusals, delegated send rules, narrow
+  "Always allow", scoped memory (`remember`/`forget`/`recall`, Memory tab), per-turn usage and
+  latency (migrations 0004, 0005), anti-bot walls named per site, site playbooks, crash markers.
+  Also fixed a pre-existing bug found live: a page with one control fell back to the AX tree
+  and clicks silently pressed Return. **Verified**: full pipeline (1316 unit, 23 E2E, lint 0
+  errors, typecheck, format, mh check); live `scripts/live/box.mjs` 15/15 and `vm.mjs` 11/11
+  on a locally built image; `scripts/live/memory.mjs` 7/7 with real Claude and real Codex.
+  **Next**: owner review, merge `main-2` into `main`, release (the image must be republished:
+  a `v*` tag) and replay `box.mjs`/`memory.mjs`/`vmbot.mjs` on the installed app. Not built:
+  D1, B5, B6, C11 (see the plan's outcome). Known: Codex/ACP refusals don't carry the
+  anti-detour text (only Claude's permission prompt); the desktop Electron E2E was not run
+  locally (needs `rebuild:native`; CI runs it).
 - **v0.1.17 RELEASED and installed on the Windows dev machine (2026-10-01)**: tag `v0.1.17`,
   CI green on all three OSes (macOS file-watch flake rerun, then the test was made robust),
   release workflow green, all installers + SHA256SUMS, Windows installer hash verified, GHCR
