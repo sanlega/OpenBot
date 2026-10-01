@@ -24,6 +24,8 @@ export interface PageView {
   elements: Array<{ ref: string; role: string; label: string; value?: string }>;
   /** Where the whole text is when the page is longer than `text` (a file in the machine). */
   fullText?: { path: string; bytes: number; lines: number };
+  /** Routes that worked on this site before (C9), when the page was just opened. */
+  playbook?: string;
   /** An anti-bot wall in front of the page (B7). */
   blocked?: { family: string; reason: string; timesBefore: number };
   /** What the step did, when it was an action. */
@@ -83,12 +85,15 @@ export class McpMachineServiceAdapter {
     const observation = this.lastRead.get(session.botId);
     const fullText = await this.spillPageText(session, observation);
     const blocked = observation ? this.noteBotWall(session, observation) : undefined;
+    // C9: opening a site with a known route hands it over once, with the page.
+    const playbook = input.url ? this.computer.playbooks().read(input.url) : undefined;
     return allowed({
       page: {
         ...page,
         ...(did ? { did } : {}),
         ...(fullText ? { fullText } : {}),
         ...(blocked ? { blocked } : {}),
+        ...(playbook ? { playbook } : {}),
       },
     });
   }

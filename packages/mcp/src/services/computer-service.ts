@@ -1,8 +1,10 @@
+import { join } from "node:path";
 import { newId, type Approval } from "@openbot/contracts";
 import { loginFieldKind, loginForUrl, resolveSecretRef, type CoreContext } from "@openbot/core";
 import {
   ComputerTaskManager,
   DefaultComputerActionBroker,
+  PlaybookStore,
   type BrokerDecision,
   type ComputerActionBroker,
   type ComputerTaskSnapshot,
@@ -75,8 +77,20 @@ export class McpComputerServiceAdapter implements McpComputerService {
       inputs: input.inputs,
     });
     const snapshot = await this.getManager().wait(taskId, waitMs(input.waitSeconds));
-    return allowed(view(snapshot!));
+    // C9: a route that worked on this site before.
+    const playbook = this.playbooks().read(input.startUrl ?? snapshot?.url);
+    return allowed({ ...view(snapshot!), ...(playbook ? { playbook } : {}) });
   }
+
+  /** Site playbooks live in the shared workspace, readable by the user and every bot. */
+  playbooks(): PlaybookStore {
+    this.playbookStore ??= new PlaybookStore(
+      join(this.ctx.config.workspaceDir, ".openbot", "playbooks"),
+    );
+    return this.playbookStore;
+  }
+
+  private playbookStore: PlaybookStore | undefined;
 
   async computerStatus(
     session: SessionContext,
@@ -179,6 +193,7 @@ export class McpComputerServiceAdapter implements McpComputerService {
         throw new Error("computer tasks require decisionService and computerProvider");
       }
       this.manager = new ComputerTaskManager({
+        playbooks: this.playbooks(),
         decisionService: this.ctx.decisionService,
         provider: this.ctx.computerProvider,
         broker: new ApprovalComputerBroker(

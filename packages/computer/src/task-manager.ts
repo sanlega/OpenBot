@@ -17,6 +17,7 @@ import {
   type ComputerPhase,
   type ComputerStepEvent,
 } from "./fast-loop.js";
+import type { PlaybookStore } from "./playbooks.js";
 
 export type ComputerTaskStatus =
   | "running"
@@ -106,6 +107,8 @@ export interface ComputerTaskManagerOptions {
   /** How often a paused task looks at the page to notice the person finished. */
   blockedPollMs?: number;
   onUpdate?: (snapshot: ComputerTaskSnapshot, event?: ComputerStepEvent) => void;
+  /** C9: routes that worked are kept per site for the next task there. */
+  playbooks?: PlaybookStore;
 }
 
 interface TaskRuntime {
@@ -482,8 +485,31 @@ export class ComputerTaskManager {
     runtime.snapshot.phase = undefined;
     runtime.snapshot.pendingInput = undefined;
     runtime.snapshot.need = undefined;
+    if (status === "completed") this.learnRoute(runtime);
     this.emit(runtime);
     this.wake(runtime);
+  }
+
+  /** C9: a finished task leaves its deep link and the steps that worked for the next one. */
+  private learnRoute(runtime: TaskRuntime): void {
+    if (!this.opts.playbooks) return;
+    const done = runtime.snapshot.steps.filter((s) => s.outcome === "executed" && s.op);
+    const steps = done
+      .filter((s) => s.op !== "wait" && s.op !== "done")
+      // What was clicked or typed into, never what was typed (it can be a secret).
+      .map((s) => (s.target ? `${s.op} "${s.target.slice(0, 60)}"` : String(s.op)))
+      .slice(0, 30);
+    const needed = runtime.snapshot.steps
+      .filter((s) => s.outcome === "takeover" && s.reason)
+      .map((s) => (s.reason as string).slice(0, 120));
+    this.opts.playbooks.record({
+      goal: runtime.snapshot.goal.slice(0, 200),
+      ...(runtime.req.startUrl ? { startUrl: runtime.req.startUrl } : {}),
+      ...(runtime.snapshot.url ? { endUrl: runtime.snapshot.url } : {}),
+      steps,
+      needed: [...new Set(needed)],
+      at: this.now().toISOString(),
+    });
   }
 
   private wake(runtime: TaskRuntime): void {

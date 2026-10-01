@@ -292,3 +292,27 @@ describe("ComputerTaskManager", () => {
     expect(phases).toContain("deciding");
   });
 });
+
+describe("site playbooks (C9)", () => {
+  it("a finished task leaves its route (never the typed text) for the next one", async () => {
+    const recorded: Array<{ steps: string[]; endUrl?: string; goal: string }> = [];
+    const tasks = new ComputerTaskManager({
+      decisionService: scriptedJev([
+        ["click", "0"],
+        ["type", "1"],
+        ["done", "none"],
+      ]),
+      provider: new FakeComputerProvider(),
+      inputTimeoutMs: 5_000,
+      playbooks: { record: (e: (typeof recorded)[number]) => recorded.push(e) } as never,
+    });
+    start(tasks, { inputs: { subject: "Q3 numbers" } });
+    let snapshot = await tasks.wait("ctask_1", 2_000);
+    while (snapshot?.status === "running") snapshot = await tasks.wait("ctask_1", 2_000);
+    expect(snapshot?.status).toBe("completed");
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]!.goal).toBe("Write an email with subject Q3");
+    expect(recorded[0]!.steps.length).toBeGreaterThan(0);
+    expect(recorded[0]!.steps.join(" ")).not.toContain("Q3 numbers");
+  });
+});
