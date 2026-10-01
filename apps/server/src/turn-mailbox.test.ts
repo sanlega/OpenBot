@@ -32,7 +32,7 @@ class RecordingDriver implements EngineDriver {
   /** When set, every turn fails with this engine error. */
   failWith?: string;
   constructor(
-    readonly id: "claude" | "codex",
+    readonly id: "claude" | "codex" | "opencode",
     private readonly models: string[],
   ) {}
   async detect(): Promise<EngineStatus> {
@@ -82,7 +82,11 @@ afterEach(async () => {
   home = undefined;
 });
 
-async function setup(drivers: { claude?: RecordingDriver; codex?: RecordingDriver }) {
+async function setup(drivers: {
+  claude?: RecordingDriver;
+  codex?: RecordingDriver;
+  opencode?: RecordingDriver;
+}) {
   home = await mkdtemp(join(tmpdir(), "openbot-turn-mailbox-"));
   ctx = await createCoreContext({
     config: loadConfig({ env: { OPENBOT_HOME: home }, overrides: { dbPath: ":memory:" } }),
@@ -201,6 +205,17 @@ describe("createTurnMailbox (message.send → engine turn)", () => {
     expect(first!.vmOnly).toBe(true);
     expect(first!.systemPrompt).toContain("vm_shell");
     expect(second!.vmOnly).toBe(false);
+  });
+
+  it("routes a VM-only bot to an engine whose host tools can be switched off", async () => {
+    const opencode = new RecordingDriver("opencode", ["ollama/qwen3:8b"]);
+    const claude = new RecordingDriver("claude", ["claude-sonnet"]);
+    const { mailbox, addBot, settle } = await setup({ opencode, claude });
+    const { bot: vmBot } = addBot({ computer: "docker" });
+    await mailbox.enqueue({ botId: vmBot.id, text: "a" });
+    await settle();
+    expect(opencode.inputs).toHaveLength(0);
+    expect(claude.inputs[0]?.vmOnly).toBe(true);
   });
 
   it("moves a turn to another engine when the first is out of quota, and says so", async () => {

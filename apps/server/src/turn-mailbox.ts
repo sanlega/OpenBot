@@ -128,9 +128,14 @@ export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): En
     requested?: EngineId,
   ): Promise<EngineChoice | { error: string }> {
     // Skip engines that just ran out of quota, while another one can answer.
-    const available = healthOf(deps).filter(
+    const healthy = healthOf(deps).filter(
       (Object.keys(deps.drivers) as EngineId[]).filter((e) => deps.drivers[e]),
     );
+    // A VM-only Bot is routed to engines whose own shell and files can be switched off (D-033);
+    // an agent CLI (Cursor, OpenCode...) keeps its file tools on this computer. Pinning one is
+    // still the owner's choice.
+    const vmCapable = healthy.filter((e) => VM_ONLY_ENGINES.has(e));
+    const available = bot.computer === "docker" && vmCapable.length > 0 ? vmCapable : healthy;
     if (available.length === 0) {
       return {
         error:
@@ -188,6 +193,9 @@ export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): En
 
   return chooseEngine;
 }
+
+/** Engines that can run a VM-only Bot with their own shell, file and browser tools off. */
+const VM_ONLY_ENGINES: ReadonlySet<string> = new Set(["claude", "codex", "fake"]);
 
 /** How many removed bots, and for how long, the Chief keeps in mind. */
 const FORMER_BOTS_MAX = 8;
