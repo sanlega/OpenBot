@@ -268,7 +268,11 @@ function resolveComputerImageManager(ctx: CoreContext, tag: string) {
     tag,
     localDockerfile: findLocalDockerfile(),
     onStatus: (status) => {
-      void ctx.eventBus.publish({ type: "computer.image_status", payload: { ...status } });
+      // The image is checked in the background at start-up; if the harness has shut down by
+      // the time it answers, there is no one to tell (and no database to record it in).
+      void ctx.eventBus
+        .publish({ type: "computer.image_status", payload: { ...status } })
+        .catch(() => undefined);
     },
   });
 }
