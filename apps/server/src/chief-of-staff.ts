@@ -46,7 +46,7 @@ export function ensureChiefOfStaff(ctx: CoreContext): Bot | undefined {
     hop: 0,
     createdAt: now,
     proactive: true,
-    dedupeKey: "first-run-greeting",
+    dedupeKey: GREETING_KEY,
     delivery: "delivered",
     pushed: false,
   };
@@ -69,6 +69,9 @@ export function ensureChiefOfStaff(ctx: CoreContext): Bot | undefined {
     .catch(() => undefined);
   return bot;
 }
+
+/** Marks the greeting message, so the Chief's first turn can be told about it. */
+export const GREETING_KEY = "first-run-greeting";
 
 export const FIRST_RUN_GREETING = [
   "Hi, I'm your Chief of Staff. Tell me what you need done and I'll see it through: I do quick things myself and set up a bot of its own for anything ongoing.",

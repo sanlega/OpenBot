@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Memory } from "@openbot/contracts";
 import { useOpenBot } from "../../state/context.js";
+import { shortTime } from "../common/time.js";
 
 const TIER_LABEL: Record<Memory["tier"], string> = {
   profile: "Always remembered",
@@ -8,9 +9,8 @@ const TIER_LABEL: Record<Memory["tier"], string> = {
   note: "Notes",
 };
 
-function errorText(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback;
-}
+/** How long a deleted fact can be brought back before it is really deleted. */
+export const UNDO_MS = 5000;
 
 /**
  * C5: "What it knows" — every fact a Bot keeps across conversations (its own and the ones about
@@ -19,45 +19,104 @@ function errorText(err: unknown, fallback: string): string {
 export function BotMemoryPanel({ botId }: { botId: string }) {
   const { transport, bots } = useOpenBot();
   const [memories, setMemories] = useState<Memory[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A deleted fact stays recoverable for a few seconds before the DELETE is sent.
+  const [deleted, setDeleted] = useState<Memory | null>(null);
+  const pending = useRef<{ memory: Memory; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const editButtons = useRef(new Map<string, HTMLButtonElement | null>());
 
   const load = useCallback(() => {
+    setLoadFailed(false);
     transport
       .get<{ memories: Memory[] }>(`/api/bots/${botId}/memories`)
       .then((r) => setMemories(r.memories))
-      .catch((err) => setError(errorText(err, "Could not load what this bot remembers.")));
+      .catch((err: unknown) => {
+        console.warn("memories:", err);
+        setLoadFailed(true);
+      });
   }, [transport, botId]);
 
   useEffect(load, [load]);
 
-  const remove = async (id: string) => {
+  const commitDelete = useCallback(
+    async (memory: Memory) => {
+      try {
+        await transport.delete(`/api/memories/${memory.id}`);
+      } catch (err) {
+        console.warn("delete memory:", err);
+        setMemories((list) => (list ? [...list, memory] : list));
+        setError("Couldn't delete that. It's back in the list; try again.");
+      }
+    },
+    [transport],
+  );
+
+  // Leaving the panel finishes a pending delete rather than dropping it.
+  useEffect(
+    () => () => {
+      const p = pending.current;
+      if (p) {
+        clearTimeout(p.timer);
+        void commitDelete(p.memory);
+      }
+    },
+    [commitDelete],
+  );
+
+  const remove = (memory: Memory) => {
     setError(null);
-    try {
-      await transport.delete(`/api/memories/${id}`);
-      setMemories((list) => list?.filter((m) => m.id !== id) ?? null);
-    } catch (err) {
-      setError(errorText(err, "Could not delete that memory."));
+    const previous = pending.current;
+    if (previous) {
+      clearTimeout(previous.timer);
+      void commitDelete(previous.memory);
     }
+    setMemories((list) => list?.filter((m) => m.id !== memory.id) ?? null);
+    setDeleted(memory);
+    const timer = setTimeout(() => {
+      pending.current = null;
+      setDeleted(null);
+      void commitDelete(memory);
+    }, UNDO_MS);
+    pending.current = { memory, timer };
+  };
+
+  const undo = () => {
+    const p = pending.current;
+    if (!p) return;
+    clearTimeout(p.timer);
+    pending.current = null;
+    setDeleted(null);
+    setMemories((list) => (list ? [...list, p.memory] : list));
+  };
+
+  const closeEditor = (id: string) => {
+    setEditing(null);
+    // Back to the Edit button it came from.
+    setTimeout(() => editButtons.current.get(id)?.focus(), 0);
   };
 
   const save = async () => {
     if (!editing) return;
+    const text = editing.text.trim();
+    if (!text) return;
     setError(null);
     try {
-      await transport.patch(`/api/memories/${editing.id}`, { content: editing.text });
+      await transport.patch(`/api/memories/${editing.id}`, { content: text });
       setMemories(
-        (list) =>
-          list?.map((m) => (m.id === editing.id ? { ...m, content: editing.text.trim() } : m)) ??
-          null,
+        (list) => list?.map((m) => (m.id === editing.id ? { ...m, content: text } : m)) ?? null,
       );
-      setEditing(null);
+      closeEditor(editing.id);
     } catch (err) {
-      setError(errorText(err, "Could not save that change."));
+      console.warn("save memory:", err);
+      setError("Couldn't save that change. Try again.");
     }
   };
 
   const nameOf = (id: string) => bots.find((b) => b.id === id)?.name ?? "another bot";
+  const sorted = (items: Memory[]) =>
+    [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <div className="settings-card bot-memory" data-testid="bot-memory-panel">
@@ -68,12 +127,20 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
           or delete anything that is wrong.
         </p>
       </div>
-      {memories === null && !error ? <p className="field-help">Loading…</p> : null}
-      {memories?.length === 0 ? (
+      {loadFailed ? (
+        <div className="memory-status" role="alert">
+          <span>Couldn't load what this bot remembers.</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={load}>
+            Try again
+          </button>
+        </div>
+      ) : memories === null ? (
+        <p className="field-help">Loading…</p>
+      ) : memories.length === 0 && !deleted ? (
         <p className="field-help">Nothing yet. Bots save facts as they learn them.</p>
       ) : null}
       {(["profile", "log", "note"] as const).map((tier) => {
-        const items = memories?.filter((m) => m.tier === tier) ?? [];
+        const items = sorted(memories?.filter((m) => m.tier === tier) ?? []);
         if (items.length === 0) return null;
         return (
           <section key={tier} className="memory-group">
@@ -82,33 +149,47 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
               {items.map((m) => (
                 <li key={m.id} className="memory-item">
                   {editing?.id === m.id ? (
-                    <div className="memory-edit field">
-                      <input
+                    <form
+                      className="memory-edit"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void save();
+                      }}
+                    >
+                      <textarea
                         aria-label="Edit memory"
+                        className="textarea"
                         value={editing.text}
+                        rows={3}
                         maxLength={500}
+                        autoFocus
                         onChange={(e) => setEditing({ id: m.id, text: e.target.value })}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") void save();
-                          if (e.key === "Escape") setEditing(null);
+                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                            e.preventDefault();
+                            void save();
+                          }
+                          if (e.key === "Escape") closeEditor(m.id);
                         }}
                       />
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        disabled={!editing.text.trim()}
-                        onClick={() => void save()}
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => setEditing(null)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                      <div className="memory-edit-actions">
+                        <span className="memory-hint">Ctrl+Enter to save, Esc to cancel</span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => closeEditor(m.id)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn btn-primary btn-sm"
+                          disabled={!editing.text.trim()}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </form>
                   ) : (
                     <>
                       <span className="memory-text">{m.content}</span>
@@ -116,12 +197,16 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
                         {m.scope === "user"
                           ? `About you · from ${m.botId === botId ? "this bot" : nameOf(m.botId)}`
                           : "This bot"}{" "}
-                        · {new Date(m.createdAt).toLocaleDateString()}
+                        · <time dateTime={m.createdAt}>{shortTime(m.createdAt)}</time>
                       </span>
                       <span className="memory-actions">
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
+                          aria-label={`Edit: ${m.content}`}
+                          ref={(el) => {
+                            editButtons.current.set(m.id, el);
+                          }}
                           onClick={() => setEditing({ id: m.id, text: m.content })}
                         >
                           Edit
@@ -130,7 +215,7 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
                           type="button"
                           className="btn btn-ghost btn-sm"
                           aria-label={`Delete: ${m.content}`}
-                          onClick={() => void remove(m.id)}
+                          onClick={() => remove(m)}
                         >
                           Delete
                         </button>
@@ -143,8 +228,18 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
           </section>
         );
       })}
+      <div aria-live="polite">
+        {deleted ? (
+          <div className="memory-status">
+            <span>Deleted.</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={undo}>
+              Undo
+            </button>
+          </div>
+        ) : null}
+      </div>
       {error ? (
-        <div className="set-row-error" role="alert">
+        <div className="memory-status memory-error" role="alert">
           {error}
         </div>
       ) : null}

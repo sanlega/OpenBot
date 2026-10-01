@@ -1,5 +1,6 @@
 import type { Bot } from "@openbot/contracts";
 import type { CoreContext } from "@openbot/core";
+import { FIRST_RUN_GREETING, GREETING_KEY } from "./chief-of-staff.js";
 
 /**
  * C4: short reminders the harness adds to the message an engine receives, from what OpenBot
@@ -18,6 +19,18 @@ export function harnessReminders(ctx: CoreContext, bot: Bot): string[] {
         "Follow the new message first. Then complete anything still unfinished from earlier " +
         "turns, checking what is already done, unless the user asked you to stop.",
     );
+  }
+  // P2: the Chief's first turn knows what it said in its greeting (it was not an engine turn).
+  if (bot.isChiefOfStaff && !last) {
+    const thread = ctx.repos.threads.getByBotId(bot.id);
+    const greeted = thread
+      ? ctx.repos.messages.list({ threadId: thread.id }).some((m) => m.dedupeKey === GREETING_KEY)
+      : false;
+    if (greeted) {
+      reminders.push(
+        `You already greeted the user in this chat with: """${FIRST_RUN_GREETING}""" Their message may answer it (e.g. "do the first one").`,
+      );
+    }
   }
   // K2: a card nobody answered because the turn ended is not a refusal.
   // Only cards closed before their deadline (the turn ended first): one that timed out after 30

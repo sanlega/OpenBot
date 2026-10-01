@@ -81,7 +81,8 @@ function parseCustomEngines(value: unknown): { engines: CustomEngineSpec[] } | {
     if (!label || label.length > 60) return { error: `engine "${slug}" needs a name` };
     if (!command) return { error: `engine "${slug}" needs a command` };
     // A program on this computer (a name on PATH or a local path), never one on a network share.
-    if (/^(\\\\|\/\/)/.test(command) || /^[a-z][a-z0-9+.-]*:\/\//i.test(command)) {
+    const slashes = command.replace(/\\/g, "/");
+    if (slashes.startsWith("//") || /^[a-z][a-z0-9+.-]*:\/\//i.test(command)) {
       return { error: `engine "${slug}" must run a program on this computer` };
     }
     if (!args.every((a): a is string => typeof a === "string")) {

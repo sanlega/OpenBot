@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { friendlyError } from "../../api/errors.js";
 
 interface ConfirmDialogProps {
   title: string;
@@ -49,7 +50,7 @@ export function ConfirmDialog({
       await onConfirm();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That didn't work. Try again.");
+      setError(friendlyError(err, "That didn't work. Try again."));
       setBusy(false);
     }
   };

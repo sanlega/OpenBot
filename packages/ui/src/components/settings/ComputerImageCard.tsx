@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ComputerImageStatus } from "@openbot/contracts";
 import { useOpenBot } from "../../state/context.js";
 import { SettingRow, SettingsGroup, StatusPill } from "./SettingsPrimitives.js";
+import { friendlyError } from "../../api/errors.js";
 
 type Tone = "success" | "warning" | "danger" | "muted" | "accent";
 
@@ -20,10 +21,6 @@ const STATE_TONE: Record<ComputerImageStatus["state"], Tone> = {
   ready: "success",
   error: "danger",
 };
-
-function errorText(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback;
-}
 
 /** Settings > Computer: get/reset the shared desktop image bots use for Computer tasks (D-020). Hidden when this OpenBot isn't using the docker provider — checks `/api/computer/status` first (never fails) so it never has to call the docker-only `/api/computer/image` and hit its 501. */
 export function ComputerImageCard() {
@@ -45,7 +42,7 @@ export function ComputerImageCard() {
         });
       })
       .catch((err) => {
-        if (!cancelled) setError(errorText(err, "Could not load the desktop image status."));
+        if (!cancelled) setError(friendlyError(err, "Could not load the desktop image status."));
       });
     return () => {
       cancelled = true;
@@ -70,7 +67,7 @@ export function ComputerImageCard() {
       });
       setStatus(next);
     } catch (err) {
-      setError(errorText(err, "Could not start the download."));
+      setError(friendlyError(err, "Could not start the download."));
     }
   };
 
@@ -81,7 +78,7 @@ export function ComputerImageCard() {
       await transport.post("/api/computer/image/reset", { removeImage: true });
       setStatus((prev) => (prev ? { ...prev, state: "missing" } : prev));
     } catch (err) {
-      setError(errorText(err, "Could not reset the desktop image."));
+      setError(friendlyError(err, "Could not reset the desktop image."));
     }
   };
 

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { Bot, EngineId, ModelInfo } from "@openbot/contracts";
 import { useOpenBot } from "../../state/context.js";
 import { engineName } from "../settings/settings-meta.js";
+import { friendlyError } from "../../api/errors.js";
 
 interface EngineModels {
   engine: EngineId;
@@ -72,7 +73,7 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
       setStatus("Saved");
       setTimeout(() => setStatus(null), 2000);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Could not save");
+      setStatus(friendlyError(err, "Could not save"));
     }
   };
 
@@ -82,7 +83,7 @@ export function BotProfileEditor({ bot }: { bot: Bot }) {
       await refresh();
       selectThread(threads.find((t) => t.botId !== bot.id)?.id ?? null);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Could not archive");
+      setStatus(friendlyError(err, "Could not archive"));
     }
   };
 

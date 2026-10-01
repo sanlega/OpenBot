@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useOpenBot } from "../../state/context.js";
 import { clockTime } from "../common/time.js";
+import { friendlyError } from "../../api/errors.js";
 
 interface TaskStep {
   step: number;
@@ -72,7 +73,7 @@ export function ComputerTasks({ botId }: { botId: string }) {
       );
       setTasks([...res.tasks].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load computer tasks");
+      setError(friendlyError(err, "Could not load computer tasks"));
       setTasks([]);
     }
   }, [transport, botId]);
@@ -95,7 +96,7 @@ export function ComputerTasks({ botId }: { botId: string }) {
       setError(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The task didn't respond");
+      setError(friendlyError(err, "The task didn't respond"));
     }
   };
 

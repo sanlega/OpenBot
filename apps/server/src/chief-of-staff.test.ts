@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createCoreContext, loadConfig, type CoreContext } from "@openbot/core";
 import { FakeClock } from "@openbot/testkit";
 import { ensureChiefOfStaff, FIRST_RUN_GREETING } from "./chief-of-staff.js";
+import { harnessReminders } from "./reminders.js";
 
 let ctx: CoreContext | undefined;
 let home: string | undefined;
@@ -61,5 +62,7 @@ describe("ensureChiefOfStaff", () => {
       text: FIRST_RUN_GREETING,
     });
     expect(FIRST_RUN_GREETING).toContain("Chief of Staff");
+    // Its first turn is told what it offered, so "do the first one" makes sense to it.
+    expect(harnessReminders(core, cos).join(" ")).toContain("You already greeted the user");
   });
 });

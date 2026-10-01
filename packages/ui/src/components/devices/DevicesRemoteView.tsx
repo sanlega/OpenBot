@@ -15,6 +15,7 @@ import {
   Toggle,
 } from "../settings/SettingsPrimitives.js";
 import { PairingQr } from "./PairingQr.js";
+import { friendlyError } from "../../api/errors.js";
 
 type Device = DevicesResponse["devices"][number] & { revokedAt?: string };
 
@@ -29,10 +30,6 @@ const VIA_LABEL: Record<Device["via"], string> = {
   tailscale: "Tailscale",
   cloudflare: "Cloudflare",
 };
-
-function errorText(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback;
-}
 
 export function DevicesRemoteView() {
   const { transport } = useOpenBot();
@@ -61,7 +58,7 @@ export function DevicesRemoteView() {
     try {
       setPair(await transport.post<PairQrResponse>("/api/devices/pair/qr"));
     } catch (err) {
-      setPairError(errorText(err, "Couldn't create a pairing code."));
+      setPairError(friendlyError(err, "Couldn't create a pairing code."));
     } finally {
       setPairing(false);
     }
@@ -172,7 +169,7 @@ function DeviceRow({ device, onRevoked }: { device: Device; onRevoked: () => voi
       await transport.delete(`/api/devices/${encodeURIComponent(device.id)}`);
       onRevoked();
     } catch (err) {
-      setError(errorText(err, "Couldn't revoke this device."));
+      setError(friendlyError(err, "Couldn't revoke this device."));
       setBusy(false);
     }
   };
@@ -377,7 +374,7 @@ function RemoteAccess({
       setHostnameDraft(null);
       onChanged();
     } catch (err) {
-      setError({ which: "cf", text: errorText(err, "Couldn't save the hostname.") });
+      setError({ which: "cf", text: friendlyError(err, "Couldn't save the hostname.") });
     } finally {
       setBusy(false);
     }
@@ -390,7 +387,7 @@ function RemoteAccess({
       await transport.post(`/api/remote/tailscale/${tsOn ? "disable" : "enable"}`);
       onChanged();
     } catch (err) {
-      setError({ which: "ts", text: errorText(err, "Couldn't change Tailscale.") });
+      setError({ which: "ts", text: friendlyError(err, "Couldn't change Tailscale.") });
     } finally {
       setBusy(false);
     }
@@ -412,7 +409,7 @@ function RemoteAccess({
         onChanged();
       }
     } catch (err) {
-      setError({ which: "cf", text: errorText(err, "Couldn't start the tunnel.") });
+      setError({ which: "cf", text: friendlyError(err, "Couldn't start the tunnel.") });
     } finally {
       setBusy(false);
     }
@@ -429,7 +426,7 @@ function RemoteAccess({
       setToken("");
       onChanged();
     } catch (err) {
-      setError({ which: "cf", text: errorText(err, "Couldn't remove the tunnel.") });
+      setError({ which: "cf", text: friendlyError(err, "Couldn't remove the tunnel.") });
     } finally {
       setBusy(false);
     }

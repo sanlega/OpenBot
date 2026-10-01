@@ -7,6 +7,7 @@ import { BotAvatar, type BotStatus } from "../common/BotAvatar.js";
 import { ConfirmDialog } from "../common/ConfirmDialog.js";
 import { shortTime } from "../common/time.js";
 import { plainText } from "../activity/format.js";
+import { friendlyError } from "../../api/errors.js";
 
 interface BotListProps {
   creating?: boolean;
@@ -258,7 +259,7 @@ function RenameForm({ bot, onDone }: { bot: Bot; onDone: () => void }) {
       onDone();
     } catch (err) {
       saving.current = false;
-      setError(err instanceof Error ? err.message : "Could not rename");
+      setError(friendlyError(err, "Could not rename"));
     }
   };
   return (
@@ -302,7 +303,7 @@ function NewBotForm({ onDone }: { onDone: () => void }) {
       selectThread(res.thread.id);
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create the bot");
+      setError(friendlyError(err, "Could not create the bot"));
       setBusy(false);
     }
   };

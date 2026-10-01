@@ -18,6 +18,7 @@ import { ScreenHeader } from "../common/ScreenHeader.js";
 import { MessageText } from "../thread/MessageText.js";
 import { botNamer, fullTime, relativeTime } from "../activity/format.js";
 import { DAYS, buildCron, describeCron, describeTrigger, type SchedulePreset } from "./schedule.js";
+import { friendlyError } from "../../api/errors.js";
 
 type RunView = RoutineRunView & { cause?: string };
 
@@ -58,14 +59,6 @@ const CAUSES: Record<string, string> = {
   event: "Triggered by an event",
   catch_up: "Catch-up run",
 };
-
-function errorText(err: unknown, fallback: string): string {
-  if (err instanceof Error && err.message) {
-    const reason = /"reason":"([^"]+)"/.exec(err.message)?.[1];
-    return reason ?? fallback;
-  }
-  return fallback;
-}
 
 export function RoutinesView() {
   const { transport, bots } = useOpenBot();
@@ -255,7 +248,7 @@ function RoutineDetail({
       if (ok) setNotice({ tone: "ok", text: ok });
       await Promise.all([onChanged(), loadRuns()]);
     } catch (err) {
-      setNotice({ tone: "error", text: errorText(err, "That didn't work. Try again.") });
+      setNotice({ tone: "error", text: friendlyError(err, "That didn't work. Try again.") });
     } finally {
       setBusy(null);
     }
@@ -515,7 +508,7 @@ function RoutineDetail({
                     await transport.delete(`/api/routines/${routine.id}`);
                     await onDeleted();
                   } catch (err) {
-                    setNotice({ tone: "error", text: errorText(err, "Could not delete it.") });
+                    setNotice({ tone: "error", text: friendlyError(err, "Could not delete it.") });
                     setBusy(null);
                   }
                 })()
@@ -824,7 +817,7 @@ function NewRoutineForm({
       });
       await onCreated(res.routine);
     } catch (err) {
-      setError(errorText(err, "Could not create the routine."));
+      setError(friendlyError(err, "Could not create the routine."));
       setBusy(false);
     }
   };

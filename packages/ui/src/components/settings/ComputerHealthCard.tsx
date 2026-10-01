@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import type { BoxDiagnostics } from "@openbot/contracts";
 import { useOpenBot } from "../../state/context.js";
 import { SettingRow, SettingsGroup, StatusPill } from "./SettingsPrimitives.js";
-
-function errorText(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback;
-}
+import { friendlyError } from "../../api/errors.js";
 
 const COMPONENT_LABEL: Record<string, string> = {
   xvfb: "display",
@@ -49,7 +46,7 @@ export function ComputerHealthCard() {
     try {
       setReport(await transport.get<BoxDiagnostics>("/api/computer/diagnose"));
     } catch (err) {
-      setError(errorText(err, "Could not run the self-check."));
+      setError(friendlyError(err, "Could not run the self-check."));
     } finally {
       setRunning(false);
     }
@@ -63,7 +60,7 @@ export function ComputerHealthCard() {
       await transport.post("/api/computer/recreate", {});
       await check();
     } catch (err) {
-      setError(errorText(err, "Could not refresh the computer."));
+      setError(friendlyError(err, "Could not refresh the computer."));
     } finally {
       setRefreshing(false);
     }

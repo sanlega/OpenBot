@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ExternalLink, Lock, X } from "lucide-react";
 import { useOpenBot } from "../../state/context.js";
+import { friendlyError } from "../../api/errors.js";
 import { ConnectorMark } from "./ConnectorMark.js";
 import type { ConnectorCatalogEntry } from "./types.js";
 
@@ -42,11 +43,9 @@ export function ConnectSheet({ entry, onClose, onConnected }: ConnectSheetProps)
       onConnected();
     } catch (err) {
       setError(
-        err instanceof Error && /409/.test(err.message)
+        (err as { status?: number }).status === 409
           ? "This app needs OAuth sign-in, which is coming in the next release."
-          : err instanceof Error
-            ? err.message
-            : "Could not connect",
+          : friendlyError(err, "Couldn't connect it. Check what you entered and try again."),
       );
       setBusy(false);
     }

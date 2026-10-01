@@ -140,11 +140,43 @@ describe("engine routes", () => {
       (await app.inject({ method: "POST", url: "/api/engines/redetect", headers: own })).statusCode,
     ).toBe(200);
     expect(ran).toBe(1);
+
+    // Relayed by a proxy to 127.0.0.1 (Tailscale serve, a Cloudflare tunnel): not the owner.
+    for (const relayed of [
+      { "cf-connecting-ip": "203.0.113.9" },
+      { "tailscale-user-login": "someone@example.com", host: "box.tailnet.ts.net" },
+      { "x-forwarded-for": "203.0.113.9" },
+    ]) {
+      const res = await app.inject({
+        method: "PUT",
+        url: "/api/engines/custom",
+        payload,
+        headers: relayed,
+      });
+      expect(res.statusCode, JSON.stringify(relayed)).toBe(401);
+    }
+    // A page whose DNS was rebound to 127.0.0.1 (its own host name, matching Origin).
+    const rebound = { host: "evil.example:4577", origin: "http://evil.example:4577" };
+    expect(
+      (await app.inject({ method: "POST", url: "/api/engines/redetect", headers: rebound }))
+        .statusCode,
+    ).toBe(401);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/engines", headers: rebound })).statusCode,
+    ).toBe(401);
+    expect(ran).toBe(1);
   });
 
   it("never runs a custom agent from a network share", async () => {
     const { app } = await setup();
-    for (const command of ["\\\\host\\share\\agent.exe", "//host/share/agent", "https://x/agent"]) {
+    for (const command of [
+      "\\\\host\\share\\agent.exe",
+      "//host/share/agent",
+      "\\/host/share/agent",
+      "/\\host\\share\\agent",
+      "\\\\?\\UNC\\host\\share\\a.exe",
+      "https://x/agent",
+    ]) {
       const res = await app.inject({
         method: "PUT",
         url: "/api/engines/custom",

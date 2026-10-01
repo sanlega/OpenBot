@@ -21,6 +21,7 @@ import {
   StatusPill,
   Toggle,
 } from "./SettingsPrimitives.js";
+import { friendlyError } from "../../api/errors.js";
 
 type Engine = EnginesResponse["engines"][number];
 type Editable = Pick<Settings, "caps" | "budgets" | "quietHours" | "botDefaults">;
@@ -280,7 +281,7 @@ export function SettingsView() {
       setDraft(editableOf(res.settings));
       setToast("Settings saved");
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not save settings");
+      setSaveError(friendlyError(err, "Could not save settings"));
     } finally {
       setSaving(false);
     }
@@ -640,7 +641,7 @@ function JevKeyCard({
         setError(res.result.reason ?? "That key didn't work. Check it and try again.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not check the key");
+      setError(friendlyError(err, "Could not check the key"));
     } finally {
       setBusy(false);
     }

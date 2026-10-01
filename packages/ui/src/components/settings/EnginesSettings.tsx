@@ -5,6 +5,7 @@ import type { CustomEngine, EnginesResponse } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { cleanVersion, engineName } from "./settings-meta.js";
 import { SettingRow, SettingsGroup, StatusPill } from "./SettingsPrimitives.js";
+import { friendlyError } from "../../api/errors.js";
 
 type Engine = EnginesResponse["engines"][number];
 
@@ -256,7 +257,7 @@ function CustomEngines({
       await onRefresh?.();
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      setError(friendlyError(err, "Could not save"));
       return false;
     } finally {
       setBusy(false);

@@ -5,6 +5,7 @@ import { useOpenBot } from "../../state/context.js";
 import { BotAvatar } from "../common/BotAvatar.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
 import { fullTime, relativeTime } from "../activity/format.js";
+import { friendlyError } from "../../api/errors.js";
 
 export type TaskRow = Delegation & {
   requesterName?: string;
@@ -81,7 +82,7 @@ export function TasksView() {
       setConfirming(null);
       loadRef.current();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not cancel the task.");
+      setError(friendlyError(err, "Could not cancel the task."));
     } finally {
       setCancelling(null);
     }

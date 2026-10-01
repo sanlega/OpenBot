@@ -9,6 +9,7 @@ import {
   humanReason,
   parseApproval,
 } from "../activity/format.js";
+import { friendlyError } from "../../api/errors.js";
 
 interface ApprovalCardProps {
   approval: Approval;
@@ -75,7 +76,7 @@ export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
       });
       onResolve("allow");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save the rule");
+      setError(friendlyError(err, "Could not save the rule"));
       setBusy(false);
     }
   };

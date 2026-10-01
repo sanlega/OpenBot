@@ -5,6 +5,7 @@ import { ScreenHeader } from "../common/ScreenHeader.js";
 import { ConnectSheet } from "./ConnectSheet.js";
 import { ConnectorMark } from "./ConnectorMark.js";
 import type { ConnectorCatalogEntry, ConnectorConnection } from "./types.js";
+import { friendlyError } from "../../api/errors.js";
 
 type Tab = "gallery" | "community" | "connected";
 
@@ -40,7 +41,7 @@ export function ConnectorsView() {
       setError(null);
     } catch (err) {
       setCurated([]);
-      setError(err instanceof Error ? err.message : "Could not load connectors");
+      setError(friendlyError(err, "Could not load connectors"));
     }
   }, [transport]);
 
@@ -112,7 +113,7 @@ export function ConnectorsView() {
       setConfirmRemove(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not disconnect");
+      setError(friendlyError(err, "Could not disconnect"));
     }
   };
 

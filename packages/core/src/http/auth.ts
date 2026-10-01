@@ -36,10 +36,41 @@ export function resolveDeviceIdentity(
   if (authHeader?.startsWith("Bearer ")) {
     return ctx.deviceAuth.verifyToken(authHeader.slice("Bearer ".length));
   }
-  if (isLoopback(request.ip)) {
+  if (isLocalOwnerRequest(request)) {
     return { deviceId: "local", role: "owner" };
   }
   return undefined;
+}
+
+/** Headers a reverse proxy adds (Tailscale serve, cloudflared, others). */
+const PROXY_HEADERS = [
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "forwarded",
+  "x-real-ip",
+  "cf-connecting-ip",
+  "cf-ray",
+  "tailscale-user-login",
+  "tailscale-user-name",
+];
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * The implicit local owner: a request from this computer, addressed to this computer, that no
+ * proxy relayed. A remote link that forwards to 127.0.0.1 (Tailscale serve, a Cloudflare tunnel)
+ * arrives from loopback too, but carries proxy headers and its public host name; a page whose
+ * DNS was rebound to 127.0.0.1 carries its own host name. Both need a paired device token.
+ */
+export function isLocalOwnerRequest(request: {
+  ip: string;
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (!isLoopback(request.ip)) return false;
+  if (PROXY_HEADERS.some((name) => request.headers[name] !== undefined)) return false;
+  const host = String(request.headers.host ?? "").toLowerCase();
+  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0]!;
+  return LOOPBACK_HOSTS.has(name);
 }
 
 const proofNonces = new Map<string, number>();

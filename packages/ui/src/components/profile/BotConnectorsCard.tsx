@@ -3,6 +3,7 @@ import type { Bot } from "@openbot/contracts";
 import { useOpenBot } from "../../state/context.js";
 import { ConnectorMark } from "../connectors/ConnectorMark.js";
 import type { ConnectorConnection } from "../connectors/types.js";
+import { friendlyError } from "../../api/errors.js";
 
 /** Which of the user's connected apps this bot may use (only these are injected into its turns). */
 export function BotConnectorsCard({ bot }: { bot: Bot }) {
@@ -28,7 +29,7 @@ export function BotConnectorsCard({ bot }: { bot: Bot }) {
       setError(null);
     } catch (err) {
       setEnabled(enabled);
-      setError(err instanceof Error ? err.message : "Could not update connectors");
+      setError(friendlyError(err, "Could not update connectors"));
     }
   };
 
