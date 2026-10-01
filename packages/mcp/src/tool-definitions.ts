@@ -300,7 +300,7 @@ export const OPENBOT_TOOL_DEFINITIONS: Tool[] = [
   {
     name: "vm_shell",
     description:
-      "Run a bash command inside the virtual machine (Debian with git, node, python3, pip, curl, jq, build tools). The working directory is /workspace, the folder shared with the user. Installs with `pip install --user` or `npm install -g` persist. Returns exit code, stdout and stderr (the end of long output). This is your shell: there is none on the user's computer.",
+      "Run a bash command inside the virtual machine (Debian with git, gh, node, python3, pip, curl, jq, ripgrep, build tools). The working directory is /workspace, the folder shared with the user. Installs with `pip install --user` or `npm install -g` persist. Returns exit code, stdout and stderr (the end of long output). This is your shell: there is none on the user's computer.",
     inputSchema: {
       type: "object",
       properties: {
