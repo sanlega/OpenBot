@@ -93,7 +93,15 @@ export function AppShell({ showSetup = false }: AppShellProps) {
       case "activity":
         return <ActivityView />;
       case "tasks":
-        return <TasksView />;
+        return (
+          <TasksView
+            onOpenThread={(threadId) => {
+              selectThread(threadId);
+              setScreen("bots");
+              setMobileView("thread");
+            }}
+          />
+        );
       case "audit":
         return <AuditView />;
       case "routines":

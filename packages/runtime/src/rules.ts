@@ -99,6 +99,13 @@ export const SENSITIVE_COMPUTER_TARGET_RE = new RegExp(
   "iu",
 );
 
+function harnessAddressRe(port: number): RegExp {
+  return new RegExp(
+    `(?:127(?:\\.\\d{1,3}){3}|localhost|\\[?::1\\]?|0\\.0\\.0\\.0|\\[?::\\]?)\\s*:\\s*${port}(?!\\d)`,
+    "i",
+  );
+}
+
 function haystackOf(req: BrokerRequest): string {
   return [req.action, req.target, req.detail, req.summary, JSON.stringify(req.args ?? {})].join(
     " \u241F ",
@@ -110,8 +117,16 @@ function haystackOf(req: BrokerRequest): string {
  * band can ever turn this back into an allow. Returns the reason, or
  * `undefined` if nothing built-in denies this request.
  */
-export function builtinDenyReason(req: BrokerRequest): string | undefined {
+export function builtinDenyReason(
+  req: BrokerRequest,
+  opts: { harnessPort?: number } = {},
+): string | undefined {
   const haystack = haystackOf(req);
+  // OpenBot's own API on this computer answers loopback as the owner: a Bot's command must never
+  // reach it (to approve its own cards, change its permissions, add an engine...).
+  if (opts.harnessPort && harnessAddressRe(opts.harnessPort).test(haystack)) {
+    return "calls OpenBot's own API; use the OpenBot tools instead";
+  }
   if (
     req.computerAccess &&
     req.computerAccess !== "docker+local" &&

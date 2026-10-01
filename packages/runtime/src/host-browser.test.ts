@@ -179,3 +179,25 @@ describe("built-in denies for OpenBot's and the engines' own secrets", () => {
     expect(deny("cat notes/sessions.md")).toBeUndefined();
   });
 });
+
+describe("a Bot's command never reaches OpenBot's own API", () => {
+  it.each([
+    "curl -X POST http://127.0.0.1:4577/api/approvals/apr_1/resolve",
+    "Invoke-WebRequest -Method Put http://localhost:4577/api/engines/custom",
+    "wget http://[::1]:4577/api/settings",
+  ])("%s", (command) => {
+    const reason = builtinDenyReason(req({ computerAccess: "docker+local", args: { command } }), {
+      harnessPort: 4577,
+    });
+    expect(reason).toMatch(/OpenBot's own API/);
+  });
+
+  it("another local port is fine", () => {
+    expect(
+      builtinDenyReason(
+        req({ computerAccess: "docker+local", args: { command: "curl http://127.0.0.1:45770/" } }),
+        { harnessPort: 4577 },
+      ),
+    ).toBeUndefined();
+  });
+});

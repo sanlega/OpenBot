@@ -7,8 +7,10 @@ export function friendlyError(err: unknown, fallback: string): string {
   const status = (err as { status?: unknown } | undefined)?.status;
   if (status === 401) return "This device isn't paired with OpenBot any more. Pair it again.";
   if (status === 403) return "Only your own devices can do this.";
-  // fetch() throws a TypeError when nothing answers.
-  if (err instanceof TypeError) return "Can't reach OpenBot right now. Try again in a moment.";
+  // fetch() throws a TypeError when nothing answers (not every TypeError: a UI bug is one too).
+  if (err instanceof TypeError && /fetch|network|load failed/i.test(err.message)) {
+    return "Can't reach OpenBot right now. Try again in a moment.";
+  }
   const reason = serverReason(err);
   return reason ? `${withStop(fallback)} ${reason}` : fallback;
 }

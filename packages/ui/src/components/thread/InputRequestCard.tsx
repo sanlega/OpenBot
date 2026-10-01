@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { InputAnswer, InputField, InputRequest } from "@openbot/contracts";
 import { Check, ClipboardList, Lock } from "lucide-react";
 import { useOpenBot } from "../../state/context.js";
+import { friendlyError } from "../../api/errors.js";
 
 /**
  * A form a Bot sent with `ask_user`. The user answers in place; the answers go
@@ -59,7 +60,7 @@ function InputForm({ request }: { request: InputRequest }) {
     try {
       await transport.post(`/api/inputs/${request.id}/answer`, { answers: answers() });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send your answers");
+      setError(friendlyError(err, "Couldn't send your answers. Try again."));
       setBusy(false);
     }
   };

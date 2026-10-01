@@ -96,7 +96,7 @@ function NewBotDefaults({
         label="Permissions"
         help={
           (value.permissionPreset ?? "full") === "full"
-            ? "Works without asking, except to spend money or delete things."
+            ? "Recommended. Works without asking, except to spend money or delete things."
             : (value.permissionPreset ?? "full") === "workspace_write"
               ? "Changes files in its workspace; asks before anything else."
               : "Can read, but asks you before changing anything."
@@ -114,7 +114,7 @@ function NewBotDefaults({
             })
           }
         >
-          <option value="full">Full (recommended)</option>
+          <option value="full">Full</option>
           <option value="workspace_write">Workspace only</option>
           <option value="read_only">Read only</option>
         </select>
@@ -123,7 +123,7 @@ function NewBotDefaults({
         label="Computer"
         help={
           (value.computer ?? "docker") === "docker"
-            ? "Works inside the virtual machine, never on this computer."
+            ? "Recommended. Works inside the virtual machine, never on this computer."
             : (value.computer ?? "docker") === "docker+local"
               ? "The virtual machine, and also this computer's shell, files and browser."
               : "No computer: chat and connectors only."
@@ -138,8 +138,8 @@ function NewBotDefaults({
             onChange({ ...value, computer: e.target.value as BotDefaultsValue["computer"] })
           }
         >
-          <option value="docker">Virtual machine (recommended)</option>
-          <option value="docker+local">Virtual machine + this computer</option>
+          <option value="docker">Virtual machine</option>
+          <option value="docker+local">VM + this computer</option>
           <option value="none">None</option>
         </select>
       </SettingRow>

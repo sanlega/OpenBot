@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BellRing, KeyRound, Send } from "lucide-react";
 import { useOpenBot } from "../../state/context.js";
+import { friendlyError } from "../../api/errors.js";
 import {
   SettingRow,
   SettingsGroup,
@@ -16,11 +17,6 @@ interface PushStatus {
   bundleId: string;
   previews: boolean;
   devices: number;
-}
-
-function reasonOf(err: unknown, fallback: string): string {
-  const body = (err as { body?: { reason?: string } } | undefined)?.body;
-  return body?.reason ?? fallback;
 }
 
 /**
@@ -65,7 +61,7 @@ export function PhoneNotifications() {
       setKeyP8("");
       setEditing(false);
     } catch (err) {
-      setError(reasonOf(err, "Couldn't save the key."));
+      setError(friendlyError(err, "Couldn't save the key."));
     } finally {
       setBusy(false);
     }
@@ -84,7 +80,7 @@ export function PhoneNotifications() {
         }),
       );
     } catch (err) {
-      setError(reasonOf(err, "Couldn't change this setting."));
+      setError(friendlyError(err, "Couldn't change this setting."));
     } finally {
       setBusy(false);
     }
@@ -103,7 +99,7 @@ export function PhoneNotifications() {
       else
         setError("No phone has turned on notifications yet. Do it in the iPhone app's Settings.");
     } catch (err) {
-      setError(reasonOf(err, "Couldn't send a test notification."));
+      setError(friendlyError(err, "Couldn't send a test notification."));
     } finally {
       setBusy(false);
     }

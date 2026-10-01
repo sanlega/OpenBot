@@ -35,6 +35,8 @@ export interface RuntimeOptions {
   clock?: SchedulingClock;
   chainLimits?: ChainLimits;
   approvalTimeoutMs?: number;
+  /** The harness's own port, which Bots' commands may not call. */
+  harnessPort?: number;
   /** C8: inactivity watchdog for engine turns (`false` turns it off). */
   stallWatch?: MailboxOptions["stallWatch"];
   /** C1: records loops in the engines' own tool calls (shadow). */
@@ -99,6 +101,7 @@ export function createRuntime(opts: RuntimeOptions): Runtime {
     decisions: opts.decisions,
     clock,
     approvalTimeoutMs: opts.approvalTimeoutMs,
+    harnessPort: opts.harnessPort,
   });
 
   const guards = new LoopGuards({

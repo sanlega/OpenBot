@@ -56,6 +56,8 @@ export interface PermissionBrokerOptions {
   decisions: DecisionService;
   clock: SchedulingClock;
   approvalTimeoutMs?: number;
+  /** The harness's own port: Bots' commands may not call its API (built-in deny). */
+  harnessPort?: number;
 }
 
 /**
@@ -129,7 +131,7 @@ export class PermissionBroker {
     req: BrokerRequest,
     preset: PermissionPreset,
   ): Promise<BrokerDecision> {
-    const denyReason = builtinDenyReason(req);
+    const denyReason = builtinDenyReason(req, { harnessPort: this.opts.harnessPort });
     if (denyReason) return { outcome: "deny", reason: `built-in deny: ${denyReason}` };
 
     if (req.readOnly) return { outcome: "allow", reason: "read-only action" };

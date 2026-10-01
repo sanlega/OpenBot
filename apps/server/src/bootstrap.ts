@@ -115,6 +115,7 @@ export async function bootstrapHarness(
     onToolLoop: (detection) => recordToolLoop(ctx, detection),
     // K3: OPENBOT_TOOL_LOOPS=shadow only records loops in the engines' own tools; off ignores them.
     nativeToolLoops: toolLoopMode(process.env.OPENBOT_TOOL_LOOPS),
+    harnessPort: ctx.config.port,
   });
 
   // Filled once `integrateMcp` has run below; turns read it lazily.

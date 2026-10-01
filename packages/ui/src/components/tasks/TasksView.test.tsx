@@ -59,8 +59,37 @@ describe("TasksView (L3)", () => {
     await userEvent.click(await screen.findByText("Compare three CRM tools"));
     await userEvent.click(screen.getByRole("button", { name: "Cancel…" }));
     expect(post).not.toHaveBeenCalled();
+    expect(screen.getByText(/Stops Researcher and any task it handed on/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Cancel task" }));
     expect(post).toHaveBeenCalledWith("/api/tasks/dlg_1/cancel", {});
+  });
+
+  it("says who needs an answer and opens the conversation to give it", async () => {
+    transport = {
+      get: vi.fn(async () => ({
+        tasks: [task({ state: "input_required", statusMessage: "Which currency?" })],
+      })),
+      post: vi.fn(),
+    } as unknown as Transport;
+    const onOpenThread = vi.fn();
+    render(<TasksView onOpenThread={onOpenThread} />);
+    await userEvent.click(await screen.findByText("Compare three CRM tools"));
+    expect(screen.getByText(/Researcher needs an answer: Which currency\?/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Answer it" }));
+    expect(onOpenThread).toHaveBeenCalledWith("thr_1");
+  });
+
+  it("shows a result as formatted text", async () => {
+    transport = {
+      get: vi.fn(async () => ({
+        tasks: [task({ state: "completed", result: "**Winner:** HubSpot" })],
+      })),
+      post: vi.fn(),
+    } as unknown as Transport;
+    render(<TasksView />);
+    await userEvent.click(await screen.findByRole("button", { name: "All" }));
+    await userEvent.click(screen.getByText("Compare three CRM tools"));
+    expect(screen.getByText("Winner:").tagName).toBe("STRONG");
   });
 });
 

@@ -146,6 +146,9 @@ describe("engine routes", () => {
       { "cf-connecting-ip": "203.0.113.9" },
       { "tailscale-user-login": "someone@example.com", host: "box.tailnet.ts.net" },
       { "x-forwarded-for": "203.0.113.9" },
+      { "tailscale-funnel-request": "?1" },
+      { via: "1.1 proxy" },
+      { "x-forwarded-proto": "https" },
     ]) {
       const res = await app.inject({
         method: "PUT",

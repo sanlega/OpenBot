@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { KeyRound } from "lucide-react";
 import { useOpenBot } from "../../state/context.js";
+import { friendlyError } from "../../api/errors.js";
 import { SettingRow, SettingsGroup } from "./SettingsPrimitives.js";
 
 interface SavedLogin {
@@ -8,11 +9,6 @@ interface SavedLogin {
   username?: string;
   hasPassword: boolean;
   updatedAt: string;
-}
-
-function reasonOf(err: unknown, fallback: string): string {
-  const body = (err as { body?: { reason?: string } } | undefined)?.body;
-  return body?.reason ?? fallback;
 }
 
 /**
@@ -54,7 +50,7 @@ export function SavedLogins() {
       setPassword("");
       await load();
     } catch (err) {
-      setError(reasonOf(err, "Couldn't save this login."));
+      setError(friendlyError(err, "Couldn't save this login."));
     } finally {
       setBusy(false);
     }
@@ -68,7 +64,7 @@ export function SavedLogins() {
       setConfirming(null);
       await load();
     } catch (err) {
-      setError(reasonOf(err, "Couldn't remove this login."));
+      setError(friendlyError(err, "Couldn't remove this login."));
     } finally {
       setBusy(false);
     }

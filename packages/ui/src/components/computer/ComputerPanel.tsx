@@ -3,6 +3,7 @@ import { AlertTriangle, Info, Monitor, MousePointer2 } from "lucide-react";
 import type { ComputerStatusResponse, LiveViewResponse } from "../../api/types.js";
 import { computerStatusView } from "../../api/adapters.js";
 import { useOpenBot } from "../../state/context.js";
+import { friendlyError } from "../../api/errors.js";
 import { ComputerTasks } from "./ComputerTasks.js";
 import { WorkspaceFiles } from "./WorkspaceFiles.js";
 
@@ -40,7 +41,7 @@ export function ComputerPanel({ botId }: ComputerPanelProps) {
           try {
             lv = await transport.get<LiveViewResponse>(`/api/computer/screens/${botId}/live`);
           } catch (cause) {
-            liveError = `Live View could not be loaded: ${String(cause)}`;
+            liveError = friendlyError(cause, "Couldn't open the live view. Try again in a moment.");
           }
         }
         if (cancelled) return;
@@ -48,7 +49,10 @@ export function ComputerPanel({ botId }: ComputerPanelProps) {
         setLive(lv);
         setError(liveError);
       } catch (cause) {
-        if (!cancelled) setError(`Computer status could not be loaded: ${String(cause)}`);
+        if (!cancelled)
+          setError(
+            friendlyError(cause, "Couldn't check this bot's computer. Try again in a moment."),
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -68,7 +72,10 @@ export function ComputerPanel({ botId }: ComputerPanelProps) {
       setError(
         statusOf(cause) === 409
           ? "The desktop image isn't ready yet — open Settings > Computer to download it."
-          : `Computer could not be started. Check Docker Desktop and the desktop image. ${String(cause)}`,
+          : friendlyError(
+              cause,
+              "Couldn't start the computer. Check that Docker Desktop is running, then try again.",
+            ),
       );
       setLoading(false);
     }
@@ -81,7 +88,7 @@ export function ComputerPanel({ botId }: ComputerPanelProps) {
       setTakeover(next);
       setError(null);
     } catch (cause) {
-      setError(`Screen takeover failed: ${String(cause)}`);
+      setError(friendlyError(cause, "Couldn't hand the screen over. Try again."));
     }
   };
 

@@ -11,13 +11,48 @@ const COMPONENT_LABEL: Record<string, string> = {
   browser: "browser",
 };
 
+/** Each self-check in plain words: what it is, and what to do when it fails. */
+const CHECKS: Record<string, { label: string; fail: string }> = {
+  "machine-id": { label: "Machine identity", fail: "Refresh the computer below." },
+  browser: { label: "Browser", fail: "Refresh the computer below." },
+  "browser file descriptors": {
+    label: "Browser resources",
+    fail: "The browser is running out of room. Refresh the computer below.",
+  },
+  internet: { label: "Internet", fail: "Check this computer's connection, then run it again." },
+  clock: { label: "Clock", fail: "The time is off, so some sites may refuse to sign in." },
+  workspace: { label: "Shared files", fail: "Bots can't save files. Refresh the computer below." },
+  isolation: {
+    label: "Bots stay inside the machine",
+    fail: "Refresh the computer below; if it stays, reset the image.",
+  },
+  firewall: { label: "Network guard", fail: "Refresh the computer below." },
+  disk: { label: "Free space", fail: "Delete large files from the workspace." },
+  "memory pressure": {
+    label: "Memory",
+    fail: "Too much is running. Stop a bot's task or refresh the computer.",
+  },
+};
+
+function checkLabel(name: string, screenOwner: (display: number) => string): string {
+  const screen = /^screen :(\d+)$/.exec(name);
+  if (screen) return `${screenOwner(Number(screen[1]))}'s screen`;
+  return CHECKS[name]?.label ?? name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function checkSummary(name: string, ok: boolean): string {
+  if (ok) return "Working";
+  if (/^screen :/.test(name)) return "Not responding. Refresh the computer below.";
+  return CHECKS[name]?.fail ?? "Not working. Refresh the computer below.";
+}
+
 /**
  * Settings > Computer: the machine's self-check (A7) and the first recovery to try. Each check is
  * one PASS/FAIL line, so the owner can tell whether the machine needs a refresh (a new machine
  * that keeps files and sign-ins) or the image reset below.
  */
 export function ComputerHealthCard() {
-  const { transport } = useOpenBot();
+  const { transport, bots } = useOpenBot();
   const [wired, setWired] = useState(false);
   const [report, setReport] = useState<BoxDiagnostics | null>(null);
   const [running, setRunning] = useState(false);
@@ -67,6 +102,10 @@ export function ComputerHealthCard() {
   };
 
   const failed = report?.checks.filter((c) => !c.ok) ?? [];
+  const screenOwner = (display: number) => {
+    const botId = report?.screens.find((x) => x.display === display)?.botId;
+    return bots.find((b) => b.id === botId)?.name ?? "A bot";
+  };
   const busy = running || refreshing;
 
   return (
@@ -92,12 +131,20 @@ export function ComputerHealthCard() {
         </div>
       </SettingRow>
       {report ? (
-        <ul className="set-checklist" aria-label="Self-check results">
+        <ul className="set-checklist" aria-label="Self-check results" aria-live="polite">
           {report.checks.map((c) => (
             <li key={c.name} data-ok={c.ok ? "true" : "false"}>
               <StatusPill tone={c.ok ? "success" : "danger"}>{c.ok ? "Pass" : "Fail"}</StatusPill>
-              <span className="set-checklist-name">{c.name}</span>
-              <span className="set-checklist-detail">{c.detail}</span>
+              <span className="set-checklist-name">{checkLabel(c.name, screenOwner)}</span>
+              <span className="set-checklist-detail">
+                {checkSummary(c.name, c.ok)}
+                {c.detail ? (
+                  <details className="set-checklist-tech">
+                    <summary>Technical details</summary>
+                    <code>{c.detail}</code>
+                  </details>
+                ) : null}
+              </span>
             </li>
           ))}
           {report.screens.map((s) =>
@@ -112,11 +159,18 @@ export function ComputerHealthCard() {
                     {c.crashloop ? "Crashing" : c.up ? "Restarted" : "Down"}
                   </StatusPill>
                   <span className="set-checklist-name">
-                    Screen :{s.display} {COMPONENT_LABEL[c.name] ?? c.name}
+                    {screenOwner(s.display)}'s {COMPONENT_LABEL[c.name] ?? c.name}
                   </span>
                   <span className="set-checklist-detail">
-                    {c.restartsInWindow} restart{c.restartsInWindow === 1 ? "" : "s"} in 10 min
-                    {c.downReason ? ` (${c.downReason})` : ""}
+                    {c.restartsInWindow === 0
+                      ? "Stopped"
+                      : `Restarted ${c.restartsInWindow} time${c.restartsInWindow === 1 ? "" : "s"} in the last 10 minutes`}
+                    {c.downReason ? (
+                      <details className="set-checklist-tech">
+                        <summary>Technical details</summary>
+                        <code>{c.downReason}</code>
+                      </details>
+                    ) : null}
                   </span>
                 </li>
               )),

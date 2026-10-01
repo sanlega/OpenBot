@@ -7,7 +7,7 @@ import { ComputerHealthCard } from "./ComputerHealthCard.js";
 
 let transport: Transport;
 vi.mock("../../state/context.js", () => ({
-  useOpenBot: () => ({ transport, state: {} }),
+  useOpenBot: () => ({ transport, state: {}, bots: [{ id: "bot_a", name: "Researcher" }] }),
 }));
 
 afterEach(cleanup);
@@ -40,11 +40,16 @@ describe("ComputerHealthCard", () => {
     render(<ComputerHealthCard />);
     await userEvent.click(await screen.findByRole("button", { name: "Run self-check" }));
     expect(await screen.findByText("1 problem")).toBeTruthy();
-    expect(screen.getByText("120 s off")).toBeTruthy();
-    expect(screen.getByText(/Screen :1 browser/)).toBeTruthy();
-    expect(screen.getByText(/2 restarts in 10 min \(oom\)/)).toBeTruthy();
+    expect(screen.getByText("Clock")).toBeTruthy();
+    expect(screen.getByText(/The time is off/)).toBeTruthy();
+    // The raw finding is kept, folded away.
+    expect(screen.getByText("120 s off").closest("details")).toBeTruthy();
+    expect(screen.getByText("Researcher's browser")).toBeTruthy();
+    expect(screen.getByText(/Restarted 2 times in the last 10 minutes/)).toBeTruthy();
+    // No internal ids on screen.
+    expect(screen.queryByText(/bot_a|Screen :1/)).toBeNull();
     // A component that never restarted is not listed.
-    expect(screen.queryByText(/Screen :1 live view/)).toBeNull();
+    expect(screen.queryByText("Researcher's live view")).toBeNull();
   });
 
   it("asks before refreshing the computer, then checks again", async () => {

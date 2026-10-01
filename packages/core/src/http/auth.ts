@@ -15,10 +15,6 @@ export function isLoopback(ip: string): boolean {
   return LOOPBACK_ADDRESSES.has(ip);
 }
 
-function isLoopbackIp(ip: string): boolean {
-  return isLoopback(ip);
-}
-
 /**
  * Resolves `request.device` before any route handler runs. A bearer token is
  * always verified if present (`Authorization: Bearer <token>`); with no
@@ -42,17 +38,19 @@ export function resolveDeviceIdentity(
   return undefined;
 }
 
-/** Headers a reverse proxy adds (Tailscale serve, cloudflared, others). */
-const PROXY_HEADERS = [
-  "x-forwarded-for",
-  "x-forwarded-host",
-  "forwarded",
-  "x-real-ip",
-  "cf-connecting-ip",
-  "cf-ray",
-  "tailscale-user-login",
-  "tailscale-user-name",
-];
+/** Headers a reverse proxy adds (Tailscale serve and Funnel, cloudflared, others). */
+const PROXY_HEADERS = ["forwarded", "via", "x-real-ip", "cf-connecting-ip", "cf-ray"];
+const PROXY_HEADER_PREFIXES = ["x-forwarded-", "tailscale-"];
+
+function relayedByProxy(headers: Record<string, string | string[] | undefined>): boolean {
+  return Object.keys(headers).some((raw) => {
+    const name = raw.toLowerCase();
+    return (
+      PROXY_HEADERS.includes(name) ||
+      PROXY_HEADER_PREFIXES.some((prefix) => name.startsWith(prefix))
+    );
+  });
+}
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -67,7 +65,7 @@ export function isLocalOwnerRequest(request: {
   headers: Record<string, string | string[] | undefined>;
 }): boolean {
   if (!isLoopback(request.ip)) return false;
-  if (PROXY_HEADERS.some((name) => request.headers[name] !== undefined)) return false;
+  if (relayedByProxy(request.headers)) return false;
   const host = String(request.headers.host ?? "").toLowerCase();
   const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0]!;
   return LOOPBACK_HOSTS.has(name);
@@ -146,7 +144,7 @@ export function requireOwner(request: FastifyRequest, reply: FastifyReply): bool
 
 /** OAuth browser callbacks must arrive on loopback only — never expose off-host. */
 export function requireLoopback(request: FastifyRequest, reply: FastifyReply): boolean {
-  if (!isLoopbackIp(request.ip)) {
+  if (!isLocalOwnerRequest(request)) {
     reply.code(403).send({ error: "forbidden", reason: "oauth callback requires loopback" });
     return false;
   }

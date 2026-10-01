@@ -29,7 +29,10 @@ describe("ComputerPanel", () => {
 
     render(<ComputerPanel botId="bot-a" />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("offline");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't check this bot's computer",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("offline");
     expect(screen.queryByText("Loading computer…")).not.toBeInTheDocument();
   });
 
@@ -46,7 +49,9 @@ describe("ComputerPanel", () => {
     render(<ComputerPanel botId="bot-a" />);
     await userEvent.setup().click(await screen.findByRole("button", { name: "Start computer" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Docker unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Check that Docker Desktop is running",
+    );
     expect(screen.getByRole("button", { name: "Start computer" })).toBeEnabled();
     expect(post).toHaveBeenCalledWith("/api/computer/start");
   });

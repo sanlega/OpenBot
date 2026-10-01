@@ -705,9 +705,15 @@ a.pair-url:hover {
   }
   .set-row[data-stacked="true"] .set-row-control,
   .set-row-control:has(.segmented),
-  .set-row-control:has(.set-hours) {
+  .set-row-control:has(.set-hours),
+  .set-row-control:has(.set-select) {
     max-width: none;
     flex-basis: 100%;
+  }
+  .set-row-control .set-select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
   .set-row-control .segmented {
     width: 100%;
@@ -840,16 +846,34 @@ a.pair-url:hover {
   margin: 0;
   padding: var(--space-2) var(--space-4);
   display: grid;
-  gap: var(--space-2);
+  /* One set of columns for every row, so names and details line up. */
+  grid-template-columns: auto max-content 1fr;
+  gap: var(--space-2) var(--space-3);
   border-top: 1px solid var(--border);
 }
 
 .set-checklist li {
   display: grid;
-  grid-template-columns: auto minmax(8rem, auto) 1fr;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: baseline;
-  gap: var(--space-2);
   font-size: var(--text-sm);
+}
+
+.set-checklist-tech {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+}
+
+.set-checklist-tech summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+
+.set-checklist-tech code {
+  display: block;
+  margin-top: var(--space-1);
+  overflow-wrap: anywhere;
 }
 
 .set-checklist-name {
@@ -857,12 +881,12 @@ a.pair-url:hover {
 }
 
 .set-checklist-detail {
-  color: var(--text-muted);
+  color: var(--text-2);
   overflow-wrap: anywhere;
 }
 
 @media (max-width: 600px) {
-  .set-checklist li {
+  .set-checklist {
     grid-template-columns: auto 1fr;
   }
   .set-checklist-detail {

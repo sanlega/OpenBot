@@ -6,6 +6,7 @@ import { BotAvatar } from "../common/BotAvatar.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
 import { fullTime, relativeTime } from "../activity/format.js";
 import { friendlyError } from "../../api/errors.js";
+import { MessageText } from "../thread/MessageText.js";
 
 export type TaskRow = Delegation & {
   requesterName?: string;
@@ -30,7 +31,7 @@ const STATE_LABEL: Record<Delegation["state"], { label: string; tone: string }> 
  * L3: the task board. What each bot handed to another, where it stands and what came back; an
  * open task can be cancelled, with the tasks its worker handed on (L1).
  */
-export function TasksView() {
+export function TasksView({ onOpenThread }: { onOpenThread?: (threadId: string) => void } = {}) {
   const { transport, bots, state } = useOpenBot();
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
@@ -82,7 +83,7 @@ export function TasksView() {
       setConfirming(null);
       loadRef.current();
     } catch (err) {
-      setError(friendlyError(err, "Could not cancel the task."));
+      setError(friendlyError(err, "Couldn't cancel the task."));
     } finally {
       setCancelling(null);
     }
@@ -117,8 +118,20 @@ export function TasksView() {
             </div>
           </div>
           {error ? (
-            <div className="set-row-error" role="alert">
+            <div className="screen-error" role="alert">
               {error}
+            </div>
+          ) : null}
+          {loadFailed && (tasks ?? []).length > 0 ? (
+            <div className="screen-error" role="status">
+              Couldn't refresh the tasks; this list may be out of date.{" "}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => loadRef.current()}
+              >
+                Try again
+              </button>
             </div>
           ) : null}
           {tasks === null ? (
@@ -149,6 +162,15 @@ export function TasksView() {
                 When the Chief of Staff or a bot hands work to another bot, it shows up here with
                 its result.
               </p>
+              {filter === "open" && (tasks ?? []).length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setFilter("all")}
+                >
+                  See all ({(tasks ?? []).length})
+                </button>
+              ) : null}
             </div>
           ) : (
             <ul className="task-list" aria-label="Tasks">
@@ -172,7 +194,9 @@ export function TasksView() {
                         {to ? <BotAvatar bot={to} size={22} motion="none" /> : null}
                         <span className="task-bot-name">{t.assigneeName ?? "A bot"}</span>
                       </span>
-                      <span className="task-title">{t.title}</span>
+                      <span className="task-title" title={t.title}>
+                        {t.title}
+                      </span>
                       <span className="task-meta">
                         <time dateTime={t.updatedAt} title={fullTime(t.updatedAt)}>
                           {relativeTime(t.updatedAt)}
@@ -183,24 +207,50 @@ export function TasksView() {
                     </button>
                     {isOpen ? (
                       <div className="task-details">
-                        {t.statusMessage ? <p className="task-status">{t.statusMessage}</p> : null}
-                        {t.result ? <pre className="task-result">{t.result}</pre> : null}
+                        <p className="task-full-title">{t.title}</p>
+                        {t.state === "input_required" ? (
+                          <p className="task-status task-status-waiting">
+                            {t.assigneeName ?? "The bot"} needs an answer
+                            {t.statusMessage ? `: ${t.statusMessage}` : "."} It's waiting in the
+                            conversation where this task started.
+                          </p>
+                        ) : t.statusMessage ? (
+                          <p className="task-status">{t.statusMessage}</p>
+                        ) : null}
+                        {t.result ? (
+                          <div className="task-result">
+                            <MessageText text={t.result} markdown />
+                          </div>
+                        ) : null}
                         <dl>
                           <dt>Handed over</dt>
                           <dd>{fullTime(t.createdAt)}</dd>
-                          <dt>Messages back and forth</dt>
-                          <dd>{t.roundTrips}</dd>
                           {t.depth && t.depth > 1 ? (
                             <>
-                              <dt>Hand-offs from you</dt>
+                              <dt>Steps away from you</dt>
                               <dd>{t.depth}</dd>
                             </>
                           ) : null}
                         </dl>
+                        {onOpenThread && t.ownerThreadId ? (
+                          <div className="set-inline-actions">
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${t.state === "input_required" ? "btn-primary" : "btn-secondary"}`}
+                              onClick={() => onOpenThread(t.ownerThreadId)}
+                            >
+                              {t.state === "input_required" ? "Answer it" : "Open conversation"}
+                            </button>
+                          </div>
+                        ) : null}
                         {OPEN.has(t.state) ? (
                           <div className="set-inline-actions">
                             {confirming === t.id ? (
                               <>
+                                <span className="task-cancel-note">
+                                  Stops {t.assigneeName ?? "the bot"} and any task it handed on.
+                                  They won't be resumed.
+                                </span>
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-sm"
