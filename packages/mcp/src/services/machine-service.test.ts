@@ -158,6 +158,21 @@ describe("virtual machine shell and files", () => {
     expect(commands[0]).toMatchObject({ command: "echo hello", cwd: "/workspace" });
   });
 
+  it("puts a long output in a file and returns its end", async () => {
+    const long = `${"x".repeat(20_000)}THE END`;
+    const { call, commands } = await setup({
+      run: (command) => (command.startsWith("mkdir") ? ok() : ok(long)),
+    });
+    const result = await call<ExecResult & { fullOutput?: string }>("vm_shell", {
+      command: "cat big.log",
+    });
+    expect(result.stdout.length).toBeLessThan(7_000);
+    expect(result.stdout.endsWith("THE END")).toBe(true);
+    expect(result.truncated).toBe(true);
+    expect(result.fullOutput).toMatch(/^\/workspace\/\.tool-output\/.+\.txt$/);
+    expect(commands[1]!.stdin).toBe(long);
+  });
+
   it("writes a file through stdin, in the workspace for relative paths", async () => {
     const { call, commands } = await setup();
     const result = await call("vm_write_file", { path: "notes/todo.md", content: "- a\n" });

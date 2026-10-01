@@ -34,6 +34,12 @@ export const VM_WORKSPACE = "/workspace";
 /** Biggest file vm_read_file returns, in characters. */
 const READ_FILE_LIMIT = 200_000;
 const KEYS = new Set(["Enter", "Escape", "Tab"]);
+/** Output characters returned inline by vm_shell; more goes to a file in the machine. */
+const SHELL_OUTPUT_INLINE = 12_000;
+
+function tail(text: string, max: number): string {
+  return text.length > max ? `…${text.slice(-max)}` : text;
+}
 
 /**
  * The bot's own hands on its machine (D-033): the browser on its virtual-machine screen, driven
@@ -137,7 +143,7 @@ export class McpMachineServiceAdapter {
   async vmShell(
     session: SessionContext,
     input: { command: string; cwd?: string; timeoutSeconds?: number },
-  ): Promise<ToolResult<{ [K in keyof ExecResult]: ExecResult[K] }>> {
+  ): Promise<ToolResult<{ [K in keyof ExecResult]: ExecResult[K] } & { fullOutput?: string }>> {
     const provider = await this.machine(session);
     if ("allowed" in provider) return provider;
     const denied = await this.permit(session, "vm_shell", "Bash", { command: input.command });
@@ -147,7 +153,26 @@ export class McpMachineServiceAdapter {
       cwd: input.cwd ?? VM_WORKSPACE,
       timeoutMs: Math.min(Math.max(input.timeoutSeconds ?? 120, 1), 600) * 1000,
     });
-    return allowed({ ...result });
+    if (result.stdout.length + result.stderr.length <= SHELL_OUTPUT_INLINE) {
+      return allowed({ ...result });
+    }
+    // A long output goes to a file in the machine; the engine gets its end and where the rest is,
+    // instead of filling its context.
+    const file = `${VM_WORKSPACE}/.tool-output/${Date.now().toString(36)}.txt`;
+    const saved = await provider
+      .exec({
+        command: `mkdir -p ${quote(`${VM_WORKSPACE}/.tool-output`)} && cat > ${quote(file)}`,
+        stdin: result.stderr ? `${result.stdout}\n--- stderr ---\n${result.stderr}` : result.stdout,
+        timeoutMs: 30_000,
+      })
+      .catch(() => undefined);
+    return allowed({
+      ...result,
+      stdout: tail(result.stdout, SHELL_OUTPUT_INLINE / 2),
+      stderr: tail(result.stderr, SHELL_OUTPUT_INLINE / 4),
+      truncated: true,
+      ...(saved?.code === 0 ? { fullOutput: file } : {}),
+    });
   }
 
   async vmReadFile(

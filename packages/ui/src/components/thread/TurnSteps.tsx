@@ -146,11 +146,22 @@ const TOOL_LABELS: Record<string, string> = {
   WebSearch: "Searched the web",
   WebFetch: "Opened",
   TodoWrite: "Updated its plan",
+  // OpenBot's virtual-machine tools (D-033).
+  vm_shell: "Ran in the VM",
+  vm_read_file: "Read",
+  vm_write_file: "Wrote",
+  vm_edit_file: "Edited",
+  vm_list_files: "Listed",
+  browser_read: "Read the page",
+  browser_click: "Clicked",
+  browser_type: "Typed",
+  browser_key: "Pressed",
+  browser_scroll: "Scrolled",
 };
 
 function toolName(tool: string): string {
-  if (TOOL_LABELS[tool]) return TOOL_LABELS[tool];
   const bare = tool.startsWith(OPENBOT_PREFIX) ? tool.slice(OPENBOT_PREFIX.length) : tool;
+  if (TOOL_LABELS[bare]) return TOOL_LABELS[bare];
   const name = bare.replace(/^mcp__[^_]+__/, "").replace(/_/g, " ");
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
@@ -175,6 +186,11 @@ function iconFor(tool: string): ReactNode {
   }
   if (tool.endsWith("ask_user")) return <ClipboardList size={size} />;
   if (/computer_(task|steer|status)$/.test(tool)) return <Monitor size={size} />;
+  if (tool.endsWith("vm_shell")) return <Terminal size={size} />;
+  if (/vm_(write|edit)_file$/.test(tool)) return <Pencil size={size} />;
+  if (/vm_(read_file|list_files)$/.test(tool)) return <FileText size={size} />;
+  if (tool.endsWith("browser_read")) return <Globe size={size} />;
+  if (/browser_(click|type|key|scroll)$/.test(tool)) return <Monitor size={size} />;
   if (tool.startsWith(OPENBOT_PREFIX)) return <Bot size={size} />;
   return <Wrench size={size} />;
 }
@@ -193,6 +209,8 @@ function detail(step: TurnStep): string | undefined {
     "bot",
     "name",
     "title",
+    "key",
+    "direction",
   ]) {
     const value = input[key];
     if (typeof value === "string" && value) {
