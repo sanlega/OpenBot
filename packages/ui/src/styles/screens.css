@@ -1454,7 +1454,7 @@
   }
   /* A row of ghost buttons under text: the first one's text lines up with the text above. */
   .memory-actions > .btn-ghost:first-child {
-    margin-left: calc(-1 * var(--space-2));
+    margin-left: calc(-1 * var(--space-3));
   }
   .memory-actions {
     grid-column: 1;

@@ -708,7 +708,7 @@ a.pair-url:hover {
   .set-row-control:has(.set-hours),
   .set-row-control > .btn-ghost:first-child,
   .set-row-control .set-inline-actions > .btn-ghost:first-child {
-    margin-left: calc(-1 * var(--space-2));
+    margin-left: calc(-1 * var(--space-3));
   }
   .set-row-control:has(.set-select),
   .set-row-control:has(.set-inline-actions .btn) {
