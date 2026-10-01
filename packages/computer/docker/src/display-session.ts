@@ -42,6 +42,11 @@ export interface DisplaySessionOptions {
   cookies?: CookieAccess;
   /** Where the shared sign-ins are saved. */
   cookieFile?: string;
+  /**
+   * Resolves once a screen's browser answers on its DevTools port (stubbed in tests). Sign-ins are
+   * handed over through that port, so a bot must not look or act before it is up.
+   */
+  waitForBrowser?: (debugPort: number) => Promise<void>;
   /** Reads the page (stubbed in tests). */
   observePage?: (
     display: number,
@@ -118,6 +123,8 @@ interface SessionState {
   lastObservation?: ObservationResult;
   processes: ChildProcess[];
   ready: Promise<void>;
+  /** Set once the browser answered on its DevTools port. */
+  browserUp?: boolean;
 }
 
 /**
@@ -130,12 +137,15 @@ export class DisplaySessionManager {
   private readonly navigateTab: (debugPort: number, url: string) => Promise<boolean>;
   private readonly pageInput: PageInput;
   private readonly jar: SharedCookieJar | undefined;
+  private readonly waitForBrowser: (debugPort: number) => Promise<void>;
 
   constructor(private readonly options: DisplaySessionOptions = {}) {
     this.screens = new ScreenManager(options.maxScreens ?? 4);
     this.shell = options.shell ?? createShellExec();
     this.navigateTab = options.navigateTab ?? navigateTabOverCdp;
     this.pageInput = options.pageInput ?? cdpPageInput;
+    this.waitForBrowser =
+      options.waitForBrowser ?? (options.startDisplay ? async () => undefined : waitForPageTarget);
     this.jar = options.cookies
       ? new SharedCookieJar(options.cookies, options.cookieFile)
       : undefined;
@@ -156,6 +166,12 @@ export class DisplaySessionManager {
   /** Before a bot looks or acts: its browser gets every sign-in (or sign-out) made on any screen. */
   private async shareSignIns(session: SessionState): Promise<void> {
     if (!this.jar) return;
+    // A browser that just started is not listening yet: syncing then failed silently, and the
+    // bot's first page loaded signed out (the "signed in on one bot, not on the other" bug).
+    if (!session.browserUp) {
+      await this.waitForBrowser(session.debugPort).catch(() => undefined);
+      session.browserUp = true;
+    }
     const ports = [...this.sessions.values()].map((s) => s.debugPort);
     await this.jar.sync(session.debugPort, ports).catch(() => undefined);
   }
@@ -460,6 +476,26 @@ function center(bounds: { x: number; y: number; width: number; height: number })
     x: bounds.x + Math.floor(bounds.width / 2),
     y: bounds.y + Math.floor(bounds.height / 2),
   };
+}
+
+/** Waits (up to 20 s) until the browser on `debugPort` lists a page it can be driven through. */
+async function waitForPageTarget(debugPort: number, timeoutMs = 20_000): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${debugPort}/json/list`, {
+        signal: AbortSignal.timeout(1_000),
+      });
+      if (res.ok) {
+        const targets = (await res.json()) as Array<{ type?: string }>;
+        if (targets.some((t) => t.type === "page")) return;
+      }
+    } catch {
+      // Still starting.
+    }
+    await sleep(250);
+  }
+  throw new Error(`the browser on port ${debugPort} did not start`);
 }
 
 async function removeStaleDesktopLocks(display: number, profile: string): Promise<void> {
