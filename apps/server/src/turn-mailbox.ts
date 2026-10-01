@@ -28,6 +28,7 @@ import {
 } from "@openbot/runtime";
 import { EngineHealth, isOutOfService } from "./engine-health.js";
 import { VAULT_KEYS } from "./providers.js";
+import { harnessReminders, steerText, withReminders } from "./reminders.js";
 
 type McpConnectors = Parameters<typeof McpComposer.forTurnAsync>[1]["connectors"];
 
@@ -269,7 +270,8 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
     if ("error" in choice) return { error: choice.error };
     return {
       bot,
-      text,
+      // C4: what OpenBot knows and the engine cannot (a cut-short turn, open cards and forms).
+      text: withReminders(text, harnessReminders(ctx, bot)),
       attachments: [],
       systemPrompt: systemPromptFor(bot),
       cwd: ctx.config.workspaceDir,
@@ -438,7 +440,7 @@ export function createTurnMailbox(
       const turn = ctx.repos.turns.getById(turnId);
       if (!turn) return { ok: false, reason: "turn not found" };
       try {
-        await deps.runtime.mailbox.steer(turn.botId, text);
+        await deps.runtime.mailbox.steer(turn.botId, steerText(text));
         return { ok: true };
       } catch (error) {
         return { ok: false, reason: String(error) };
@@ -484,14 +486,15 @@ export function wakeOnBotMessages(
       const from = event.botId ? ctx.repos.bots.getById(event.botId) : undefined;
       const delegation = delegationId ? tracker.get(delegationId) : undefined;
       const mode = ctx.repos.chains.getById(chainId)?.mode ?? "live";
+      const task = taskText(
+        from,
+        message.text,
+        delegation !== undefined,
+        delegation ? userWords(ctx, delegation.ownerThreadId) : undefined,
+      );
       const turn = await buildTurn({
         bot,
-        text: taskText(
-          from,
-          message.text,
-          delegation !== undefined,
-          delegation ? userWords(ctx, delegation.ownerThreadId) : undefined,
-        ),
+        text: task,
         chainId,
         threadId: thread.id,
         mode,
@@ -512,7 +515,8 @@ export function wakeOnBotMessages(
       }
       void submitWithFailover(ctx, deps, buildTurn, turn, {
         bot,
-        text: turn.text,
+        // The text before reminders: a failover rebuilds the turn and adds them again.
+        text: task,
         chainId,
         threadId: thread.id,
         mode,
@@ -625,9 +629,10 @@ export function wakeRequesterOnDelegations(
         "Tell the user plainly what went wrong. Do not send the same task again unless you have fixed the cause; a login, quota or limit problem is for the user to fix.",
       );
     }
+    const wakeText = lines.join("\n");
     const turn = await buildTurn({
       bot: requester,
-      text: lines.join("\n"),
+      text: wakeText,
       chainId,
       threadId: thread.id,
       mode: "live",
@@ -645,7 +650,7 @@ export function wakeRequesterOnDelegations(
     }
     void submitWithFailover(ctx, deps, buildTurn, turn, {
       bot: requester,
-      text: turn.text,
+      text: wakeText,
       chainId,
       threadId: thread.id,
       mode: "live",

@@ -224,3 +224,31 @@ describe("paths and quoting", () => {
     expect(quote("it's")).toBe(`'it'\\''s'`);
   });
 });
+
+describe("long pages (C7)", () => {
+  it("saves the whole text of a long page to a file and says where", async () => {
+    const { call, commands } = await setup();
+    const provider = harness!.ctx.computerProvider!;
+    const screen = provider.screen.bind(provider);
+    const longText = Array.from({ length: 900 }, (_, i) => `line ${i} of a long article`).join(
+      "\n",
+    );
+    provider.screen = async (botId) => {
+      const real = await screen(botId);
+      return {
+        ...real,
+        observe: async (o) => ({ ...(await real.observe(o)), text: longText }),
+        act: (a) => real.act(a),
+        liveView: () => real.liveView(),
+        takeover: (on) => real.takeover(on),
+      };
+    };
+    const read = await call<
+      Page & { page: { text?: string; fullText?: { path: string; lines: number } } }
+    >("browser_read", {});
+    expect(read.page.text!.length).toBeLessThanOrEqual(6000);
+    expect(read.page.fullText).toMatchObject({ lines: 900 });
+    expect(read.page.fullText!.path).toMatch(/^\/workspace\/\.tool-output\/page-.+\.txt$/);
+    expect(commands.at(-1)!.stdin).toContain("line 899 of a long article");
+  });
+});

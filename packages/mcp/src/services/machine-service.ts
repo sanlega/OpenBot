@@ -17,10 +17,12 @@ import type { McpComputerServiceAdapter } from "./computer-service.js";
 export interface PageView {
   url?: string;
   title?: string;
-  /** The page's readable text (capped). */
+  /** The page's readable text (capped; see `fullText` for the rest). */
   text?: string;
   /** Controls on screen: pass `ref` to browser_click / browser_type. */
   elements: Array<{ ref: string; role: string; label: string; value?: string }>;
+  /** Where the whole text is when the page is longer than `text` (a file in the machine). */
+  fullText?: { path: string; bytes: number; lines: number };
   /** What the step did, when it was an action. */
   did?: string;
 }
@@ -75,7 +77,35 @@ export class McpMachineServiceAdapter {
       await sleep(SETTLE_MS);
     }
     const page = await this.read(session.botId, screen);
-    return allowed({ page: { ...page, ...(did ? { did } : {}) } });
+    const fullText = await this.spillPageText(session, this.lastRead.get(session.botId));
+    return allowed({
+      page: { ...page, ...(did ? { did } : {}), ...(fullText ? { fullText } : {}) },
+    });
+  }
+
+  /**
+   * C7: a page longer than what comes back inline is not cut silently: the whole text goes to a
+   * file in the machine and the engine gets where it is, its size and its line count (to decide
+   * between reading it all and searching it with rg).
+   */
+  private async spillPageText(
+    session: SessionContext,
+    observation: Observation | undefined,
+  ): Promise<{ path: string; bytes: number; lines: number } | undefined> {
+    const text = observation?.text;
+    if (!text || text.length <= PAGE_TEXT_LIMIT) return undefined;
+    const provider = await this.machine(session).catch(() => undefined);
+    if (!provider || "allowed" in provider) return undefined;
+    const path = `${VM_WORKSPACE}/.tool-output/page-${Date.now().toString(36)}.txt`;
+    const saved = await provider
+      .exec({
+        command: `mkdir -p ${quote(`${VM_WORKSPACE}/.tool-output`)} && cat > ${quote(path)}`,
+        stdin: `${observation.url ?? ""}\n\n${text}`,
+        timeoutMs: 30_000,
+      })
+      .catch(() => undefined);
+    if (saved?.code !== 0) return undefined;
+    return { path, bytes: Buffer.byteLength(text, "utf8"), lines: text.split("\n").length };
   }
 
   async browserClick(
