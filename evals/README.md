@@ -13,6 +13,8 @@ JEV_API_KEY=... node apps/server/dist/main.js eval --real --jev   # and the Jev-
 node apps/server/dist/main.js eval path/to/cases --json
 ```
 
+`"fakeOnly": true` cases use the fake engine's `@tool` directives and are skipped with `--real`.
+
 Every run uses a fresh, throw-away OpenBot home (your own `~/.openbot` is never touched) and
 exits with code 1 when a case fails. Cases marked `"real": true` are skipped without `--real`;
 judged cases are skipped without `--jev`. These are product evals for OpenBot's Bots; the

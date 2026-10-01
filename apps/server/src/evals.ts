@@ -17,6 +17,8 @@ export interface EvalCase {
   description?: string;
   /** Only meaningful against real engines (skipped without `--real`). */
   real?: boolean;
+  /** Uses the fake engine's directives (`@tool ...`): skipped with `--real`. */
+  fakeOnly?: boolean;
   bot?: {
     name?: string;
     description?: string;
@@ -95,6 +97,8 @@ export async function runEvals(
     OPENBOT_FAKE_COMPUTER: options.real ? undefined : "1",
     OPENBOT_FAKE_JEV: options.jev ? undefined : "1",
     OPENBOT_MCP_REGISTRY_URL: "http://127.0.0.1:9",
+    // Engines that keep state under OpenBot's home (Codex's private home) use the throw-away one.
+    OPENBOT_HOME: home,
     // Real runs get their own virtual machine, never the installed app's (container, ports,
     // sign-ins); the owner can still point them elsewhere.
     OPENBOT_DESKTOP_CONTAINER: process.env.OPENBOT_DESKTOP_CONTAINER ?? EVAL_CONTAINER,
@@ -102,26 +106,32 @@ export async function runEvals(
     OPENBOT_DESKTOP_VIEW_PORT: process.env.OPENBOT_DESKTOP_VIEW_PORT ?? "6100",
     OPENBOT_DESKTOP_VOLUME: process.env.OPENBOT_DESKTOP_VOLUME ?? "openbot-browser-eval",
   });
-  const port = await freePort();
-  const ctx = await createCoreContext({
-    config: loadConfig({ env: { ...process.env, OPENBOT_HOME: home, PORT: String(port) } }),
-    disableNdjson: true,
-    // In-process only: nothing but this runner talks to it.
-    localOwnerKey: false,
-  });
-  const app = await buildServer(ctx, { wireRemote: false });
   const results: EvalResult[] = [];
+  let ctx: CoreContext | undefined;
+  let app: Awaited<ReturnType<typeof buildServer>> | undefined;
+  let drivers: Array<{ dispose(): Promise<void> } | undefined> = [];
   try {
-    await bootstrapHarness(ctx, app);
+    const port = await freePort();
+    ctx = await createCoreContext({
+      config: loadConfig({ env: { ...process.env, OPENBOT_HOME: home, PORT: String(port) } }),
+      disableNdjson: true,
+      // In-process only: nothing but this runner talks to it.
+      localOwnerKey: false,
+    });
+    app = await buildServer(ctx, { wireRemote: false });
+    const harness = await bootstrapHarness(ctx, app);
+    drivers = Object.values(harness.drivers);
     await app.listen({ port, host: "127.0.0.1" });
     ctx.repos.setupState.patch({ completedAt: ctx.clock.now().toISOString() });
     for (const c of cases) {
       const result =
         c.real && !options.real
           ? skipped(c, "needs real engines (--real)")
-          : c.judge && !options.jev
-            ? skipped(c, "needs Jev to judge (--jev)")
-            : await runCase(ctx, app, c, options);
+          : c.fakeOnly && options.real
+            ? skipped(c, "uses the fake engine's directives")
+            : c.judge && !options.jev
+              ? skipped(c, "needs Jev to judge (--jev)")
+              : await runCase(ctx, app, c, options);
       results.push(result);
       log(
         `${result.skipped ? "SKIP" : result.passed ? "PASS" : "FAIL"}  ${c.id}${
@@ -134,8 +144,11 @@ export async function runEvals(
       );
     }
   } finally {
-    await app.close().catch(() => undefined);
-    ctx.closeDb();
+    // Real engines keep child processes (Claude per session, Codex's app-server): without this
+    // the command never exits.
+    await Promise.all(drivers.map((d) => d?.dispose().catch(() => undefined)));
+    await app?.close().catch(() => undefined);
+    ctx?.closeDb();
     // The eval machine goes with the run (its browser volume stays, for the next run's sign-ins).
     if (options.real && (process.env.OPENBOT_DESKTOP_CONTAINER ?? "") === EVAL_CONTAINER) {
       await removeContainer(EVAL_CONTAINER);
@@ -190,6 +203,7 @@ async function runCase(
   let approvals = 0;
   let reply = "";
   let status: string | undefined;
+  let unsubscribe = () => {};
   const done = new Promise<void>((resolve) => {
     const stop = ctx.eventBus.subscribe((event: OBEvent) => {
       if (event.botId !== botId) return;
@@ -206,11 +220,12 @@ async function runCase(
         event.type === "turn.interrupted"
       ) {
         status = event.type.slice("turn.".length);
-        stop();
+        unsubscribe();
         // The reply message is published right after the turn ends.
         setTimeout(resolve, 50);
       }
     });
+    unsubscribe = stop;
   });
 
   const sent = await ctx.mailbox?.enqueue({ botId, text: c.prompt });
@@ -222,6 +237,10 @@ async function runCase(
     done.then(() => false),
     new Promise<boolean>((r) => setTimeout(() => r(true), timeoutMs)),
   ]);
+  if (timedOut) {
+    unsubscribe();
+    await ctx.mailbox?.stopBot(botId).catch(() => undefined);
+  }
   // The reply as the user sees it: the bot's last message in its chat.
   const thread = ctx.repos.threads.getByBotId(botId);
   const stored = thread

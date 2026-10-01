@@ -62,6 +62,8 @@ export interface BootstrapResult {
   mcpServices: ReturnType<typeof createMcpServices>;
   digest: { stop: () => void };
   availableEngines: string[];
+  /** The engine drivers in use (a short-lived harness, like `openbot eval`, disposes them). */
+  drivers: Partial<Record<string, { dispose(): Promise<void> }>>;
 }
 
 export async function bootstrapHarness(
@@ -176,6 +178,7 @@ export async function bootstrapHarness(
     mcpServices,
     digest,
     availableEngines: providers.availableEngines,
+    drivers: providers.drivers,
   };
 }
 

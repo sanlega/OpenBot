@@ -1,6 +1,7 @@
 {
   "id": "openbot-tools",
-  "description": "The engine reaches OpenBot's own tools through the injected MCP server.",
+  "description": "The engine reaches OpenBot's own tools through the injected MCP server (fake engine directive).",
+  "fakeOnly": true,
   "prompt": "@tool list_bots {}",
   "expect": { "status": "completed", "toolsUsed": ["list_bots"], "maxApprovals": 0 }
 }

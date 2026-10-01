@@ -85,7 +85,8 @@ async function evaluate(args: string[]): Promise<void> {
   else
     console.log(`
 ${ran - failed.length}/${ran} passed, ${results.length - ran} skipped.`);
-  if (failed.length > 0) process.exitCode = 1;
+  // Explicit: nothing left running (engine children, timers) may keep the command alive.
+  process.exit(failed.length > 0 ? 1 : 0);
 }
 
 async function doctor(): Promise<void> {
