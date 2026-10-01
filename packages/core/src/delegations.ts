@@ -113,8 +113,10 @@ export class DelegationTracker {
     // The task the hand-off belongs to: the running turn's, else a wake turn's (never a direct
     // conversation with the user, which starts a chain of its own).
     const parent = bound ?? this.contextTask(input.requesterBotId);
+    // Results show where the parent task reports (the user's conversation); a direct chat has
+    // no parent and reports in the bot's own thread.
     const ownerThread =
-      (bound ? this.ctx.repos.threads.getById(bound.ownerThreadId) : undefined) ??
+      (parent ? this.ctx.repos.threads.getById(parent.ownerThreadId) : undefined) ??
       this.ctx.repos.threads.getByBotId(input.requesterBotId);
     if (!ownerThread) return { ok: false, reason: `no thread for bot ${input.requesterBotId}` };
     const existing = this.repo.findOpenBetween(input.requesterBotId, input.assigneeBotId);

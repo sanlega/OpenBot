@@ -5,7 +5,7 @@ import { relativeTime } from "../activity/format.js";
 
 interface Entry {
   name: string;
-  kind: "dir" | "file";
+  kind: "dir" | "file" | "link";
   size: number;
   modifiedAt: string;
 }
@@ -133,9 +133,9 @@ export function WorkspaceFiles({ botId }: { botId: string }) {
                   type="button"
                   className="files-row"
                   onClick={() =>
-                    e.kind === "dir"
-                      ? (setPreview(null), setPath(path ? `${path}/${e.name}` : e.name))
-                      : void openFile(e.name)
+                    e.kind === "file"
+                      ? void openFile(e.name)
+                      : (setPreview(null), setPath(path ? `${path}/${e.name}` : e.name))
                   }
                 >
                   {e.kind === "dir" ? (

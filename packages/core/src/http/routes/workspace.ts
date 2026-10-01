@@ -1,4 +1,4 @@
-import { open, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { CoreContext } from "../../context.js";
@@ -26,6 +26,13 @@ export async function insideWorkspace(root: string, rel: string): Promise<string
   const back = relative(realRoot, target);
   const leaves = back === ".." || back.startsWith(`..${sep}`) || back.startsWith("../");
   return leaves || isAbsolute(back) ? undefined : target;
+}
+
+/** `?path=` as one string (a repeated parameter arrives as an array). */
+function queryPath(query: unknown): string {
+  const value = (query as { path?: unknown } | undefined)?.path;
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === "string" ? first : "";
 }
 
 /** Recent `vm_shell` commands per bot (N2), from the event bus. */
@@ -69,7 +76,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
 
   app.get("/api/workspace/files", async (request, reply) => {
     if (!requireOwner(request, reply)) return;
-    const { path = "" } = request.query as { path?: string };
+    const path = queryPath(request.query);
     const dir = await insideWorkspace(ctx.config.workspaceDir, path);
     if (!dir) return reply.code(404).send({ error: "not_found", reason: "no such folder" });
     let names: string[];
@@ -78,15 +85,22 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
     } catch {
       return reply.code(404).send({ error: "not_found", reason: "not a folder" });
     }
+    names.sort((a, b) => a.localeCompare(b));
     const entries = (
       await Promise.all(
         names.slice(0, MAX_ENTRIES).map(async (name) => {
           try {
-            const s = await stat(join(dir, name));
+            // lstat: a link shows as a link, never with the details of what it points to.
+            const s = await lstat(join(dir, name));
+            const link = s.isSymbolicLink();
             return {
               name,
-              kind: s.isDirectory() ? ("dir" as const) : ("file" as const),
-              size: s.size,
+              kind: link
+                ? ("link" as const)
+                : s.isDirectory()
+                  ? ("dir" as const)
+                  : ("file" as const),
+              size: link ? 0 : s.size,
               modifiedAt: s.mtime.toISOString(),
             };
           } catch {
@@ -96,8 +110,13 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
       )
     )
       .filter((e) => e !== undefined)
+      // Folders first, then the rest by name.
       .sort((a, b) =>
-        a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "dir" ? -1 : 1,
+        (a.kind === "dir") === (b.kind === "dir")
+          ? a.name.localeCompare(b.name)
+          : a.kind === "dir"
+            ? -1
+            : 1,
       );
     return {
       path: path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
@@ -108,7 +127,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
 
   app.get("/api/workspace/file", async (request, reply) => {
     if (!requireOwner(request, reply)) return;
-    const { path = "" } = request.query as { path?: string };
+    const path = queryPath(request.query);
     const file = await insideWorkspace(ctx.config.workspaceDir, path);
     if (!file) return reply.code(404).send({ error: "not_found", reason: "no such file" });
     let size: number;
@@ -119,7 +138,18 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
     } catch {
       return reply.code(404).send({ error: "not_found", reason: "no such file" });
     }
-    const handle = await open(file, "r");
+    let handle: Awaited<ReturnType<typeof open>>;
+    try {
+      handle = await open(file, "r");
+    } catch {
+      // Locked or unreadable: a plain answer, never an error page with local paths.
+      return reply.code(409).send({ error: "unreadable", reason: "this file can't be opened now" });
+    }
+    // A path component swapped for a link between the check and the open: refuse.
+    if ((await insideWorkspace(ctx.config.workspaceDir, path)) !== file) {
+      await handle.close();
+      return reply.code(404).send({ error: "not_found", reason: "no such file" });
+    }
     try {
       const buffer = Buffer.alloc(Math.min(size, PREVIEW_BYTES));
       await handle.read(buffer, 0, buffer.length, 0);

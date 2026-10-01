@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cdpCookies, cdpStorage, DisplaySessionManager } from "./display-session.js";
+import { cdpCookies, cdpStorage, debugPortOf, DisplaySessionManager } from "./display-session.js";
 import { createLiveViewUrl } from "./live-view-url.js";
 import { defaultExecIdentity, runExec, type ExecRequest } from "./exec.js";
 import { startPackageHelper } from "./apt-helper.js";
@@ -80,7 +80,7 @@ const sessions = new DisplaySessionManager({
       cdp.revoke(owner);
     }
     // The screen's next browser starts with no connector tabs, whoever owned it.
-    setForeignTabs(9220 + display, []);
+    setForeignTabs(debugPortOf(display), []);
     displayOwner.delete(display);
   },
 });
@@ -207,7 +207,7 @@ const server = createServer(async (req, res) => {
     const body = await parseBody(req).catch(() => ({}) as Record<string, unknown>);
     if (typeof body.botId === "string") {
       leases.delete(body.botId);
-      cdp.revoke(body.botId);
+      cdp.revokeAccess(body.botId);
     }
     return json(res, 200, { ok: true });
   }

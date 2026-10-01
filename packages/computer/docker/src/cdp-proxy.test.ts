@@ -203,7 +203,10 @@ describe("CdpProxy (B5)", () => {
     const count = seen.length;
     proxy.grant("bot_a", { allowHosts: ["*"], mode: "act" });
     expect(seen.length).toBe(count);
-    // A takeover or the screen going away forgets them.
+    // A takeover ends the connector's access but its open tabs stay protected.
+    proxy.revokeAccess("bot_a");
+    expect(seen.length).toBe(count);
+    // The screen going away forgets them.
     proxy.revoke("bot_a");
     expect(seen.at(-1)).toEqual([]);
   });

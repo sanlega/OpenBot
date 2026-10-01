@@ -59,7 +59,16 @@ describe("workspace files (N2)", () => {
       const res = await app.inject({ method: "GET", url: `/api/workspace/file?path=${path}` });
       expect(res.statusCode, path).toBe(404);
     }
+    // A repeated ?path= is not an error page.
+    expect(
+      (await app.inject({ method: "GET", url: "/api/workspace/files?path=a&path=b" })).statusCode,
+    ).toBe(404);
     if (linked) {
+      // Listed as a link, without the details of what it points to.
+      const listed = (await app.inject({ method: "GET", url: "/api/workspace/files" })).json();
+      expect(listed.entries).toContainEqual(
+        expect.objectContaining({ name: "escape", kind: "link", size: 0 }),
+      );
       expect(await insideWorkspace(ws, "escape/secret.txt")).toBeUndefined();
       const res = await app.inject({
         method: "GET",

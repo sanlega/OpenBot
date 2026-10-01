@@ -652,22 +652,31 @@ export function wakeRequesterOnDelegations(
       threadId: thread.id,
       mode: "live",
     });
-    // R1: what the requester hands out while handling this report belongs to its own task.
-    const ownTask = requester.isChiefOfStaff ? undefined : tracker.openFor(requester.id);
-    const turn =
-      "error" in built || !ownTask
-        ? built
-        : {
-            ...built,
+    // R1: what the requester hands out while handling this report belongs to the task the
+    // report is part of (the reporting task's parent), if the requester still works on it.
+    const parent = d.parentId ? tracker.get(d.parentId) : undefined;
+    const ownTask =
+      !requester.isChiefOfStaff &&
+      parent &&
+      parent.assigneeBotId === requester.id &&
+      ["submitted", "working", "input_required"].includes(parent.state)
+        ? parent
+        : undefined;
+    const withContext = (t: EnqueueTurnInput): EnqueueTurnInput =>
+      ownTask
+        ? {
+            ...t,
             prepareTurn: async (turnId: string) => {
               tracker.setContext(requester.id, ownTask.id);
-              return (await built.prepareTurn?.(turnId)) ?? {};
+              return (await t.prepareTurn?.(turnId)) ?? {};
             },
             finishTurn: async (turnId: string) => {
               tracker.setContext(requester.id, undefined);
-              await built.finishTurn?.(turnId);
+              await t.finishTurn?.(turnId);
             },
-          };
+          }
+        : t;
+    const turn = "error" in built ? built : withContext(built);
     if ("error" in turn) {
       await ctx.eventBus.publish({
         type: "turn.failed",
@@ -686,6 +695,8 @@ export function wakeRequesterOnDelegations(
       threadId: thread.id,
       mode: "live",
       pinnedByUser: false,
+      // A failover retry keeps the wake turn's task context.
+      decorate: withContext,
     });
   };
 
@@ -752,7 +763,12 @@ async function submitWithFailover(
   deps: TurnMailboxDeps,
   buildTurn: TurnBuilder,
   turn: EnqueueTurnInput,
-  args: Omit<BuildTurnArgs, "engine"> & { pinnedByUser: boolean; delegationId?: string },
+  args: Omit<BuildTurnArgs, "engine"> & {
+    pinnedByUser: boolean;
+    delegationId?: string;
+    /** Re-applied to a failover retry (it is rebuilt from scratch). */
+    decorate?: (t: EnqueueTurnInput) => EnqueueTurnInput;
+  },
 ): Promise<TurnOutcome | undefined> {
   const tracker = delegationsOf(ctx);
   const settle = async (outcome: TurnOutcome | undefined): Promise<void> => {
@@ -822,7 +838,8 @@ async function submitWithFailover(
           chainId: args.chainId,
           payload: { messageId: message.id, text: note, author: "system" },
         });
-        const retry = await buildTurn({ ...args, engine: fallback });
+        const rebuilt = await buildTurn({ ...args, engine: fallback });
+        const retry = "error" in rebuilt || !args.decorate ? rebuilt : args.decorate(rebuilt);
         if (!("error" in retry)) {
           if (args.delegationId) await tracker.started(args.delegationId, retry.engine);
           final = await deps.runtime.mailbox.submit(bound(retry));

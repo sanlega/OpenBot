@@ -287,7 +287,7 @@ export class DisplaySessionManager {
     let session = this.sessions.get(botId);
     if (!session) {
       const vncPort = 5900 + display;
-      const debugPort = 9220 + display;
+      const debugPort = debugPortOf(display);
       session = {
         display,
         vncPort,
@@ -559,6 +559,11 @@ export class DisplaySessionManager {
     session.supervisor = supervisor;
     await supervisor.start();
   }
+}
+
+/** The DevTools port of a screen's browser. */
+export function debugPortOf(display: number): number {
+  return 9220 + display;
 }
 
 /** Chromium's flags, in one place: the supervisor is the only launcher. */

@@ -71,9 +71,15 @@ export class CdpProxy {
   }
 
   /** The user took the screen over, or it went to another bot: the tool loses it at once. */
+  /** The screen went away (another bot, or closed): access ends and its tabs are forgotten. */
   revoke(botId: string): void {
     if (this.tabs.delete(botId)) this.options.onTabs?.(botId, [], this.ports.get(botId));
     this.ports.delete(botId);
+    this.revokeTokens(botId);
+  }
+
+  /** The user took the screen over: the tool loses access, its tabs (still open) stay protected. */
+  revokeAccess(botId: string): void {
     this.revokeTokens(botId);
   }
 
