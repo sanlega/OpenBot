@@ -20,7 +20,7 @@ _Last updated: 2026-10-01 by Claude (backlog sweep on main-2, verified by two re
   Memory, Health, Tasks, Files, Speed and the dialogs.
   Verified: unit suites, 26 browser E2E, the Electron smoke test (next to the installed app via
   `OPENBOT_DESKTOP_USER_DATA`), `openbot eval` on the fake engine, and one real-engine case.
-  Reviewer scores: functionality 10/10, design 9.5 to 10 (see the plan's outcome).
+  Reviewer scores (final): functionality 10/10, design 10/10.
   **Next**: the owner decides on merging to `main` and releasing v0.1.19.
   - **Release notes must say**: the browser UI opened by address, as with `openbot serve`, now
     needs the printed `#key=` link. Remote browsers over Tailscale or a tunnel need pairing.

@@ -56,6 +56,6 @@ built-in deny for the harness port and the key file), plain-language errors ever
 (`friendlyError`), AA contrast tokens, a dates helper, Health/Tasks/Files/Speed/Memory/dialog
 UX fixes, and Activity naming the task a waiting card belongs to.
 Verifier scores: functionality 6 → 8 → 8 → 9 → 9.5 → 7 (new P1 bugs) → 8 → 9 → 9 → 9.5 → 10;
-design 6 → 8.5 → 9.5 (final pass pending at the time of writing).
+design 6 → 8.5 → 9.5 → 10. Final pass: both 10/10.
 Checks: unit suites, 26 browser E2E (incl. reconnect after restart and the local owner key),
 the Electron smoke test, `openbot eval` on the fake engine and one real-engine case.
