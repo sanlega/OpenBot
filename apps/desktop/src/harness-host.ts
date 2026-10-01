@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeCrashMarker } from "./crash-marker.js";
 
 export type HarnessHostEvents = {
   ready: [];
@@ -119,6 +120,7 @@ export class HarnessHost extends EventEmitter<HarnessHostEvents> {
   private intentionalStop = false;
   private restartAttempts = 0;
   private restartTimer?: ReturnType<typeof setTimeout>;
+  private startedAt = Date.now();
 
   constructor(private readonly options: HarnessHostOptions) {
     super();
@@ -163,6 +165,7 @@ export class HarnessHost extends EventEmitter<HarnessHostEvents> {
     });
 
     this.child.on("spawn", () => {
+      this.startedAt = Date.now();
       this.restartAttempts = 0;
       this.emit("ready");
     });
@@ -171,6 +174,9 @@ export class HarnessHost extends EventEmitter<HarnessHostEvents> {
       const exitCode = typeof code === "number" ? code : null;
       this.emit("exit", exitCode);
       this.child = undefined;
+      // D3: an exit nobody asked for leaves a note the next harness reports to the owner.
+      if (!this.intentionalStop)
+        writeCrashMarker(this.options.openbotHome, exitCode, this.startedAt);
       if (!this.intentionalStop) this.scheduleRestart();
     });
   }

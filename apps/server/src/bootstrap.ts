@@ -39,6 +39,7 @@ import {
 } from "@openbot/runtime";
 import type { FastifyInstance } from "fastify";
 import { ensureChiefOfStaff } from "./chief-of-staff.js";
+import { reportPreviousCrash } from "./crash-report.js";
 import { postDigestIfDue } from "./digest.js";
 import { bootstrapProviders } from "./providers.js";
 import { modelLister, pinModelOnSpawn } from "./bot-models.js";
@@ -84,6 +85,7 @@ export async function bootstrapHarness(
   // Installs that finished setup before the CoS was seeded get one now.
   ensureChiefOfStaff(ctx);
   await closeOrphanedTurns(ctx);
+  await reportPreviousCrash(ctx).catch(() => false);
   const caps = new CapCounterService(ctx.clock);
   // S2/S3 hold across restarts: replay the CoS's past spawns (a spawned Bot's
   // DM thread is created with it).

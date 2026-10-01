@@ -1,5 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HarnessHost } from "./harness-host.js";
+import { classifyHarnessExit, CRASH_MARKER } from "./crash-marker.js";
+
+let home = "";
+afterEach(() => {
+  if (home) rmSync(home, { recursive: true, force: true });
+  home = "";
+});
+const tempHome = () => (home = mkdtempSync(join(tmpdir(), "openbot-host-")));
 
 describe("HarnessHost", () => {
   it("restarts after an unexpected exit", async () => {
@@ -16,7 +27,7 @@ describe("HarnessHost", () => {
 
     const host = new HarnessHost({
       port: 4577,
-      openbotHome: "/tmp/openbot",
+      openbotHome: tempHome(),
       fork: { fork },
       harnessEntry: "/tmp/server-main.js",
       maxRestartDelayMs: 1000,
@@ -28,6 +39,14 @@ describe("HarnessHost", () => {
 
     await vi.waitFor(() => expect(fork).toHaveBeenCalledTimes(2), { timeout: 3000 });
     host.stop();
+    // D3: the crash is left for the next harness to report.
+    const marker = JSON.parse(readFileSync(join(home, "logs", CRASH_MARKER), "utf8"));
+    expect(marker).toMatchObject({ class: "nonzero_exit", code: 1 });
+  });
+
+  it("an intentional restart (exit 0) is not a crash", () => {
+    expect(classifyHarnessExit(0)).toBeUndefined();
+    expect(classifyHarnessExit(null)).toBe("signal_exit");
   });
 
   it("does not restart after an intentional stop", async () => {
@@ -43,7 +62,7 @@ describe("HarnessHost", () => {
 
     const host = new HarnessHost({
       port: 4577,
-      openbotHome: "/tmp/openbot",
+      openbotHome: tempHome(),
       fork: { fork },
       harnessEntry: "/tmp/server-main.js",
     });
@@ -53,5 +72,6 @@ describe("HarnessHost", () => {
     child.listeners.get("exit")?.(0);
     await new Promise((r) => setTimeout(r, 50));
     expect(fork).toHaveBeenCalledTimes(1);
+    expect(existsSync(join(home, "logs", CRASH_MARKER))).toBe(false);
   });
 });
