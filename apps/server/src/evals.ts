@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -61,6 +62,14 @@ export interface EvalOptions {
   log?: (line: string) => void;
 }
 
+const EVAL_CONTAINER = "openbot-desktop-eval";
+
+function removeContainer(name: string): Promise<void> {
+  return new Promise((resolve) => {
+    execFile("docker", ["rm", "-f", name], () => resolve());
+  });
+}
+
 export async function loadEvalCases(dir: string): Promise<EvalCase[]> {
   const names = (await readdir(dir)).filter((n) => n.endsWith(".json")).sort();
   const cases: EvalCase[] = [];
@@ -86,6 +95,12 @@ export async function runEvals(
     OPENBOT_FAKE_COMPUTER: options.real ? undefined : "1",
     OPENBOT_FAKE_JEV: options.jev ? undefined : "1",
     OPENBOT_MCP_REGISTRY_URL: "http://127.0.0.1:9",
+    // Real runs get their own virtual machine, never the installed app's (container, ports,
+    // sign-ins); the owner can still point them elsewhere.
+    OPENBOT_DESKTOP_CONTAINER: process.env.OPENBOT_DESKTOP_CONTAINER ?? EVAL_CONTAINER,
+    OPENBOT_DESKTOP_CONTROL_PORT: process.env.OPENBOT_DESKTOP_CONTROL_PORT ?? "8807",
+    OPENBOT_DESKTOP_VIEW_PORT: process.env.OPENBOT_DESKTOP_VIEW_PORT ?? "6100",
+    OPENBOT_DESKTOP_VOLUME: process.env.OPENBOT_DESKTOP_VOLUME ?? "openbot-browser-eval",
   });
   const port = await freePort();
   const ctx = await createCoreContext({
@@ -121,6 +136,10 @@ export async function runEvals(
   } finally {
     await app.close().catch(() => undefined);
     ctx.closeDb();
+    // The eval machine goes with the run (its browser volume stays, for the next run's sign-ins).
+    if (options.real && (process.env.OPENBOT_DESKTOP_CONTAINER ?? "") === EVAL_CONTAINER) {
+      await removeContainer(EVAL_CONTAINER);
+    }
     restoreEnv();
     await rm(home, { recursive: true, force: true }).catch(() => undefined);
   }
