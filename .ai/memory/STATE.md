@@ -1,8 +1,19 @@
 # Project state
 
-_Last updated: 2026-10-01 by Claude (v0.1.19 released and installed: backlog sweep + D-036)_
+_Last updated: 2026-10-01 by Claude (v0.1.20 released and installed: spawn gate reads the user's messages)_
 
 ## In progress
+- **v0.1.20 RELEASED and installed (2026-10-01)**: fixes an explicit "create a bot X" being
+  refused. The spawn gate's `user_requested` question reads `recent_user_messages`, which
+  `cos-service` always sent empty; it now sends the last 5 user messages from the Chief's chat.
+  Found by the owner testing v0.1.19.
+  - Verified live with `scripts/live/spawn.mjs` on a copy of the real home: `user_requested`
+    0.98, bot created.
+  - CI green; the release's macOS Intel job hit npm timeouts and passed on rerun.
+  - Hash verified; installed silently with nothing running. The app reports 0.1.20; the VM
+    runs `:v0.1.20` and the self-check passes 10/10.
+  - **Next**: the owner repeats the Investigador test (Tasks, the form in the Chief's chat,
+    the result card).
 - **v0.1.19 RELEASED and installed on the Windows dev machine (2026-10-01)**: `main-2`
   fast-forwarded into `main` (29 commits), CI green on all three OSes (desktop E2E
   included), tag `v0.1.19`, release workflow green (5 installers + SHA256SUMS + GHCR
