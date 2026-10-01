@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createCoreContext, loadConfig, type CoreContext } from "@openbot/core";
 import { FakeClock } from "@openbot/testkit";
-import { ensureChiefOfStaff } from "./chief-of-staff.js";
+import { ensureChiefOfStaff, FIRST_RUN_GREETING } from "./chief-of-staff.js";
 
 let ctx: CoreContext | undefined;
 let home: string | undefined;
@@ -46,5 +46,20 @@ describe("ensureChiefOfStaff", () => {
 
     expect(ensureChiefOfStaff(core)).toBeUndefined();
     expect(allBots(core).filter((b) => b.isChiefOfStaff)).toHaveLength(1);
+  });
+
+  it("greets the owner once, in the Chief's own thread (P2)", async () => {
+    const core = await setup();
+    core.repos.setupState.patch({ completedAt: core.clock.now().toISOString() });
+    const cos = ensureChiefOfStaff(core)!;
+    ensureChiefOfStaff(core);
+    const thread = core.repos.threads.getByBotId(cos.id)!;
+    const messages = core.repos.messages.list({ threadId: thread.id });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      author: { type: "bot", id: cos.id },
+      text: FIRST_RUN_GREETING,
+    });
+    expect(FIRST_RUN_GREETING).toContain("Chief of Staff");
   });
 });
