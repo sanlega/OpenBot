@@ -154,9 +154,10 @@ export async function createBot(
   input: Record<string, unknown>,
 ): Promise<CreatedBot> {
   // These scenarios are about the permission flow (cards, gates), so unless a test says otherwise its
-  // Bots use the ordinary write-in-workspace preset, not the Full one new Bots get by default.
+  // Bots use the ordinary write-in-workspace preset, not the Full one new Bots get by default, and
+  // work on this computer: a Bot whose computer is the VM has no host shell or files (D-033).
   const res = await api<CreatedBot>(harness, "/api/bots", {
-    body: { permissionPreset: "workspace_write", ...input },
+    body: { permissionPreset: "workspace_write", computer: "none", ...input },
   });
   if (res.status !== 201) throw new Error(`create bot failed: ${JSON.stringify(res)}`);
   return res.body;

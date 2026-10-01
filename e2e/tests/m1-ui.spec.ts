@@ -133,8 +133,9 @@ test.describe("Bot profile in the real UI", () => {
         model,
       });
 
-      await profile.getByRole("button", { name: "Archive bot" }).click();
-      await profile.getByRole("button", { name: "Archive", exact: true }).click();
+      // Deleting asks once; the confirm button has the same words.
+      await profile.getByRole("button", { name: "Delete bot" }).click();
+      await profile.getByRole("button", { name: "Delete bot" }).click();
       await expect(page.getByTestId("bot-list")).not.toContainText("Helper Pro");
       const archived = await api<{ bot: { archivedAt?: string } }>(harness, `/api/bots/${bot.id}`);
       expect(archived.body.bot.archivedAt).toBeDefined();
