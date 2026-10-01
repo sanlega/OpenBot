@@ -26,6 +26,32 @@ const KIND_TITLES: Record<Approval["kind"], string> = {
 };
 
 const SHELL_TOOLS = new Set(["Bash", "shell", "exec_command", "local_shell"]);
+const FILE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit", "apply_patch"]);
+
+/**
+ * C2: "Always allow" proposes the narrowest rule that covers what was asked: this exact command,
+ * this exact file, or (for anything else) the tool.
+ */
+export function proposedRule(
+  tool: string,
+  input: Record<string, unknown> | undefined,
+): { match: { tool: string; args?: Record<string, unknown> }; label: string } {
+  const command = typeof input?.command === "string" ? input.command : undefined;
+  if (SHELL_TOOLS.has(tool) && command) {
+    return {
+      match: { tool, args: { command } },
+      label: "Allow this exact command for this bot from now on",
+    };
+  }
+  const file = typeof input?.file_path === "string" ? input.file_path : undefined;
+  if (FILE_TOOLS.has(tool) && file) {
+    return {
+      match: { tool, args: { file_path: file } },
+      label: `Allow ${tool} on ${file} for this bot from now on`,
+    };
+  }
+  return { match: { tool }, label: `Allow ${tool} for this bot from now on` };
+}
 
 export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
   const openbot = useOptionalOpenBot();
@@ -36,8 +62,7 @@ export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
   const headline = approvalAction(approval, names.humanize);
   const reason = rawReason ? names.humanize(humanReason(rawReason)) : undefined;
   const target = approvalTarget(approval);
-  const command = typeof input?.command === "string" ? input.command : undefined;
-  const isShell = tool ? SHELL_TOOLS.has(tool) : false;
+  const rule = tool ? proposedRule(tool, input) : undefined;
 
   const alwaysAllow = async () => {
     if (!openbot || !tool) return;
@@ -45,7 +70,7 @@ export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
     try {
       await openbot.transport.post("/api/rules", {
         scope: approval.botId,
-        match: isShell && command ? { tool, args: { command } } : { tool },
+        match: rule?.match ?? { tool },
         effect: "allow",
       });
       onResolve("allow");
@@ -91,11 +116,7 @@ export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
             className="btn btn-secondary"
             disabled={busy}
             onClick={() => void alwaysAllow()}
-            title={
-              isShell
-                ? "Allow this exact command for this bot from now on"
-                : `Allow ${tool} for this bot from now on`
-            }
+            title={rule?.label}
           >
             Always allow
           </button>

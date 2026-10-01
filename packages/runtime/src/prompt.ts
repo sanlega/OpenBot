@@ -75,7 +75,10 @@ Your computer has a browser. Two ways to use it:
   browser_type({ref, text, submit}), browser_key and browser_scroll act and return the page
   after the step. Read the page before acting and use only refs from the latest page.
   browser_read returns the whole page's text: never scroll or start a task just to see
-  what a page says.
+  what a page says. A long page's full text is in the file named by \`fullText\` (search it with
+  rg). \`playbook\` is a route that worked on that site before: start from its deep link.
+  \`blocked\` names an anti-bot wall: if it does not clear in a few seconds, take another route
+  or ask the user to solve it on the Computer tab; never keep retrying a site that blocks.
 - A longer routine flow handed to Jev: computer_task({goal, startUrl, inputs}) clicks and
   types on its own (you write the text: pass it in \`inputs\` keyed by the field's label).
   Follow it with computer_status until it finishes and do what each result's \`next\` says.
