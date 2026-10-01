@@ -43,6 +43,43 @@ export function registerComputerRoutes(app: FastifyInstance, ctx: CoreContext): 
     return ctx.computerProvider.status();
   });
 
+  // A7: the machine's self-checks, its screens and its latest telemetry (Settings > Computer).
+  app.get("/api/computer/diagnose", async (request, reply) => {
+    if (!requireAuth(request, reply)) return;
+    const provider = ctx.computerProvider;
+    if (!provider?.diagnose)
+      return reply
+        .code(501)
+        .send({ error: "not_implemented", reason: "this computer has no self-checks" });
+    try {
+      return await provider.diagnose();
+    } catch (error) {
+      return reply.code(500).send({
+        error: "diagnose_failed",
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  // "Refresh the computer": a fresh machine that keeps files and sign-ins.
+  app.post("/api/computer/recreate", async (request, reply) => {
+    if (!requireAuth(request, reply)) return;
+    const provider = ctx.computerProvider;
+    if (!provider?.recreate)
+      return reply
+        .code(501)
+        .send({ error: "not_implemented", reason: "this computer cannot be refreshed" });
+    try {
+      await provider.recreate();
+    } catch (error) {
+      return reply.code(500).send({
+        error: "recreate_failed",
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return provider.status();
+  });
+
   app.get("/api/computer/image", async (request, reply) => {
     if (!requireAuth(request, reply)) return;
     if (!ctx.computerImageManager)

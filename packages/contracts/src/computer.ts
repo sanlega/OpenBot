@@ -74,6 +74,8 @@ export interface ComputerProvider {
   }): Promise<ExecResult>;
   /** Runs the machine's self-checks (the virtual machine has them; D-034). */
   diagnose?(): Promise<BoxDiagnostics>;
+  /** A fresh machine that keeps files and sign-ins (the first recovery to try; D-034). */
+  recreate?(): Promise<void>;
 }
 
 /** One self-check of the bots' machine: PASS/FAIL and what it found. */

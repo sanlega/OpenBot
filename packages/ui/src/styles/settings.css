@@ -832,3 +832,40 @@ a.pair-url:hover {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+
+/* ---------- Computer health (self-check) ---------- */
+
+.set-checklist {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.set-checklist li {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, auto) 1fr;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.set-checklist-name {
+  font-weight: 600;
+}
+
+.set-checklist-detail {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .set-checklist li {
+    grid-template-columns: auto 1fr;
+  }
+  .set-checklist-detail {
+    grid-column: 1 / -1;
+  }
+}

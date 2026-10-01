@@ -5,6 +5,7 @@ import type { EnginesResponse, SettingsPatch } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { getStoredTheme, setTheme, type ThemePreference } from "../../state/theme.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
+import { ComputerHealthCard } from "./ComputerHealthCard.js";
 import { ComputerImageCard } from "./ComputerImageCard.js";
 import { DataSettings } from "./DataSettings.js";
 import { EnginesSettings } from "./EnginesSettings.js";
@@ -283,6 +284,7 @@ export function SettingsView() {
               title="Computer"
               description="The shared virtual desktop bots use for Computer tasks."
             >
+              <ComputerHealthCard />
               <ComputerImageCard />
               <SavedLogins />
             </SettingsSection>

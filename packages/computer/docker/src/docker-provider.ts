@@ -337,6 +337,25 @@ export class DockerProvider implements ComputerProvider {
     return report;
   }
 
+  /**
+   * "Refresh the computer": a new container from the same image. Files (the workspace) and
+   * sign-ins (the browser volume) are kept; whatever was running inside is not.
+   */
+  async recreate(): Promise<void> {
+    const docker = await this.resolveDocker();
+    await ensureDockerEngine(() => docker.ping(), this.options.launcher);
+    const name = this.options.containerName ?? DEFAULT_CONTAINER;
+    const match = (await docker.listContainers({ all: true })).find((c) =>
+      c.Names.some((n) => n === `/${name}`),
+    );
+    const container = match ? docker.getContainer(match.Id) : undefined;
+    if (container?.remove) await container.remove({ force: true });
+    this.started = false;
+    this.replacePending = false;
+    this.controlToken = randomBytes(16).toString("hex");
+    await this.ensureStarted();
+  }
+
   /** Stop the container after idle (plan: stop after idle). Test hook. */
   scheduleIdleStop(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);

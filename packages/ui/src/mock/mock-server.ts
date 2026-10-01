@@ -478,6 +478,24 @@ export class MockClientApiServer {
     if (method === "GET" && path === "/api/computer/image") {
       return sendJson(res, 200, this.computerImage);
     }
+    if (method === "GET" && path === "/api/computer/diagnose") {
+      return sendJson(res, 200, {
+        ok: true,
+        checks: [
+          { name: "machine-id", ok: true, detail: "0123456789abcdef0123456789abcdef" },
+          { name: "browser", ok: true, detail: "Chromium 130.0.6723.116" },
+          { name: "internet", ok: true, detail: "status 204" },
+          { name: "clock", ok: true, detail: "0 s off" },
+          { name: "workspace", ok: true, detail: "/workspace writable" },
+          { name: "isolation", ok: true, detail: "bot commands are confined" },
+        ],
+        screens: [],
+        telemetry: [],
+      });
+    }
+    if (method === "POST" && path === "/api/computer/recreate") {
+      return sendJson(res, 200, { ready: true });
+    }
     if (method === "POST" && path === "/api/computer/image/build") {
       if (this.computerImage.state === "pulling" || this.computerImage.state === "building") {
         return sendJson(res, 409, { error: "already_in_progress" });
