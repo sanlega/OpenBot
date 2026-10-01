@@ -1,8 +1,30 @@
 # Project state
 
-_Last updated: 2026-10-01 by Claude (v0.1.18 released and installed: Grok Bot roadmap + B5)_
+_Last updated: 2026-10-01 by Claude (backlog sweep on main-2, verified by two reviewer agents; NOT released)_
 
 ## In progress
+- **Backlog sweep after v0.1.18 (2026-10-01), on `main-2`, pushed, NOT merged to `main` and
+  NOT released** (plan `.ai/memory/plans/2026-10-01-backlog-sweep.md`, every item ticked).
+  K1-K4 (refusals and loops reach every engine, "not answered" is not "refused"), L1-L3 (cancel
+  with cascade, depth limit 3, Tasks screen), M1-M3 (new-bot defaults, Reset OpenBot, Speed),
+  N1-N3 (connector tabs protected, Computer > Files, the engine's plan in the turn), P1 (Check
+  again in Settings > Engines, no restart), P2 (the Chief greets once and knows it did), R1
+  (unpaired screen), R2 (already true), R3 (reconnect E2E), Q1 (`pnpm eval` / `openbot eval`,
+  `evals/cases`), Q2 (release signs when secrets exist), Q3 (Firecracker note in
+  `.ai/resources`). **D-036** (from the functional reviewer): loopback alone is no longer the
+  owner. A request needs a loopback Host, no proxy headers and the install's key
+  (`~/.openbot/local-owner.key`); the desktop app passes the key to its window, `openbot serve`
+  prints an `/app/#key=…` link, and paired devices are unchanged. Also: built-in denies for the
+  harness port and the key file, a cross-site Origin guard, and owner-only engine routes.
+  Design pass: plain errors (`friendlyError`), AA contrast tokens, `formatDate`, and fixes to
+  Memory, Health, Tasks, Files, Speed and the dialogs.
+  Verified: unit suites, 26 browser E2E, the Electron smoke test (next to the installed app via
+  `OPENBOT_DESKTOP_USER_DATA`), `openbot eval` on the fake engine, and one real-engine case.
+  Reviewer scores: functionality 10/10, design 9.5 to 10 (see the plan's outcome).
+  **Next**: the owner decides on merging to `main` and releasing v0.1.19.
+  - **Release notes must say**: the browser UI opened by address, as with `openbot serve`, now
+    needs the printed `#key=` link. Remote browsers over Tailscale or a tunnel need pairing.
+  - **After installing**: replay `scripts/live`; they now read the key file.
 - **v0.1.18 RELEASED and installed on the Windows dev machine (2026-10-01)**: `main-2` fast-
   forwarded into `main`, CI green on all three OSes (desktop E2E included), tag `v0.1.18`,
   release workflow green (5 installers + SHA256SUMS + GHCR `:v0.1.18`), Windows installer hash
