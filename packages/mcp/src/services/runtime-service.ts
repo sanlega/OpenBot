@@ -1,6 +1,6 @@
 import type { Bot } from "@openbot/contracts";
 import { delegationsOf, type CoreContext } from "@openbot/core";
-import { classifyToolCall, type Runtime } from "@openbot/runtime";
+import { classifyToolCall, refusalMessage, type Runtime } from "@openbot/runtime";
 import type {
   ReportDoneInput,
   RequestApprovalInput,
@@ -127,7 +127,7 @@ export class McpRuntimeServiceAdapter implements McpRuntimeService {
   async permissionPrompt(
     session: SessionContext,
     input: { tool_name: string; input: unknown },
-  ): Promise<ToolResult<{ behavior: "allow" | "deny" }>> {
+  ): Promise<ToolResult<{ behavior: "allow" | "deny"; message?: string }>> {
     // OpenBot's own tools are gated inside their handlers (spawn/notify gates,
     // caps, dry-run simulation), so an engine asking about them never needs the user.
     if (input.tool_name.startsWith(OPENBOT_TOOL_PREFIX)) {
@@ -167,9 +167,18 @@ export class McpRuntimeServiceAdapter implements McpRuntimeService {
       // The engine is blocked on this tool call until the user answers the card
       // (or it expires, which denies).
       const resolution = await this.runtime.broker.waitForApproval(decision.approvalId);
-      return allowed({ behavior: resolution });
+      if (resolution === "allow") return allowed({ behavior: resolution });
+      const expired = this.ctx.repos.approvals.getById(decision.approvalId)?.status === "expired";
+      return allowed({
+        behavior: "deny" as const,
+        message: refusalMessage(expired ? "expired" : "declined"),
+      });
     }
-    return allowed({ behavior: "deny" as const });
+    // Claude Code shows `message` to the model with the refusal (C2).
+    return allowed({
+      behavior: "deny" as const,
+      message: refusalMessage("blocked", decision.reason),
+    });
   }
 
   private resolveBot(ref: string): Bot | undefined {

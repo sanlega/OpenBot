@@ -10,7 +10,7 @@ import { FakeClock } from "@openbot/testkit";
 import { beforeEach, describe, expect, it } from "vitest";
 import { InMemoryApprovalStore } from "./approval-store.js";
 import type { BrokerRequest } from "./broker-types.js";
-import { APPROVAL_TIMEOUT_MS, PermissionBroker } from "./broker.js";
+import { APPROVAL_TIMEOUT_MS, PermissionBroker, refusalMessage } from "./broker.js";
 import { InMemoryEventSink } from "./event-sink.js";
 import { InMemoryRuleStore } from "./rules.js";
 
@@ -348,5 +348,36 @@ describe("PermissionBroker approvals (30 min timeout, resolve)", () => {
     });
     broker.resolveApproval(decision.approvalId as string, "allow");
     expect(await broker.waitForApproval(decision.approvalId as string)).toBe("allow");
+  });
+});
+
+describe("PermissionBroker refusals that close detours (C2)", () => {
+  it("the same action retried while its card is open joins that card", async () => {
+    const { broker, approvalStore } = setup(new StubRiskDecisionService(3, 0.6));
+    const first = await broker.evaluate(req({ action: "risky_tool" }), {
+      mode: "live",
+      preset: "workspace_write",
+    });
+    const again = await broker.evaluate(req({ action: "risky_tool" }), {
+      mode: "live",
+      preset: "workspace_write",
+    });
+    expect(again.approvalId).toBe(first.approvalId);
+    expect(approvalStore.listPending()).toHaveLength(1);
+    // Once answered, a new attempt asks again.
+    broker.resolveApproval(first.approvalId as string, "deny");
+    const later = await broker.evaluate(req({ action: "risky_tool" }), {
+      mode: "live",
+      preset: "workspace_write",
+    });
+    expect(later.approvalId).not.toBe(first.approvalId);
+  });
+
+  it("the refusal text forbids reaching the same result another way", () => {
+    const text = refusalMessage("blocked", "built-in deny: reads the vault");
+    expect(text).toContain("(built-in deny: reads the vault)");
+    expect(text).toMatch(/do not reach the same result another way/i);
+    expect(text).toMatch(/pastebin/);
+    expect(refusalMessage("declined")).toMatch(/^The user declined/);
   });
 });

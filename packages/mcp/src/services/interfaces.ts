@@ -34,7 +34,7 @@ export interface McpRuntimeService {
   permissionPrompt(
     session: SessionContext,
     input: { tool_name: string; input: unknown },
-  ): Promise<ToolResult<{ behavior: "allow" | "deny" }>>;
+  ): Promise<ToolResult<{ behavior: "allow" | "deny"; message?: string }>>;
 }
 
 export interface McpCosService {

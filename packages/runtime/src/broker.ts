@@ -17,6 +17,26 @@ import {
   type RuleStore,
 } from "./rules.js";
 
+/**
+ * C2: what the model reads when an action is refused. A refusal must close the detours too: the
+ * cheapest defence against a prompt-injected exfiltration is telling the model, in so many words,
+ * that the same crossing by another route is the same refusal.
+ */
+export function refusalMessage(kind: "blocked" | "declined" | "expired", reason?: string): string {
+  const head =
+    kind === "blocked"
+      ? `OpenBot blocked this action${reason ? ` (${reason})` : ""}.`
+      : kind === "declined"
+        ? "The user declined this action."
+        : "Nobody answered the approval card in time, so this action was not run.";
+  return (
+    `${head} Do not retry the same action, and do not reach the same result another way: not ` +
+    "through another tool, the browser, a script, a different command, or a public file host, " +
+    "pastebin, transfer link or similar courier. That is the same refused action. Carry on with " +
+    "the rest of the task, or say in your reply what you could not do and why."
+  );
+}
+
 /** Plan §5 WS2: "Approvals time out after 30 min." */
 export const APPROVAL_TIMEOUT_MS = 30 * 60_000;
 
@@ -180,6 +200,13 @@ export class PermissionBroker {
   }
 
   private ask(req: BrokerRequest, reason: string): BrokerDecision {
+    // The same action retried while its card is still open joins that card instead of stacking
+    // another one in front of the user.
+    const detail = `${req.detail}\n\n${reason}`;
+    const open = this.opts.approvalStore
+      .listPending()
+      .find((a) => a.botId === req.botId && a.summary === req.summary && a.detail === detail);
+    if (open) return { outcome: "ask", reason, approvalId: open.id };
     const expiresAt = new Date(
       this.opts.clock.now().getTime() + (this.opts.approvalTimeoutMs ?? APPROVAL_TIMEOUT_MS),
     ).toISOString();
@@ -188,7 +215,7 @@ export class PermissionBroker {
       botId: req.botId,
       chainId: req.chainId,
       summary: req.summary,
-      detail: `${req.detail}\n\n${reason}`,
+      detail,
       expiresAt,
     });
     this.opts.events.emit({

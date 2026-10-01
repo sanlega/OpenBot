@@ -125,7 +125,7 @@ describe("McpRuntimeServiceAdapter.permissionPrompt", () => {
       const approvalId = await pendingApprovalId(runtime);
       runtime.broker.resolveApproval(approvalId, resolution);
 
-      expect(await result).toEqual({ allowed: true, behavior: resolution });
+      expect(await result).toMatchObject({ allowed: true, behavior: resolution });
     },
   );
 
@@ -200,7 +200,7 @@ describe("McpRuntimeServiceAdapter.permissionPrompt", () => {
       summary: "GitHub: issue_write",
     });
     runtime.broker.resolveApproval(approvalId, "deny");
-    expect(await write).toEqual({ allowed: true, behavior: "deny" });
+    expect(await write).toMatchObject({ allowed: true, behavior: "deny" });
   });
 });
 
@@ -228,9 +228,10 @@ describe("McpRuntimeServiceAdapter.permissionPrompt uses the Bot as it is now", 
       { tool_name: "mcp__playwright__browser_navigate", input: { url: "https://example.com" } },
       { tool_name: "Bash", input: { command: "start https://example.com" } },
     ]) {
-      expect(await service.permissionPrompt(session, call)).toEqual({
+      expect(await service.permissionPrompt(session, call)).toMatchObject({
         allowed: true,
         behavior: "deny",
+        message: expect.stringMatching(/same result another way/),
       });
     }
     expect(runtime.approvals.listPending()).toHaveLength(0);
@@ -245,9 +246,10 @@ describe("McpRuntimeServiceAdapter.permissionPrompt uses the Bot as it is now", 
       { tool_name: "Write", input: { file_path: "notes.txt", content: "x" } },
       { tool_name: "apply_patch", input: { file_path: "notes.txt" } },
     ]) {
-      expect(await service.permissionPrompt(session, call)).toEqual({
+      expect(await service.permissionPrompt(session, call)).toMatchObject({
         allowed: true,
         behavior: "deny",
+        message: expect.stringMatching(/same result another way/),
       });
     }
     expect(runtime.approvals.listPending()).toHaveLength(0);
