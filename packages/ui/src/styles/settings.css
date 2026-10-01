@@ -706,7 +706,8 @@ a.pair-url:hover {
   .set-row[data-stacked="true"] .set-row-control,
   .set-row-control:has(.segmented),
   .set-row-control:has(.set-hours),
-  .set-row-control:has(.set-select) {
+  .set-row-control:has(.set-select),
+  .set-row-control:has(.set-inline-actions .btn) {
     max-width: none;
     flex-basis: 100%;
   }

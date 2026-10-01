@@ -28,6 +28,10 @@ describe("the local owner key (D-036)", () => {
     expect((await get()).statusCode).toBe(401);
     expect((await get({ [LOCAL_OWNER_KEY_HEADER]: "cd".repeat(32) })).statusCode).toBe(401);
     expect((await get({ [LOCAL_OWNER_KEY_HEADER]: KEY.slice(1) })).statusCode).toBe(401);
+    // 64 characters but more bytes (non-ASCII): refused, not a server error.
+    expect(
+      (await get({ [LOCAL_OWNER_KEY_HEADER]: "é".repeat(32) + "a".repeat(32) })).statusCode,
+    ).toBe(401);
     expect((await get({ [LOCAL_OWNER_KEY_HEADER]: KEY })).statusCode).toBe(200);
     // The event stream can't set headers in a browser: `?key=` works the same.
     expect((await get({}, `/api/bots?key=${KEY}`)).statusCode).toBe(200);

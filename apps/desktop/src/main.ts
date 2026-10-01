@@ -22,6 +22,7 @@ import {
   defaultOpenbotHome,
   harnessBaseUrl,
   harnessWsUrl,
+  isHarnessUrl,
   readLocalOwnerKey,
   withLocalOwnerKey,
 } from "./config.js";
@@ -87,7 +88,7 @@ function createBrowserWindow(): BrowserWindow {
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, url) => {
-    if (url.startsWith(harnessBaseUrl(port)) || url.startsWith("file:")) return;
+    if (isHarnessUrl(url, port) || url.startsWith("file:")) return;
     event.preventDefault();
     openExternalLink(url);
   });
@@ -192,7 +193,7 @@ function setupIpc(): void {
   ipcMain.handle("openbot:harness-status", async () => fetchHarnessStatus(harnessBaseUrl(port)));
   // D-036: only this app's own window gets the owner key (synchronously, before it calls the API).
   ipcMain.on("openbot:local-owner-key", (event) => {
-    const fromOwnWindow = event.senderFrame?.url.startsWith(harnessBaseUrl(port)) ?? false;
+    const fromOwnWindow = isHarnessUrl(event.senderFrame?.url, port);
     event.returnValue = fromOwnWindow ? (readLocalOwnerKey(openbotHome) ?? "") : "";
   });
 

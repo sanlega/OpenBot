@@ -259,7 +259,7 @@ function RenameForm({ bot, onDone }: { bot: Bot; onDone: () => void }) {
       onDone();
     } catch (err) {
       saving.current = false;
-      setError(friendlyError(err, "Could not rename"));
+      setError(friendlyError(err, "Couldn't rename."));
     }
   };
   return (
@@ -303,7 +303,7 @@ function NewBotForm({ onDone }: { onDone: () => void }) {
       selectThread(res.thread.id);
       onDone();
     } catch (err) {
-      setError(friendlyError(err, "Could not create the bot"));
+      setError(friendlyError(err, "Couldn't create the bot."));
       setBusy(false);
     }
   };

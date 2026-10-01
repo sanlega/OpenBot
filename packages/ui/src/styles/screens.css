@@ -1436,7 +1436,16 @@
 }
 
 .memory-error {
-  color: var(--danger);
+  color: var(--danger-text);
+}
+
+.memory-deleted {
+  grid-template-columns: 1fr;
+  border-style: dashed;
+}
+
+.memory-deleted .memory-status {
+  margin-top: 0;
 }
 
 @media (max-width: 600px) {

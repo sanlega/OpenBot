@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DigestContent } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
+import { formatDate } from "../common/time.js";
 
 interface DigestMessageProps {
   postedAt?: string;
@@ -48,7 +49,7 @@ export function DigestMessage({ postedAt, text }: DigestMessageProps) {
       <header className="digest-header">
         <span className="badge badge-cos">Daily digest</span>
         <time dateTime={postedAt ?? digest.postedAt}>
-          {new Date(postedAt ?? digest.postedAt).toLocaleString()}
+          {formatDate(postedAt ?? digest.postedAt, { dateStyle: "medium", timeStyle: "short" })}
         </time>
       </header>
       {digest.sections.map((section) => (

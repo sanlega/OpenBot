@@ -42,7 +42,7 @@ export function ComputerImageCard() {
         });
       })
       .catch((err) => {
-        if (!cancelled) setError(friendlyError(err, "Could not load the desktop image status."));
+        if (!cancelled) setError(friendlyError(err, "Couldn't load the desktop image status."));
       });
     return () => {
       cancelled = true;
@@ -67,7 +67,7 @@ export function ComputerImageCard() {
       });
       setStatus(next);
     } catch (err) {
-      setError(friendlyError(err, "Could not start the download."));
+      setError(friendlyError(err, "Couldn't start the download."));
     }
   };
 
@@ -78,7 +78,7 @@ export function ComputerImageCard() {
       await transport.post("/api/computer/image/reset", { removeImage: true });
       setStatus((prev) => (prev ? { ...prev, state: "missing" } : prev));
     } catch (err) {
-      setError(friendlyError(err, "Could not reset the desktop image."));
+      setError(friendlyError(err, "Couldn't reset the desktop image."));
     }
   };
 

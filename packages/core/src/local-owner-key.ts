@@ -30,6 +30,10 @@ export async function loadOrCreateLocalOwnerKey(openbotHome: string): Promise<st
 
 /** Constant-time comparison of a presented key with this install's. */
 export function localOwnerKeyMatches(expected: string, presented: unknown): boolean {
-  if (typeof presented !== "string" || presented.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(presented), Buffer.from(expected));
+  if (typeof presented !== "string") return false;
+  const given = Buffer.from(presented, "utf8");
+  const wanted = Buffer.from(expected, "utf8");
+  // Byte lengths, not characters: a 64-character header with non-ASCII would make
+  // timingSafeEqual throw.
+  return given.length === wanted.length && timingSafeEqual(given, wanted);
 }

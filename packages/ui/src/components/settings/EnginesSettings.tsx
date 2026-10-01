@@ -257,7 +257,7 @@ function CustomEngines({
       await onRefresh?.();
       return true;
     } catch (err) {
-      setError(friendlyError(err, "Could not save"));
+      setError(friendlyError(err, "Couldn't save."));
       return false;
     } finally {
       setBusy(false);

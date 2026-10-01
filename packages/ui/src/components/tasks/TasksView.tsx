@@ -32,7 +32,7 @@ const STATE_LABEL: Record<Delegation["state"], { label: string; tone: string }> 
  * open task can be cancelled, with the tasks its worker handed on (L1).
  */
 export function TasksView({ onOpenThread }: { onOpenThread?: (threadId: string) => void } = {}) {
-  const { transport, bots, state } = useOpenBot();
+  const { transport, bots, state, threads } = useOpenBot();
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
   const [open, setOpen] = useState<string | null>(null);
@@ -71,6 +71,8 @@ export function TasksView({ onOpenThread }: { onOpenThread?: (threadId: string) 
   useEffect(() => () => clearTimeout(pending.current), []);
 
   const botById = useMemo(() => new Map(bots.map((b) => [b.id, b])), [bots]);
+  // "Answer it" only leads somewhere the app can open.
+  const knownThreads = useMemo(() => new Set((threads ?? []).map((t) => t.id)), [threads]);
   const visible = (tasks ?? []).filter((t) => filter === "all" || OPEN.has(t.state));
   const openCount = (tasks ?? []).filter((t) => OPEN.has(t.state)).length;
 
@@ -232,8 +234,8 @@ export function TasksView({ onOpenThread }: { onOpenThread?: (threadId: string) 
                             </>
                           ) : null}
                         </dl>
-                        {onOpenThread && t.ownerThreadId ? (
-                          <div className="set-inline-actions">
+                        <div className="set-inline-actions task-actions">
+                          {onOpenThread && knownThreads.has(t.ownerThreadId) ? (
                             <button
                               type="button"
                               className={`btn btn-sm ${t.state === "input_required" ? "btn-primary" : "btn-secondary"}`}
@@ -241,43 +243,43 @@ export function TasksView({ onOpenThread }: { onOpenThread?: (threadId: string) 
                             >
                               {t.state === "input_required" ? "Answer it" : "Open conversation"}
                             </button>
-                          </div>
-                        ) : null}
-                        {OPEN.has(t.state) ? (
-                          <div className="set-inline-actions">
-                            {confirming === t.id ? (
-                              <>
-                                <span className="task-cancel-note">
-                                  Stops {t.assigneeName ?? "the bot"} and any task it handed on.
-                                  They won't be resumed.
-                                </span>
+                          ) : null}
+                          {OPEN.has(t.state) ? (
+                            <>
+                              {confirming === t.id ? (
+                                <>
+                                  <span className="task-cancel-note">
+                                    Stops {t.assigneeName ?? "the bot"} and any task it handed on.
+                                    They won't be resumed.
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setConfirming(null)}
+                                  >
+                                    Keep it
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger btn-sm"
+                                    disabled={cancelling === t.id}
+                                    onClick={() => void cancel(t.id)}
+                                  >
+                                    {cancelling === t.id ? "Cancelling…" : "Cancel task"}
+                                  </button>
+                                </>
+                              ) : (
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-sm"
-                                  onClick={() => setConfirming(null)}
+                                  onClick={() => setConfirming(t.id)}
                                 >
-                                  Keep it
+                                  Cancel…
                                 </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-danger btn-sm"
-                                  disabled={cancelling === t.id}
-                                  onClick={() => void cancel(t.id)}
-                                >
-                                  {cancelling === t.id ? "Cancelling…" : "Cancel task"}
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => setConfirming(t.id)}
-                              >
-                                Cancel…
-                              </button>
-                            )}
-                          </div>
-                        ) : null}
+                              )}
+                            </>
+                          ) : null}
+                        </div>
                       </div>
                     ) : null}
                   </li>

@@ -19,6 +19,7 @@ export class HttpTransport implements Transport {
   readonly baseUrl: string;
   private readonly deviceToken?: string;
   private readonly localKeySource?: string | (() => string | undefined);
+  private knownLocalKey?: string;
   /** Aborted by close(): a closed transport's requests never settle (nothing is left to answer). */
   private readonly lifetime = new AbortController();
 
@@ -31,8 +32,12 @@ export class HttpTransport implements Transport {
 
   /** Read on every request: the desktop app's key can appear after the page loaded. */
   private localKey(): string | undefined {
+    if (this.knownLocalKey) return this.knownLocalKey;
     const source = this.localKeySource;
-    return typeof source === "function" ? source() : source;
+    const key = typeof source === "function" ? source() : source;
+    // Asked again only until there is one (the desktop app reads a file per ask).
+    if (key) this.knownLocalKey = key;
+    return key;
   }
 
   private headers(extra?: HeadersInit): HeadersInit {

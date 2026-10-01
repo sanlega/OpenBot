@@ -29,7 +29,7 @@ export function BotConnectorsCard({ bot }: { bot: Bot }) {
       setError(null);
     } catch (err) {
       setEnabled(enabled);
-      setError(friendlyError(err, "Could not update connectors"));
+      setError(friendlyError(err, "Couldn't update connectors."));
     }
   };
 

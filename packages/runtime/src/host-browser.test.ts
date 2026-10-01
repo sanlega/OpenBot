@@ -217,3 +217,13 @@ describe("a Bot's command never reaches OpenBot's own API", () => {
     ).toBeUndefined();
   });
 });
+
+describe("the local owner key file is off limits", () => {
+  it("can't be read with a command, wherever the path starts", () => {
+    expect(
+      builtinDenyReason(
+        req({ computerAccess: "docker+local", args: { command: "cat ~/.o*/local-owner.key" } }),
+      ),
+    ).toMatch(/database or vault/);
+  });
+});

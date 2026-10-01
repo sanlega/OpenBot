@@ -79,7 +79,7 @@ export function ApprovalCard({ approval, onResolve }: ApprovalCardProps) {
       });
       onResolve("allow");
     } catch (err) {
-      setError(friendlyError(err, "Could not save the rule"));
+      setError(friendlyError(err, "Couldn't save the rule."));
       setBusy(false);
     }
   };

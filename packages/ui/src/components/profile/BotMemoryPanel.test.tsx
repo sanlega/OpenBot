@@ -47,7 +47,7 @@ describe("BotMemoryPanel (C5)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Delete: Reports go in a table" }));
     expect(screen.queryByText("Reports go in a table")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Undo/ }));
     expect(screen.getByText("Reports go in a table")).toBeTruthy();
     expect(del).not.toHaveBeenCalled();
 

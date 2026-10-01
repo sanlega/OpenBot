@@ -6,7 +6,7 @@ import { TasksView, type TaskRow } from "./TasksView.js";
 
 let transport: Transport;
 vi.mock("../../state/context.js", () => ({
-  useOpenBot: () => ({ transport, bots: [], state: { lastSeq: 0 } }),
+  useOpenBot: () => ({ transport, bots: [], threads: [{ id: "thr_1" }], state: { lastSeq: 0 } }),
 }));
 afterEach(cleanup);
 

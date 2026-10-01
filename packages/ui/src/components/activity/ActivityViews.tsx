@@ -96,6 +96,32 @@ export function ActivityView({ onOpenThread }: ActivityViewProps = {}) {
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [limit, setLimit] = useState(PAGE);
+  // Tasks waiting on an answer, so a worker's card says which task it is for (L3).
+  const [waitingTasks, setWaitingTasks] = useState<
+    Array<{ id: string; title: string; assigneeBotId: string }>
+  >([]);
+  const waitingCount =
+    pendingApprovals.length +
+    [...state.inputs.values()].filter((i) => i.status === "pending").length;
+  useEffect(() => {
+    if (waitingCount === 0) {
+      setWaitingTasks([]);
+      return;
+    }
+    let cancelled = false;
+    transport
+      .get<{ tasks?: Array<{ id: string; title: string; assigneeBotId: string; state: string }> }>(
+        "/api/tasks",
+      )
+      .then((r) => {
+        if (!cancelled)
+          setWaitingTasks((r.tasks ?? []).filter((t) => t.state === "input_required"));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [transport, waitingCount]);
   const names = useMemo(() => botNamer(bots), [bots]);
 
   useRefetchOnEvents(() => {
@@ -136,6 +162,8 @@ export function ActivityView({ onOpenThread }: ActivityViewProps = {}) {
   });
 
   const waitingInputs = [...state.inputs.values()].filter((i) => i.status === "pending");
+  const taskOf = (botId: string | undefined) =>
+    botId ? waitingTasks.find((t) => t.assigneeBotId === botId) : undefined;
   const waiting: Array<{ key: string; ts: string; approval?: Approval; input?: InputRequest }> = [
     ...pendingApprovals.map((a) => ({ key: a.id, ts: a.createdAt, approval: a })),
     ...waitingInputs.map((i) => ({ key: i.id, ts: i.createdAt, input: i })),
@@ -191,6 +219,11 @@ export function ActivityView({ onOpenThread }: ActivityViewProps = {}) {
                             <code className="inline-code">{target}</code>
                           ) : null}
                         </div>
+                        {taskOf(botId) ? (
+                          <div className="row-sub inbox-task">
+                            For the task “{taskOf(botId)!.title}”
+                          </div>
+                        ) : null}
                       </div>
                       <time className="row-meta" dateTime={ts} title={fullTime(ts)}>
                         {relativeTime(ts)}

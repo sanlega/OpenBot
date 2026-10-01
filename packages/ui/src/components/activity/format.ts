@@ -1,5 +1,6 @@
 import type { Approval, Bot } from "@openbot/contracts";
 import { shortTime } from "../common/time.js";
+import { formatDate } from "../common/time.js";
 
 /** "Just now", "5m ago", "3h ago", then the short date/time used elsewhere. */
 export function relativeTime(iso: string, now = new Date()): string {
@@ -17,7 +18,7 @@ export function fullTime(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
     ? ""
-    : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    : formatDate(d, { dateStyle: "medium", timeStyle: "short" });
 }
 
 /** Markdown → one line of plain text, for previews and titles. */

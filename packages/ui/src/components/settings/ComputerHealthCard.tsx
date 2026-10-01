@@ -81,7 +81,7 @@ export function ComputerHealthCard() {
     try {
       setReport(await transport.get<BoxDiagnostics>("/api/computer/diagnose"));
     } catch (err) {
-      setError(friendlyError(err, "Could not run the self-check."));
+      setError(friendlyError(err, "Couldn't run the self-check."));
     } finally {
       setRunning(false);
     }
@@ -95,13 +95,16 @@ export function ComputerHealthCard() {
       await transport.post("/api/computer/recreate", {});
       await check();
     } catch (err) {
-      setError(friendlyError(err, "Could not refresh the computer."));
+      setError(friendlyError(err, "Couldn't refresh the computer."));
     } finally {
       setRefreshing(false);
     }
   };
 
-  const failed = report?.checks.filter((c) => !c.ok) ?? [];
+  // A crashing or stopped part of a screen is a problem too: the count matches the red rows.
+  const brokenParts =
+    report?.screens.flatMap((x) => x.components.filter((c) => c.crashloop || !c.up)) ?? [];
+  const problems = (report?.checks.filter((c) => !c.ok).length ?? 0) + brokenParts.length;
   const screenOwner = (display: number) => {
     const botId = report?.screens.find((x) => x.display === display)?.botId;
     return bots.find((b) => b.id === botId)?.name ?? "A bot";
@@ -116,8 +119,8 @@ export function ComputerHealthCard() {
       >
         <div className="set-inline-actions">
           {report ? (
-            <StatusPill tone={report.ok ? "success" : "danger"}>
-              {report.ok ? "All good" : `${failed.length} problem${failed.length === 1 ? "" : "s"}`}
+            <StatusPill tone={problems === 0 ? "success" : "danger"}>
+              {problems === 0 ? "All good" : `${problems} problem${problems === 1 ? "" : "s"}`}
             </StatusPill>
           ) : null}
           <button
@@ -130,53 +133,56 @@ export function ComputerHealthCard() {
           </button>
         </div>
       </SettingRow>
-      {report ? (
-        <ul className="set-checklist" aria-label="Self-check results" aria-live="polite">
-          {report.checks.map((c) => (
-            <li key={c.name} data-ok={c.ok ? "true" : "false"}>
-              <StatusPill tone={c.ok ? "success" : "danger"}>{c.ok ? "Pass" : "Fail"}</StatusPill>
-              <span className="set-checklist-name">{checkLabel(c.name, screenOwner)}</span>
-              <span className="set-checklist-detail">
-                {checkSummary(c.name, c.ok)}
-                {c.detail ? (
-                  <details className="set-checklist-tech">
-                    <summary>Technical details</summary>
-                    <code>{c.detail}</code>
-                  </details>
-                ) : null}
-              </span>
-            </li>
-          ))}
-          {report.screens.map((s) =>
-            s.components
-              .filter((c) => c.restartsInWindow > 0 || !c.up || c.crashloop)
-              .map((c) => (
-                <li
-                  key={`${s.display}-${c.name}`}
-                  data-ok={c.up && !c.crashloop ? "true" : "false"}
-                >
-                  <StatusPill tone={c.crashloop ? "danger" : c.up ? "warning" : "danger"}>
-                    {c.crashloop ? "Crashing" : c.up ? "Restarted" : "Down"}
-                  </StatusPill>
-                  <span className="set-checklist-name">
-                    {screenOwner(s.display)}'s {COMPONENT_LABEL[c.name] ?? c.name}
-                  </span>
-                  <span className="set-checklist-detail">
-                    {c.restartsInWindow === 0
-                      ? "Stopped"
-                      : `Restarted ${c.restartsInWindow} time${c.restartsInWindow === 1 ? "" : "s"} in the last 10 minutes`}
-                    {c.downReason ? (
-                      <details className="set-checklist-tech">
-                        <summary>Technical details</summary>
-                        <code>{c.downReason}</code>
-                      </details>
-                    ) : null}
-                  </span>
-                </li>
-              )),
-          )}
-        </ul>
-      ) : null}
+      {/* Always rendered, so screen readers announce the results when they arrive. */}
+      <div aria-live="polite">
+        {report ? (
+          <ul className="set-checklist" aria-label="Self-check results">
+            {report.checks.map((c) => (
+              <li key={c.name} data-ok={c.ok ? "true" : "false"}>
+                <StatusPill tone={c.ok ? "success" : "danger"}>{c.ok ? "Pass" : "Fail"}</StatusPill>
+                <span className="set-checklist-name">{checkLabel(c.name, screenOwner)}</span>
+                <span className="set-checklist-detail">
+                  {checkSummary(c.name, c.ok)}
+                  {!c.ok && c.detail ? (
+                    <details className="set-checklist-tech">
+                      <summary>Technical details</summary>
+                      <code>{c.detail}</code>
+                    </details>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+            {report.screens.map((s) =>
+              s.components
+                .filter((c) => c.restartsInWindow > 0 || !c.up || c.crashloop)
+                .map((c) => (
+                  <li
+                    key={`${s.display}-${c.name}`}
+                    data-ok={c.up && !c.crashloop ? "true" : "false"}
+                  >
+                    <StatusPill tone={c.crashloop ? "danger" : c.up ? "warning" : "danger"}>
+                      {c.crashloop ? "Crashing" : c.up ? "Restarted" : "Down"}
+                    </StatusPill>
+                    <span className="set-checklist-name">
+                      {screenOwner(s.display)}'s {COMPONENT_LABEL[c.name] ?? c.name}
+                    </span>
+                    <span className="set-checklist-detail">
+                      {c.restartsInWindow === 0
+                        ? "Stopped"
+                        : `Restarted ${c.restartsInWindow} time${c.restartsInWindow === 1 ? "" : "s"} in the last 10 minutes`}
+                      {c.downReason ? (
+                        <details className="set-checklist-tech">
+                          <summary>Technical details</summary>
+                          <code>{c.downReason}</code>
+                        </details>
+                      ) : null}
+                    </span>
+                  </li>
+                )),
+            )}
+          </ul>
+        ) : null}
+      </div>
       <SettingRow
         label="Refresh the computer"
         help="Starts a new virtual machine. Files and sign-ins are kept; anything running in it stops."

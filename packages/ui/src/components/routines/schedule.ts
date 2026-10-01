@@ -1,4 +1,5 @@
 import type { RoutineTrigger } from "@openbot/contracts";
+import { formatDate } from "../common/time.js";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_ALIASES: Record<string, number> = {
@@ -105,7 +106,7 @@ export function describeTrigger(trigger: RoutineTrigger): string {
   if (trigger.type === "schedule") {
     if (trigger.at) {
       const d = new Date(trigger.at);
-      return `Once, ${d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`;
+      return `Once, ${formatDate(d, { dateStyle: "medium", timeStyle: "short" })}`;
     }
     if (!trigger.cron) return "No schedule";
     return describeCron(trigger.cron) ?? `Cron: ${trigger.cron}`;

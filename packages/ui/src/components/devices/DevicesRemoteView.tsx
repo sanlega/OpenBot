@@ -16,6 +16,7 @@ import {
 } from "../settings/SettingsPrimitives.js";
 import { PairingQr } from "./PairingQr.js";
 import { friendlyError } from "../../api/errors.js";
+import { formatDate } from "../common/time.js";
 
 type Device = DevicesResponse["devices"][number] & { revokedAt?: string };
 
@@ -174,7 +175,7 @@ function DeviceRow({ device, onRevoked }: { device: Device; onRevoked: () => voi
     }
   };
 
-  const paired = new Date(device.pairedAt).toLocaleDateString([], {
+  const paired = formatDate(device.pairedAt, {
     month: "short",
     day: "numeric",
   });

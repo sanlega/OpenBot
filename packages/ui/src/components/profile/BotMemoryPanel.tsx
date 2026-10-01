@@ -9,6 +9,10 @@ const TIER_LABEL: Record<Memory["tier"], string> = {
   note: "Notes",
 };
 
+/** The save shortcut's modifier, as this computer names it. */
+const MOD_KEY =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+
 /** How long a deleted fact can be brought back before it is really deleted. */
 export const UNDO_MS = 5000;
 
@@ -65,30 +69,36 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
     [commitDelete],
   );
 
+  // The fact leaves the list (and the server) once its Undo is gone.
+  const finishDelete = (memory: Memory) => {
+    setMemories((list) => list?.filter((m) => m.id !== memory.id) ?? null);
+    void commitDelete(memory);
+  };
+
   const remove = (memory: Memory) => {
     setError(null);
     const previous = pending.current;
     if (previous) {
       clearTimeout(previous.timer);
-      void commitDelete(previous.memory);
+      finishDelete(previous.memory);
     }
-    setMemories((list) => list?.filter((m) => m.id !== memory.id) ?? null);
+    // It stays where it was, as "Deleted · Undo", so the way back is right where you looked.
     setDeleted(memory);
     const timer = setTimeout(() => {
       pending.current = null;
       setDeleted(null);
-      void commitDelete(memory);
+      finishDelete(memory);
     }, UNDO_MS);
     pending.current = { memory, timer };
   };
 
-  const undo = () => {
+  const undo = (id: string) => {
     const p = pending.current;
     if (!p) return;
     clearTimeout(p.timer);
     pending.current = null;
     setDeleted(null);
-    setMemories((list) => (list ? [...list, p.memory] : list));
+    setTimeout(() => editButtons.current.get(id)?.focus(), 0);
   };
 
   const closeEditor = (id: string) => {
@@ -136,7 +146,7 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
         </div>
       ) : memories === null ? (
         <p className="field-help">Loading…</p>
-      ) : memories.length === 0 && !deleted ? (
+      ) : memories.length === 0 ? (
         <p className="field-help">Nothing yet. Bots save facts as they learn them.</p>
       ) : null}
       {(["profile", "log", "note"] as const).map((tier) => {
@@ -147,8 +157,24 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
             <h4>{TIER_LABEL[tier]}</h4>
             <ul className="memory-list">
               {items.map((m) => (
-                <li key={m.id} className="memory-item">
-                  {editing?.id === m.id ? (
+                <li
+                  key={m.id}
+                  className={deleted?.id === m.id ? "memory-item memory-deleted" : "memory-item"}
+                >
+                  {deleted?.id === m.id ? (
+                    <span className="memory-status" role="status">
+                      <span>Deleted.</span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        autoFocus
+                        aria-label={`Undo deleting: ${m.content}`}
+                        onClick={() => undo(m.id)}
+                      >
+                        Undo
+                      </button>
+                    </span>
+                  ) : editing?.id === m.id ? (
                     <form
                       className="memory-edit"
                       onSubmit={(e) => {
@@ -173,7 +199,7 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
                         }}
                       />
                       <div className="memory-edit-actions">
-                        <span className="memory-hint">Ctrl+Enter to save, Esc to cancel</span>
+                        <span className="memory-hint">{MOD_KEY}+Enter to save, Esc to cancel</span>
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
@@ -228,16 +254,6 @@ export function BotMemoryPanel({ botId }: { botId: string }) {
           </section>
         );
       })}
-      <div aria-live="polite">
-        {deleted ? (
-          <div className="memory-status">
-            <span>Deleted.</span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={undo}>
-              Undo
-            </button>
-          </div>
-        ) : null}
-      </div>
       {error ? (
         <div className="memory-status memory-error" role="alert">
           {error}

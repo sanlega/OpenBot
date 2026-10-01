@@ -40,8 +40,8 @@
   /* Status colours used as small text (pills, inline status): AA (4.5:1) on the surfaces. */
   --success-text: var(--success);
   --warning-text: var(--warning);
-  --danger-text: var(--danger);
-  --accent-text: var(--accent);
+  --danger-text: #ff7d84;
+  --accent-text: #8ea3ff;
   --cos: #b89cff;
   --focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -108,8 +108,8 @@
     --warning-soft: rgba(183, 121, 31, 0.12);
     --danger: #d63b45;
     --danger-soft: rgba(214, 59, 69, 0.1);
-    --success-text: #157a4b;
-    --warning-text: #8a5a12;
+    --success-text: #126b41;
+    --warning-text: #7a4f0f;
     --danger-text: #b3242f;
     --accent-text: #2f4de8;
     --cos: #7c4dff;
@@ -143,8 +143,8 @@
   --warning-soft: rgba(183, 121, 31, 0.12);
   --danger: #d63b45;
   --danger-soft: rgba(214, 59, 69, 0.1);
-  --success-text: #157a4b;
-  --warning-text: #8a5a12;
+  --success-text: #126b41;
+  --warning-text: #7a4f0f;
   --danger-text: #b3242f;
   --accent-text: #2f4de8;
   --cos: #7c4dff;

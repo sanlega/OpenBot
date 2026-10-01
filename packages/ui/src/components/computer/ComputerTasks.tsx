@@ -73,7 +73,7 @@ export function ComputerTasks({ botId }: { botId: string }) {
       );
       setTasks([...res.tasks].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")));
     } catch (err) {
-      setError(friendlyError(err, "Could not load computer tasks"));
+      setError(friendlyError(err, "Couldn't load computer tasks."));
       setTasks([]);
     }
   }, [transport, botId]);

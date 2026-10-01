@@ -26,7 +26,7 @@ const CREDENTIAL_PATH_RE =
  * (`.openbot\\workspace`) it would match one backslash and lose the workspace exception.
  */
 const DB_OR_VAULT_RE =
-  /(openbot\.db|vault\.bin|vault\.key|\.openbot[/\\]+(?![/\\])(?!(?:workspace|uploads)(?:[/\\"'\s]|$))|(?:^|[\s"'/\\])sessions[/\\]+[^\s"'/\\]*\.token)/i;
+  /(openbot\.db|vault\.bin|vault\.key|local-owner\.key|\.openbot[/\\]+(?![/\\])(?!(?:workspace|uploads)(?:[/\\"'\s]|$))|(?:^|[\s"'/\\])sessions[/\\]+[^\s"'/\\]*\.token)/i;
 const SUDO_RE = /\bsudo\b/i;
 const RM_RF_RE = /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\b/i;
 

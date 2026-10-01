@@ -23,6 +23,19 @@ export function readLocalOwnerKey(openbotHome: string): string | undefined {
   }
 }
 
+/**
+ * A page of this app's harness: the exact origin, never a prefix (127.0.0.1:45771 or
+ * 127.0.0.1:4577@elsewhere would pass a startsWith check).
+ */
+export function isHarnessUrl(url: string | undefined, port = DEFAULT_PORT): boolean {
+  if (!url) return false;
+  try {
+    return new URL(url).origin === new URL(harnessBaseUrl(port)).origin;
+  } catch {
+    return false;
+  }
+}
+
 /** The event stream's address with the owner key (a WebSocket can't carry it in a header). */
 export function withLocalOwnerKey(url: string, key: string | undefined): string {
   return key ? `${url}${url.includes("?") ? "&" : "?"}key=${key}` : url;

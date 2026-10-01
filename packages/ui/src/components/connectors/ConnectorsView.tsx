@@ -41,7 +41,7 @@ export function ConnectorsView() {
       setError(null);
     } catch (err) {
       setCurated([]);
-      setError(friendlyError(err, "Could not load connectors"));
+      setError(friendlyError(err, "Couldn't load connectors."));
     }
   }, [transport]);
 
@@ -113,7 +113,7 @@ export function ConnectorsView() {
       setConfirmRemove(null);
       await load();
     } catch (err) {
-      setError(friendlyError(err, "Could not disconnect"));
+      setError(friendlyError(err, "Couldn't disconnect."));
     }
   };
 

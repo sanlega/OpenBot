@@ -281,7 +281,7 @@ export function SettingsView() {
       setDraft(editableOf(res.settings));
       setToast("Settings saved");
     } catch (err) {
-      setSaveError(friendlyError(err, "Could not save settings"));
+      setSaveError(friendlyError(err, "Couldn't save settings."));
     } finally {
       setSaving(false);
     }
@@ -641,7 +641,7 @@ function JevKeyCard({
         setError(res.result.reason ?? "That key didn't work. Check it and try again.");
       }
     } catch (err) {
-      setError(friendlyError(err, "Could not check the key"));
+      setError(friendlyError(err, "Couldn't check the key."));
     } finally {
       setBusy(false);
     }

@@ -3,6 +3,7 @@ import { ArrowRightLeft, BellOff, Info } from "lucide-react";
 import { BotAvatar } from "../common/BotAvatar.js";
 import { clockTime } from "../common/time.js";
 import { MessageText } from "./MessageText.js";
+import { formatDate } from "../common/time.js";
 
 interface MessageItemProps {
   message: Message;
@@ -30,7 +31,10 @@ export function MessageItem({ message, bot, bots, grouped, onQuickReply }: Messa
         <div className="msg-bubble">
           <MessageText text={message.text} markdown={false} />
         </div>
-        <span className="msg-time" title={new Date(message.createdAt).toLocaleString()}>
+        <span
+          className="msg-time"
+          title={formatDate(message.createdAt, { dateStyle: "medium", timeStyle: "short" })}
+        >
           {time}
         </span>
       </div>
@@ -87,7 +91,10 @@ export function MessageItem({ message, bot, bots, grouped, onQuickReply }: Messa
         {grouped ? null : (
           <div className="msg-header">
             <span className="msg-author">{author}</span>
-            <span className="msg-time" title={new Date(message.createdAt).toLocaleString()}>
+            <span
+              className="msg-time"
+              title={formatDate(message.createdAt, { dateStyle: "medium", timeStyle: "short" })}
+            >
               {time}
             </span>
           </div>

@@ -508,7 +508,7 @@ function RoutineDetail({
                     await transport.delete(`/api/routines/${routine.id}`);
                     await onDeleted();
                   } catch (err) {
-                    setNotice({ tone: "error", text: friendlyError(err, "Could not delete it.") });
+                    setNotice({ tone: "error", text: friendlyError(err, "Couldn't delete it.") });
                     setBusy(null);
                   }
                 })()
@@ -817,7 +817,7 @@ function NewRoutineForm({
       });
       await onCreated(res.routine);
     } catch (err) {
-      setError(friendlyError(err, "Could not create the routine."));
+      setError(friendlyError(err, "Couldn't create the routine."));
       setBusy(false);
     }
   };
