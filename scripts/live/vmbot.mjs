@@ -74,7 +74,9 @@ const check = (name, ok, detail = "") => {
 const created = await api("/api/bots", {
   name: `VM test ${Date.now() % 10000}`,
   description: "A test bot for the virtual machine live check. Be brief.",
-  routing: MODEL ? { mode: "pinned", engine: ENGINE, model: MODEL } : { mode: "pinned", engine: ENGINE },
+  routing: MODEL
+    ? { mode: "pinned", engine: ENGINE, model: MODEL }
+    : { mode: "pinned", engine: ENGINE },
   permissionPreset: "full",
   computer: "docker",
 });
@@ -92,7 +94,8 @@ ws.addEventListener("message", (m) => {
   const e = frame.event;
   events.push(e);
   const p = e.payload ?? {};
-  if (e.type.startsWith("turn.")) log(e.type, (p.error ?? p.errorMessage ?? "").toString().slice(0, 300));
+  if (e.type.startsWith("turn."))
+    log(e.type, (p.error ?? p.errorMessage ?? "").toString().slice(0, 300));
   else if (e.type === "tool.started")
     log("  tool", p.toolName, JSON.stringify(p.input ?? {}).slice(0, 160));
   else if (e.type === "message.created") {
@@ -105,7 +108,11 @@ ws.addEventListener("message", (m) => {
 async function turn(text) {
   const from = events.length;
   ws.send(
-    JSON.stringify({ type: "command", command: "message.send", payload: { botId: bot.id, threadId, text } }),
+    JSON.stringify({
+      type: "command",
+      command: "message.send",
+      payload: { botId: bot.id, threadId, text },
+    }),
   );
   log("USER ->", text);
   const started = Date.now();
@@ -114,13 +121,17 @@ async function turn(text) {
   while (Date.now() - started < TURN_MIN * 60_000) {
     await new Promise((r) => setTimeout(r, 1500));
     const approvals = (await api("/api/approvals")).body.approvals ?? [];
-    for (const a of approvals.filter((x) => x.status === "pending" && x.botId === bot.id && !answered.has(x.id))) {
+    for (const a of approvals.filter(
+      (x) => x.status === "pending" && x.botId === bot.id && !answered.has(x.id),
+    )) {
       answered.add(a.id);
       cards += 1;
       log("CARD (denied)", a.summary ?? a.action ?? "", (a.detail ?? "").slice(0, 200));
       await api(`/api/approvals/${a.id}/resolve`, { resolution: "deny" });
     }
-    const end = events.slice(from).find((e) => ["turn.completed", "turn.failed", "turn.interrupted"].includes(e.type));
+    const end = events
+      .slice(from)
+      .find((e) => ["turn.completed", "turn.failed", "turn.interrupted"].includes(e.type));
     if (end) {
       await new Promise((r) => setTimeout(r, 500));
       const mine = events.slice(from);
@@ -135,28 +146,38 @@ async function turn(text) {
   return { end: "timeout", events: events.slice(from), cards, reply: "" };
 }
 
-const toolsOf = (t) => t.events.filter((e) => e.type === "tool.started").map((e) => e.payload?.toolName ?? "");
+const toolsOf = (t) =>
+  t.events.filter((e) => e.type === "tool.started").map((e) => e.payload?.toolName ?? "");
 /** The engine's own shell or file tools, on the user's computer. */
-const HOST = /^(Bash|PowerShell|Read|Write|Edit|MultiEdit|Glob|Grep|LS|shell|exec_command|local_shell|apply_patch|commandExecution|fileChange)$/;
+const HOST =
+  /^(Bash|PowerShell|Read|Write|Edit|MultiEdit|Glob|Grep|LS|shell|exec_command|local_shell|apply_patch|commandExecution|fileChange)$/;
 
 const marker = `hi-from-${ENGINE}-${Date.now() % 100000}`;
 const t1 = await turn(
   `Run uname -sm and tell me the result. Then create the file vmcheck/${ENGINE}.txt in the workspace containing exactly: ${marker}`,
 );
 check("turn 1 completed", t1.end === "turn.completed", t1.error ?? "");
-check("used vm_shell or vm_write_file", toolsOf(t1).some((n) => /vm_(shell|write_file)/.test(n)), toolsOf(t1).join(","));
+check(
+  "used vm_shell or vm_write_file",
+  toolsOf(t1).some((n) => /vm_(shell|write_file)/.test(n)),
+  toolsOf(t1).join(","),
+);
 check("no host shell or file tool", !toolsOf(t1).some((n) => HOST.test(n)), toolsOf(t1).join(","));
 check("answered with the VM's system (Linux)", /linux/i.test(t1.reply), t1.reply.slice(0, 120));
 const file = join(HOME, "workspace", "vmcheck", `${ENGINE}.txt`);
-check("the file is in the host workspace", existsSync(file) && readFileSync(file, "utf8").includes(marker));
+check(
+  "the file is in the host workspace",
+  existsSync(file) && readFileSync(file, "utf8").includes(marker),
+);
 
 const hostFile = process.platform === "win32" ? "C:\\Windows\\win.ini" : "/etc/hosts";
 const t2 = await turn(`What does the first line of ${hostFile} on my computer say? Quote it.`);
 check("turn 2 completed", t2.end === "turn.completed", t2.error ?? "");
 check("no host shell or file tool", !toolsOf(t2).some((n) => HOST.test(n)), toolsOf(t2).join(","));
+// The model may know a file's usual content; what matters is that nothing read it and it says so.
 check(
-  "did not read the host file",
-  !(process.platform === "win32" ? /\[fonts\]|for 16-bit app support/i : /127\.0\.0\.1\s+localhost/).test(t2.reply),
+  "said it cannot read the user's computer",
+  /can.?t|cannot|no access|not able|unable|only (run|work)/i.test(t2.reply),
   t2.reply.slice(0, 160),
 );
 
@@ -164,7 +185,11 @@ const t3 = await turn(
   "Open https://the-internet.herokuapp.com/tables in your browser and tell me the email of the person whose last name is Smith in the first table.",
 );
 check("turn 3 completed", t3.end === "turn.completed", t3.error ?? "");
-check("used the browser tools", toolsOf(t3).some((n) => /browser_read|computer_task/.test(n)), toolsOf(t3).join(","));
+check(
+  "used the browser tools",
+  toolsOf(t3).some((n) => /browser_read|computer_task/.test(n)),
+  toolsOf(t3).join(","),
+);
 check("answered from the page", /jsmith@gmail\.com/i.test(t3.reply), t3.reply.slice(0, 160));
 
 const failed = results.filter((r) => !r.ok);

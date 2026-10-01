@@ -153,6 +153,40 @@ describe("Mailbox basic turn lifecycle (against @openbot/engines-fake)", () => {
     ).toBe(true);
   });
 
+  it("the reply is the text after the last tool call, not the narration between tools", async () => {
+    const tool = (hooks: TurnHooks, id: string) => {
+      hooks.emit({ type: "tool_started", toolName: "browser_click", input: {}, toolUseId: id });
+      hooks.emit({ type: "tool_completed", toolUseId: id, output: {}, isError: false });
+    };
+    const runtime = buildRuntime(
+      new ScriptedEngineDriver(async (hooks) => {
+        hooks.emit({ type: "session_started", sessionId: "sess_1" });
+        hooks.emit({ type: "text_delta", text: "Let me open the page." });
+        tool(hooks, "t1");
+        hooks.emit({ type: "text_delta", text: "Signed in. Now clicking Connect." });
+        tool(hooks, "t2");
+        hooks.emit({ type: "text_delta", text: "Done: Julia Bravo has a pending invitation." });
+        return turnResult();
+      }),
+    );
+    expect((await runtime.mailbox.submit(makeInput(runtime))).text).toBe(
+      "Done: Julia Bravo has a pending invitation.",
+    );
+
+    // Ending on a tool call: the last thing it said is the answer.
+    const endsOnTool = buildRuntime(
+      new ScriptedEngineDriver(async (hooks) => {
+        hooks.emit({ type: "session_started", sessionId: "sess_1" });
+        hooks.emit({ type: "text_delta", text: "Report written to report.md." });
+        tool(hooks, "t1");
+        return turnResult();
+      }),
+    );
+    expect((await endsOnTool.mailbox.submit(makeInput(endsOnTool))).text).toBe(
+      "Report written to report.md.",
+    );
+  });
+
   it("a turn that ends with neither tool calls nor text still gets a visible reply", async () => {
     const runtime = buildRuntime(
       new ScriptedEngineDriver(async (hooks) => {

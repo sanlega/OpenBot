@@ -46,6 +46,16 @@ const server = spawn(process.execPath, [join(REPO, "apps/server/dist/main.js"), 
     OPENBOT_HOME: HOME,
     PORT: String(PORT),
     OPENBOT_MCP_REGISTRY_URL: "http://127.0.0.1:9",
+    // Its own desktop container next to an installed app's (set VM_IMAGE to the image to test).
+    ...(process.env.VM_IMAGE
+      ? {
+          OPENBOT_DESKTOP_IMAGE: process.env.VM_IMAGE,
+          OPENBOT_DESKTOP_CONTAINER: "openbot-desktop-livecheck",
+          OPENBOT_DESKTOP_CONTROL_PORT: "8797",
+          OPENBOT_DESKTOP_VIEW_PORT: "6090",
+          OPENBOT_DESKTOP_VOLUME: "openbot-browser-livecheck",
+        }
+      : {}),
   },
   stdio: ["ignore", "pipe", "pipe"],
 });

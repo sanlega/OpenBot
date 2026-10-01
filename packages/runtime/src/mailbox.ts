@@ -223,13 +223,20 @@ export class Mailbox {
       }
     }
 
+    // The reply is what the engine wrote after its last tool call; what it said between tools
+    // ("Let me open the page…") is narration, shown live in the turn's activity, not the answer.
     let replyText = "";
+    let lastSaid = "";
     let toolCallCount = 0;
     const pendingToolEffects: Promise<void>[] = [];
 
     const hooks: TurnHooks = {
       emit: (e: EngineEvent) => {
-        if (e.type === "tool_started") toolCallCount += 1;
+        if (e.type === "tool_started") {
+          toolCallCount += 1;
+          if (replyText.trim()) lastSaid = replyText;
+          replyText = "";
+        }
         this.handleEngineEvent({ botId, input, turnId, event: e, pendingToolEffects }, (t) => {
           replyText += t;
         });
@@ -271,6 +278,8 @@ export class Mailbox {
     }
     // A reply of exactly NO_REPLY means "nothing to add" (a harness update the user already saw).
     let synthesized = false;
+    // Ended on a tool call with nothing after it: its last words are the answer.
+    if (status === "completed" && !replyText.trim()) replyText = lastSaid;
     if (status === "completed") replyText = replyText.trim();
     if (status === "completed" && NO_REPLY_RE.test(replyText)) replyText = "";
     // Local models often open their answer with blank lines (or reply with nothing else).
