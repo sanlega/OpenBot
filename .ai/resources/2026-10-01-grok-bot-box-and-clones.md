@@ -53,3 +53,12 @@ the READMEs/docs of the clones. Only structure and behaviour are recorded here.
 - Candidates for later: a visible todo list per turn, a box self-check (`box-doctor`-style) in
   Settings > Computer with Update vs Reset, first-run greeting for new bots, delegated Full
   access, per-bot memory file, a terminal/file panel on the Computer tab.
+
+## The box's /workspace (a second dump, same owner)
+- Large tool results are spilled to `/workspace/agent-tools/<uuid>.txt` and read from there
+  instead of filling the context.
+- Bots browsed with Playwright MCP inside the box (`/workspace/.playwright-mcp`: accessibility
+  snapshots with refs as `.yml`, plus screenshots), i.e. an engine-driven read-then-act browser,
+  the approach of OpenBot's `browser_*` tools.
+- Coding work was delegated to cloud coding agents (`cloud-agent-transcripts/bc-*`), issue by
+  issue, with role prompts (foreman / builder / designer) kept in the workspace.

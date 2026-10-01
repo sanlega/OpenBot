@@ -58,7 +58,7 @@ async function setup() {
       ctx.repos.messages.create(message);
     }
     ctx.repos.engineSessions.upsert({
-      id: newId("session"),
+      id: `ses_${name}`,
       botId,
       engine: "claude",
       sessionId: `sess-${name}`,
