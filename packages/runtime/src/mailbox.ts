@@ -27,7 +27,8 @@ import {
   StallWatch,
   type StallWatchOptions,
 } from "./stall-watch.js";
-import { ToolLoopDetector, type LoopDetection } from "./tool-loop-detector.js";
+import { loopReminder, ToolLoopDetector, type LoopDetection } from "./tool-loop-detector.js";
+import { refusalMessage } from "./broker.js";
 
 export interface EnqueueTurnInput extends TurnInput {
   engine: EngineId;
@@ -84,8 +85,13 @@ export interface MailboxOptions {
   sessions?: SessionStore;
   /** C8: how long a quiet engine may run before it is stopped and resumed once; `false` turns it off. */
   stallWatch?: Partial<StallWatchOptions> | false;
-  /** C1: records loops in the engine's own tool calls (shadow mode: nothing is stopped). */
+  /** C1: records loops in the engine's own tool calls. */
   onToolLoop?: (detection: LoopDetection) => void;
+  /**
+   * K3: what happens on a loop in the engine's own tools: `on` (default) steers a loop reminder
+   * into the turn, `shadow` only records it, `off` does nothing.
+   */
+  nativeToolLoops?: "off" | "shadow" | "on";
 }
 
 const NO_REPLY_RE = /^NO_REPLY[.!]?$/i;
@@ -113,9 +119,24 @@ export class Mailbox {
   private readonly nativeLoops: ToolLoopDetector | undefined;
 
   constructor(private readonly opts: MailboxOptions) {
-    this.nativeLoops = opts.onToolLoop
-      ? new ToolLoopDetector("shadow", opts.onToolLoop)
-      : undefined;
+    const mode = opts.nativeToolLoops ?? "on";
+    this.nativeLoops = mode === "off" ? undefined : new ToolLoopDetector(mode, opts.onToolLoop);
+  }
+
+  /**
+   * Says something to the engine inside its running turn (K1, K3). Only engines that take text
+   * mid-turn (Claude, Codex); for the others, a queued prompt would start a new exchange.
+   */
+  private nudge(botId: string, engine: EngineId, text: string): void {
+    const driver = this.opts.drivers[engine];
+    const live =
+      driver?.describe?.().capabilities.steer ??
+      (engine === "claude" || engine === "codex" || engine === "fake");
+    if (!live) return;
+    const active = this.active.get(botId);
+    if (!active) return;
+    // After the engine has its answer to the current call, not in the middle of it.
+    setTimeout(() => void active.handle.steer(text).catch(() => undefined), 0);
   }
 
   submit(input: EnqueueTurnInput): Promise<TurnOutcome> {
@@ -362,6 +383,7 @@ export class Mailbox {
       };
     }
     await this.finish(input, turnId);
+    this.opts.broker.abandonFor(botId, input.chainId);
     await Promise.all(pendingToolEffects);
     mark({ completedAt: nowIso() });
 
@@ -512,7 +534,10 @@ export class Mailbox {
         if (call && this.nativeLoops && !call.name.startsWith("mcp__openbot")) {
           const output =
             typeof event.output === "string" ? event.output : JSON.stringify(event.output ?? null);
-          this.nativeLoops.observe(turnId, call.name, call.input, output, botId);
+          const action = this.nativeLoops.observe(turnId, call.name, call.input, output, botId);
+          if (action !== "none") {
+            this.nudge(botId, input.engine, loopReminder(action, action === "retry_once" ? 2 : 3));
+          }
         }
         return;
       }
@@ -626,7 +651,18 @@ export class Mailbox {
     if (decision.outcome === "allow") return "allow";
     // A simulated action is recorded (`action.simulated`) and must not run: the
     // engine executes whatever it is allowed to, so refuse it.
-    if (decision.outcome === "deny" || decision.outcome === "simulate") return "deny";
-    return this.opts.broker.waitForApproval(decision.approvalId as string);
+    if (decision.outcome === "simulate") return "deny";
+    if (decision.outcome === "deny") {
+      // K1: the engine's own refusal says nothing about detours; tell it in words.
+      this.nudge(botId, input.engine, refusalMessage("blocked", decision.reason));
+      return "deny";
+    }
+    const answer = await this.opts.broker.waitForApproval(decision.approvalId as string);
+    if (answer === "deny" && this.active.has(botId)) {
+      const card = this.opts.broker.approval?.(decision.approvalId as string);
+      const expired = card?.resolution === "expired";
+      this.nudge(botId, input.engine, refusalMessage(expired ? "expired" : "declined"));
+    }
+    return answer;
   }
 }

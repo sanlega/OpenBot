@@ -19,6 +19,25 @@ export function harnessReminders(ctx: CoreContext, bot: Bot): string[] {
         "turns, checking what is already done, unless the user asked you to stop.",
     );
   }
+  // K2: a card nobody answered because the turn ended is not a refusal.
+  const since = last?.createdAt ?? "";
+  const unanswered = ctx.repos.approvals
+    .list({})
+    .filter(
+      (a) =>
+        a.botId === bot.id &&
+        a.resolution === "expired" &&
+        a.kind !== "bot_request" &&
+        a.createdAt >= since,
+    )
+    .slice(0, 3);
+  if (unanswered.length > 0) {
+    reminders.push(
+      `Not answered (your turn ended first), so NOT refused by the user: ${unanswered
+        .map((a) => `"${a.summary}"`)
+        .join(", ")}. If it is still needed, run it again and it will ask again.`,
+    );
+  }
   const cards = ctx.repos.approvals
     .list({ status: "pending" })
     .filter((a) => a.botId === bot.id)

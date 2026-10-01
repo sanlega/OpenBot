@@ -377,10 +377,16 @@ describe("connectors in turns", () => {
     await settle();
 
     expect(claude.decisions.get("mcp__filesystem__read_text_file")).toBe("allow");
-    expect(claude.decisions.get("mcp__filesystem__write_file")).toBe("pending");
-    const pending = runtime.approvals.listPending();
-    expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({ kind: "connector_action", botId: bot.id });
+    // This scripted engine ends its turn without waiting for the card: the card was raised, and
+    // closed as expired (not denied by the user) when the turn ended (K2).
+    expect(claude.decisions.get("mcp__filesystem__write_file")).toBe("deny");
+    const events = runtime.events as InMemoryEventSink;
+    const asked = events.byType("approval.requested");
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.payload).toMatchObject({ kind: "connector_action" });
+    const id = String(asked[0]!.payload.approvalId);
+    expect(runtime.approvals.get(id)).toMatchObject({ resolution: "expired" });
+    expect(runtime.approvals.listPending()).toHaveLength(0);
   });
 });
 

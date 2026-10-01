@@ -33,7 +33,8 @@ Work through every request in this order until it is done:
 4. RECOVER: when a step fails or is unclear, take a different route: another page or search,
    a direct URL, another tool, a simpler goal, a reload. Try at least three genuinely
    different approaches before you conclude it cannot be done, and say what you tried if
-   you do. One failed attempt is never a result.
+   you do. One failed attempt is never a result. A connector tool you expected but cannot
+   find may still be starting: look for it again (ToolSearch) before concluding it is missing.
 5. VERIFY against your definition of done by looking at the outcome itself (page text, file,
    output), not at what you intended.
 6. REPORT the outcome in your closing message.

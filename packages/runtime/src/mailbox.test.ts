@@ -788,3 +788,96 @@ describe("Mailbox per-turn usage", () => {
     });
   });
 });
+
+describe("Mailbox says refusals and loops to the engine (K1, K2, K3)", () => {
+  /** A driver whose turns run a script and record what was steered into them. */
+  class SteerableDriver implements EngineDriver {
+    readonly id = "fake";
+    readonly steered: string[] = [];
+    constructor(private readonly script: (hooks: TurnHooks) => Promise<TurnResult>) {}
+    async detect(): Promise<EngineStatus> {
+      return { installed: true, login: { ok: true }, apiKey: { ok: true } };
+    }
+    async validateKey() {
+      return { ok: true };
+    }
+    async listModels(): Promise<ModelInfo[]> {
+      return [];
+    }
+    startTurn(_input: TurnInput, hooks: TurnHooks): TurnHandle {
+      return {
+        steer: async (text) => {
+          this.steered.push(text);
+        },
+        interrupt: async () => {},
+        done: this.script(hooks),
+      };
+    }
+    async dispose() {}
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 5));
+
+  it("K1: a refused action is followed by the anti-detour text in the running turn", async () => {
+    const driver = new SteerableDriver(async (hooks) => {
+      await hooks.requestApproval({
+        toolName: "Bash",
+        input: { command: "cat ~/.ssh/id_rsa" },
+        toolUseId: "t1",
+      });
+      await tick();
+      return turnResult();
+    });
+    const runtime = buildRuntime(driver);
+    await runtime.mailbox.submit(makeInput(runtime));
+    expect(driver.steered.join("\n")).toMatch(/do not reach the same result another way/i);
+  });
+
+  it("K3: a repeated identical shell call gets a loop reminder", async () => {
+    const driver = new SteerableDriver(async (hooks) => {
+      for (let i = 0; i < 3; i++) {
+        hooks.emit({
+          type: "tool_started",
+          toolName: "Bash",
+          input: { command: "ls" },
+          toolUseId: `t${i}`,
+        });
+        hooks.emit({ type: "tool_completed", toolUseId: `t${i}`, output: "a.txt", isError: false });
+        await tick();
+      }
+      return turnResult();
+    });
+    const runtime = buildRuntime(driver);
+    await runtime.mailbox.submit(makeInput(runtime));
+    expect(driver.steered.some((t) => /same result/.test(t))).toBe(true);
+    expect(driver.steered.some((t) => /going in circles/.test(t))).toBe(true);
+  });
+
+  it("K2: a card left open when the turn ends closes as expired, not denied", async () => {
+    let release: () => void = () => undefined;
+    const driver = new SteerableDriver(async (hooks) => {
+      void hooks.requestApproval({ toolName: "risky_tool", input: {}, toolUseId: "t1" });
+      await new Promise<void>((r) => (release = r));
+      return turnResult({ isError: true, errorMessage: "interrupted" });
+    });
+    const runtime = createRuntime({
+      decisions: new StubAskDecisions(),
+      drivers: { fake: driver },
+      clock: new FakeClock(0),
+      events: new InMemoryEventSink(),
+    });
+    const done = runtime.mailbox.submit(makeInput(runtime, { permission: "workspace_write" }));
+    await tick();
+    const pending = runtime.approvals.listPending();
+    expect(pending).toHaveLength(1);
+    release();
+    await done;
+    expect(runtime.approvals.get(pending[0]!.id)?.resolution).toBe("expired");
+  });
+});
+
+/** Jev that is never sure: every unknown action asks the user. */
+class StubAskDecisions extends FakeDecisionService {
+  override band() {
+    return "human" as const;
+  }
+}

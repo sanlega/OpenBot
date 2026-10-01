@@ -261,6 +261,31 @@ export class PermissionBroker {
     });
   }
 
+  /**
+   * K2: the turn waiting on these cards ended (stopped, stalled, interrupted): nobody can act on
+   * the answer any more. The cards close as expired — not denied — and the next turn is told so.
+   */
+  abandonFor(botId: string, chainId: string): string[] {
+    const abandoned: string[] = [];
+    for (const [approvalId, pending] of [...this.pending]) {
+      const approval = this.opts.approvalStore.get(approvalId);
+      if (!approval || approval.botId !== botId || approval.chainId !== chainId) continue;
+      if (approval.kind === "bot_request" || approval.status !== "pending") continue;
+      this.opts.clock.clearTimeout(pending.timer);
+      this.pending.delete(approvalId);
+      this.opts.approvalStore.resolve(approvalId, "expired");
+      this.emitResolved(approvalId, "expired");
+      pending.resolve("deny");
+      abandoned.push(approvalId);
+    }
+    return abandoned;
+  }
+
+  /** A card as stored (resolution included). */
+  approval(approvalId: string) {
+    return this.opts.approvalStore.get(approvalId);
+  }
+
   /** A user (or CoS) resolving a pending approval card. */
   resolveApproval(approvalId: string, resolution: "allow" | "deny"): void {
     this.opts.approvalStore.resolve(approvalId, resolution);

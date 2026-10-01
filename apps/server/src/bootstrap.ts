@@ -478,6 +478,18 @@ async function closeOrphanedTurns(ctx: CoreContext): Promise<void> {
       payload: { errorMessage: "OpenBot restarted before this turn finished." },
     });
   }
+  // K2: cards a turn was waiting on when OpenBot stopped can no longer run anything: they close
+  // as expired (the next turn is told the user did not refuse them). A bot's own request_approval
+  // survives: its answer is delivered as a new message.
+  for (const approval of ctx.repos.approvals.list({ status: "pending" })) {
+    if (approval.kind === "bot_request" || approval.kind === "routine_live") continue;
+    ctx.repos.approvals.resolve(approval.id, "expired");
+    await ctx.eventBus.publish({
+      type: "approval.resolved",
+      botId: approval.botId,
+      payload: { approvalId: approval.id, resolution: "expired" },
+    });
+  }
 }
 
 /**
