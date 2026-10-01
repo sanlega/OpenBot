@@ -54,6 +54,8 @@
   flex-direction: column;
   gap: var(--space-8);
   min-width: 0;
+  /* Room below the last section, so jumping to it from the side nav brings it to the top. */
+  padding-bottom: 45vh;
 }
 
 .set-content-single {
