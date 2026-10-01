@@ -17,6 +17,8 @@ export type JevTarget = { kind: "fake" } | { kind: "http"; url: string; apiKey: 
 export interface HarnessOptions {
   /** Reuse an `OPENBOT_HOME` (e.g. to restart over the same data). */
   home?: string;
+  /** Reuse a port (a restart the open UI should reconnect to). */
+  port?: number;
   jev?: JevTarget;
 }
 
@@ -50,7 +52,7 @@ function freePort(): Promise<number> {
 
 export async function startTestHarness(options: HarnessOptions = {}): Promise<TestHarness> {
   const home = options.home ?? (await mkdtemp(join(tmpdir(), "openbot-e2e-")));
-  const port = await freePort();
+  const port = options.port ?? (await freePort());
   const jev = options.jev ?? { kind: "fake" };
   const env: NodeJS.ProcessEnv = {
     ...process.env,
