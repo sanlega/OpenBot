@@ -81,12 +81,12 @@ async function evaluate(args: string[]): Promise<void> {
   });
   const failed = results.filter((r) => !r.passed);
   const ran = results.filter((r) => !r.skipped).length;
-  if (json) console.log(JSON.stringify(results, null, 2));
-  else
-    console.log(`
-${ran - failed.length}/${ran} passed, ${results.length - ran} skipped.`);
-  // Explicit: nothing left running (engine children, timers) may keep the command alive.
-  process.exit(failed.length > 0 ? 1 : 0);
+  const out = json
+    ? `${JSON.stringify(results, null, 2)}\n`
+    : `\n${ran - failed.length}/${ran} passed, ${results.length - ran} skipped.\n`;
+  // Explicit exit (nothing left running may keep the command alive), once the output has
+  // reached a pipe in full.
+  process.stdout.write(out, () => process.exit(failed.length > 0 ? 1 : 0));
 }
 
 async function doctor(): Promise<void> {
