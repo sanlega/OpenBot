@@ -4,6 +4,7 @@ import type {
   ActResult,
   ComputerProvider,
   ComputerStatus,
+  BoxDiagnostics,
   ExecResult,
   Observation,
   Screen,
@@ -17,7 +18,7 @@ export interface DockerEngine {
   getContainer(id: string): {
     inspect(): Promise<{
       State: { Running: boolean };
-      Config?: { Env?: string[]; Image?: string };
+      Config?: { Env?: string[]; Image?: string; Labels?: Record<string, string> | null };
       HostConfig?: { Binds?: string[] | null };
     }>;
     start(): Promise<void>;
@@ -44,6 +45,53 @@ export interface DockerProviderOptions {
   launcher?: DockerLauncherDeps;
   /** Gets the image when it is not on this computer yet (an update, or the first use). */
   ensureImage?: () => Promise<void>;
+  /** The owner's time zone (IANA name), applied inside the machine; this computer's by default. */
+  timeZone?: string;
+  /** Memory cap of the machine in MiB (`OPENBOT_DESKTOP_MEMORY_MB`, 6 GiB by default). */
+  memoryMb?: number;
+  now?: () => number;
+}
+
+/**
+ * How the box is built (bump when `boxHostConfig` changes): a container made with older settings
+ * is replaced, like one made from another image.
+ */
+export const BOX_LAYOUT = "2";
+
+/**
+ * The container's limits and privileges (A2/A3): Docker's init reaps Chromium's orphans; only
+ * the capabilities the root-side services need (changing user for bots' commands, the loopback
+ * firewall, package installs); no privilege gain through setuid binaries; memory, process and
+ * shared-memory limits so one runaway command cannot take the desktop down.
+ */
+export function boxHostConfig(memoryMb: number) {
+  return {
+    Init: true,
+    CapDrop: ["ALL"],
+    CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "SETUID", "SETGID", "KILL", "NET_ADMIN"],
+    SecurityOpt: ["no-new-privileges"],
+    Memory: memoryMb * 1024 * 1024,
+    MemorySwap: memoryMb * 1024 * 1024,
+    PidsLimit: 4096,
+    ShmSize: 1024 * 1024 * 1024,
+    RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
+  };
+}
+
+/** No box work for this long, and nothing in flight: an update may replace the container (D2). */
+export const BOX_QUIET_MS = 5 * 60_000;
+
+function defaultTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
+function defaultMemoryMb(): number {
+  const value = Number(process.env.OPENBOT_DESKTOP_MEMORY_MB);
+  return Number.isInteger(value) && value >= 1024 ? value : 6144;
 }
 
 /** D-020: distributed via GHCR; local `docker build` is a dev-checkout-only fallback (see `image-manager.ts`). */
@@ -86,9 +134,42 @@ export class DockerProvider implements ComputerProvider {
   private readonly screens = new ScreenManager(4);
   private controlToken: string;
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
+  private client: ControlDaemonClient | undefined;
+  /** Box requests in flight and the time of the last one (D2: never replace a busy box). */
+  private inFlight = 0;
+  private lastActivity = 0;
+  /** The running container is outdated; it is replaced once the box is quiet. */
+  private replacePending = false;
 
   constructor(private readonly options: DockerProviderOptions = {}) {
     this.controlToken = randomBytes(16).toString("hex");
+  }
+
+  private now(): number {
+    return (this.options.now ?? Date.now)();
+  }
+
+  /** Whether bots are using the box (a command, a screen step, or one in the last minutes). */
+  isBusy(): boolean {
+    return this.inFlight > 0 || this.now() - this.lastActivity < BOX_QUIET_MS;
+  }
+
+  /** Counts a box request as activity for as long as it runs. */
+  async track<T>(run: () => Promise<T>): Promise<T> {
+    this.inFlight += 1;
+    this.lastActivity = this.now();
+    try {
+      return await run();
+    } finally {
+      this.inFlight -= 1;
+      this.lastActivity = this.now();
+      this.scheduleIdleStop();
+    }
+  }
+
+  /** Whether a newer container is waiting for the box to be quiet. */
+  hasPendingReplacement(): boolean {
+    return this.replacePending;
   }
 
   async status(): Promise<ComputerStatus> {
@@ -114,7 +195,9 @@ export class DockerProvider implements ComputerProvider {
 
   private async startOnce(): Promise<void> {
     if (this.started) {
-      if ((await this.status()).ready) {
+      // An outdated container waits for a quiet moment; then the next start replaces it.
+      const replaceNow = this.replacePending && !this.isBusy();
+      if (!replaceNow && (await this.status()).ready) {
         this.scheduleIdleStop();
         return;
       }
@@ -145,8 +228,14 @@ export class DockerProvider implements ComputerProvider {
           (b) => !binds.includes(b),
         ) ||
         // Made from another image (an older OpenBot): the daemon inside must match this app.
-        (info.Config?.Image !== undefined && info.Config.Image !== image);
-      if (outdated && container.remove) {
+        (info.Config?.Image !== undefined && info.Config.Image !== image) ||
+        // Made with older limits and privileges (before the box was hardened).
+        (info.Config?.Labels !== undefined && info.Config.Labels?.["openbot.box"] !== BOX_LAYOUT);
+      // D2: a box in use is not pulled from under a running command or task; it is replaced
+      // once nothing has used it for a few minutes.
+      const deferred = outdated && info.State.Running && this.isBusy();
+      this.replacePending = deferred;
+      if (outdated && !deferred && container.remove) {
         // Made before the shared workspace and browser volume, for another workspace or from
         // another image: replace it. Sign-ins live on the browser volume, so they are kept.
         await container.remove({ force: true });
@@ -160,6 +249,7 @@ export class DockerProvider implements ComputerProvider {
 
     if (!reuse) {
       const port = this.options.controlPort ?? 8787;
+      const timeZone = this.options.timeZone ?? defaultTimeZone();
       const created = await docker.createContainer({
         Image: image,
         name,
@@ -167,7 +257,9 @@ export class DockerProvider implements ComputerProvider {
           `OPENBOT_CONTROL_TOKEN=${this.controlToken}`,
           "OPENBOT_MAX_SCREENS=4",
           `OPENBOT_BROWSER_DIR=${BROWSER_DIR}`,
+          ...(timeZone ? [`OPENBOT_TZ=${timeZone}`] : []),
         ],
+        Labels: { "openbot.box": BOX_LAYOUT },
         HostConfig: {
           Binds: desktopBinds(this.options.workspaceMount, this.options.browserVolume),
           PortBindings: {
@@ -177,6 +269,7 @@ export class DockerProvider implements ComputerProvider {
             ],
           },
           AutoRemove: false,
+          ...boxHostConfig(this.options.memoryMb ?? defaultMemoryMb()),
         },
         ExposedPorts: { "8787/tcp": {}, "6080/tcp": {} },
       });
@@ -207,6 +300,7 @@ export class DockerProvider implements ComputerProvider {
       botId,
       display,
       this.controlClient(),
+      (run) => this.track(run),
       this.options.liveViewBaseUrl ??
         (this.options.liveViewPort && this.options.liveViewPort !== 6080
           ? `http://127.0.0.1:${this.options.liveViewPort}/vnc.html`
@@ -223,8 +317,24 @@ export class DockerProvider implements ComputerProvider {
     if (!this.started) throw new Error("DockerProvider.exec() called before ensureStarted()");
     const client = this.controlClient();
     if (!client.exec) throw new Error("this computer cannot run commands");
-    this.scheduleIdleStop();
-    return client.exec(request);
+    const exec = client.exec.bind(client);
+    return this.track(() => exec(request));
+  }
+
+  /** The machine's self-checks, its screens' processes and its latest telemetry (A7). */
+  async diagnose(): Promise<BoxDiagnostics> {
+    if (!this.started) await this.ensureStarted();
+    const client = this.controlClient();
+    if (!client.diagnose) throw new Error("this computer has no self-checks");
+    const report = await client.diagnose();
+    if (this.replacePending) {
+      report.checks.push({
+        name: "update",
+        ok: true,
+        detail: "a newer machine is ready; it replaces this one once the bots are idle",
+      });
+    }
+    return report;
   }
 
   /** Stop the container after idle (plan: stop after idle). Test hook. */
@@ -235,6 +345,7 @@ export class DockerProvider implements ComputerProvider {
     this.idleTimer = setTimeout(() => {
       void this.stop();
     }, idleMs);
+    this.idleTimer.unref?.();
   }
 
   async stop(): Promise<void> {
@@ -252,12 +363,19 @@ export class DockerProvider implements ComputerProvider {
 
   private controlClient(): ControlDaemonClient {
     if (this.options.controlClient) return this.options.controlClient;
-    const port = this.options.controlPort ?? 8787;
-    return new HttpControlDaemonClient({
-      baseUrl: `http://127.0.0.1:${port}`,
-      token: this.controlToken,
-    });
+    // One client per token: it keeps each bot's screen lease between steps.
+    if (!this.client || this.clientToken !== this.controlToken) {
+      const port = this.options.controlPort ?? 8787;
+      this.client = new HttpControlDaemonClient({
+        baseUrl: `http://127.0.0.1:${port}`,
+        token: this.controlToken,
+      });
+      this.clientToken = this.controlToken;
+    }
+    return this.client;
   }
+
+  private clientToken: string | undefined;
 
   private async resolveDocker(): Promise<DockerEngine> {
     if (this.options.docker) return this.options.docker;
@@ -274,11 +392,12 @@ class DockerScreen implements Screen {
     private readonly botId: string,
     private readonly display: number,
     private readonly control: ControlDaemonClient,
+    private readonly track: <T>(run: () => Promise<T>) => Promise<T>,
     private readonly liveViewBaseUrl?: string,
   ) {}
 
   async observe(): Promise<Observation> {
-    const observation = await this.control.observe(this.botId, this.display);
+    const observation = await this.track(() => this.control.observe(this.botId, this.display));
     this.lastObservedIndices = new Set(observation.elements.map((el) => el.index));
     return observation;
   }
@@ -295,7 +414,7 @@ class DockerScreen implements Screen {
         };
       }
     }
-    return this.control.act(this.botId, this.display, action);
+    return this.track(() => this.control.act(this.botId, this.display, action));
   }
 
   async liveView(): Promise<{ url: string; token: string; expiresAt: string }> {
@@ -312,6 +431,9 @@ class DockerScreen implements Screen {
 
   async takeover(on: boolean): Promise<void> {
     this.takenOver = on;
+    // The user has the screen: nothing the bot still has running may click on it (its next step
+    // needs a new lease).
+    if (on) await this.control.revoke?.(this.botId);
   }
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Action, Observation } from "@openbot/contracts";
 import { ScreenManager } from "./screen-manager.js";
-import { DockerProvider } from "./docker-provider.js";
+import { BOX_LAYOUT, BOX_QUIET_MS, DockerProvider } from "./docker-provider.js";
 import type { ControlDaemonClient } from "./control-daemon.js";
 
 class MemoryControlDaemon implements ControlDaemonClient {
@@ -249,5 +249,94 @@ describe("DockerProvider image version", () => {
     expect(ensureImage).toHaveBeenCalledOnce();
     expect(removed).toBe(true);
     expect(created[0]!.Image).toBe("ghcr.io/sanlega/openbot-desktop:v0.1.17");
+  });
+});
+
+describe("DockerProvider hardened box (A2/A3, D2)", () => {
+  function engine(labels?: Record<string, string>) {
+    type Created = {
+      HostConfig: { CapAdd: string[] } & Record<string, unknown>;
+      Env: string[];
+      Labels?: Record<string, string>;
+    };
+    const created: Created[] = [];
+    let removed = false;
+    return {
+      created,
+      removed: () => removed,
+      docker: {
+        ping: async () => {},
+        listContainers: async () => (removed ? [] : [{ Id: "old", Names: ["/openbot-desktop"] }]),
+        getContainer: () => ({
+          inspect: async () => ({
+            State: { Running: true },
+            Config: { Env: ["OPENBOT_CONTROL_TOKEN=t"], Labels: labels ?? {} },
+            HostConfig: { Binds: ["openbot-browser:/data/browser"] },
+          }),
+          start: async () => {},
+          remove: async () => {
+            removed = true;
+          },
+        }),
+        createContainer: async (options: unknown) => {
+          created.push(options as Created);
+          return { id: "new", start: async () => {} };
+        },
+      },
+    };
+  }
+
+  it("creates the box with an init, no extra privileges, limits and the owner's time zone", async () => {
+    const e = engine();
+    await new DockerProvider({
+      docker: e.docker,
+      controlClient: new MemoryControlDaemon(),
+      idleStopMs: 0,
+      timeZone: "Europe/Madrid",
+      memoryMb: 4096,
+    }).ensureStarted();
+    const options = e.created[0]!;
+    expect(options.HostConfig).toMatchObject({
+      Init: true,
+      CapDrop: ["ALL"],
+      SecurityOpt: ["no-new-privileges"],
+      Memory: 4096 * 1024 * 1024,
+      PidsLimit: 4096,
+      RestartPolicy: { Name: "on-failure", MaximumRetryCount: 3 },
+    });
+    expect(options.HostConfig.CapAdd).not.toContain("SYS_ADMIN");
+    expect(options.Env).toContain("OPENBOT_TZ=Europe/Madrid");
+    expect(options.Labels).toEqual({ "openbot.box": BOX_LAYOUT });
+  });
+
+  it("replaces a box built with the old layout", async () => {
+    const e = engine({});
+    await new DockerProvider({
+      docker: e.docker,
+      controlClient: new MemoryControlDaemon(),
+      idleStopMs: 0,
+    }).ensureStarted();
+    expect(e.removed()).toBe(true);
+  });
+
+  it("keeps an outdated box while bots use it, and replaces it once quiet", async () => {
+    let now = 1_000_000;
+    const e = engine({});
+    const provider = new DockerProvider({
+      docker: e.docker,
+      controlClient: new MemoryControlDaemon(),
+      idleStopMs: 0,
+      now: () => now,
+    });
+    // A command ran a moment ago (the box is in use).
+    await provider.track(async () => undefined);
+    await provider.ensureStarted();
+    expect(e.removed()).toBe(false);
+    expect(provider.hasPendingReplacement()).toBe(true);
+
+    now += BOX_QUIET_MS + 1;
+    await provider.ensureStarted();
+    expect(e.removed()).toBe(true);
+    expect(e.created).toHaveLength(1);
   });
 });

@@ -23,32 +23,89 @@ export const MAX_EXEC_OUTPUT = 60_000;
  */
 export const BOT_HOME = "/data/home";
 
+/**
+ * Processes (threads included) the bot user may have at once: a runaway command or a fork bomb
+ * hits this before it starves the desktop of process ids.
+ */
+export const BOX_MAX_PROCESSES = 1024;
+
+export interface ExecIdentity {
+  /** The unprivileged user commands run as (`box`); unset when the daemon isn't root (tests). */
+  uid?: number;
+  gid?: number;
+  /** Secrets of the daemon: any variable whose value contains one is removed from the command's environment. */
+  secrets?: string[];
+}
+
+/** The user commands run as, when the daemon itself runs as root inside the container. */
+export function defaultExecIdentity(env: NodeJS.ProcessEnv = process.env): ExecIdentity {
+  const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+  const uid = Number(env.OPENBOT_BOX_UID ?? 1000);
+  return isRoot && Number.isInteger(uid) && uid > 0 ? { uid, gid: uid } : {};
+}
+
+/** The command's environment: the daemon's own, minus anything carrying a daemon secret. */
+export function commandEnv(base: NodeJS.ProcessEnv, secrets: string[] = []): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  const live = secrets.filter((s) => s.length >= 8);
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined) continue;
+    if (key === "OPENBOT_CONTROL_TOKEN") continue;
+    if (live.some((secret) => value.includes(secret))) continue;
+    env[key] = value;
+  }
+  return {
+    ...env,
+    HOME: BOT_HOME,
+    USER: "box",
+    LOGNAME: "box",
+    npm_config_prefix: `${BOT_HOME}/.npm-global`,
+    PIP_BREAK_SYSTEM_PACKAGES: "1",
+    PATH: `${BOT_HOME}/.local/bin:${BOT_HOME}/.npm-global/bin:${base.PATH ?? "/usr/local/bin:/usr/bin:/bin"}`,
+    // Commands are not interactive: anything asking for input gets end-of-file.
+    DEBIAN_FRONTEND: "noninteractive",
+    GIT_TERMINAL_PROMPT: "0",
+  };
+}
+
+/**
+ * How a command is started: a small wrapper makes it the first thing the OOM killer takes (a
+ * memory hog dies before the desktop does), caps its processes, and lowers its CPU priority so
+ * the screens and the fast loop stay responsive during an `npm install`.
+ */
+export function execArgv(command: string): { file: string; args: string[] } {
+  const wrapper = [
+    "echo 500 > /proc/self/oom_score_adj 2>/dev/null",
+    `ulimit -u ${BOX_MAX_PROCESSES} 2>/dev/null`,
+    'exec nice -n 10 bash -lc "$0"',
+  ].join("; ");
+  return { file: "bash", args: ["-c", wrapper, command] };
+}
+
 /** Runs a shell command in the machine for a bot (the engine's shell, D-033). */
-export function runExec(request: ExecRequest, defaults: { cwd: string }): Promise<ExecResult> {
+export function runExec(
+  request: ExecRequest,
+  defaults: { cwd: string },
+  identity: ExecIdentity = defaultExecIdentity(),
+): Promise<ExecResult> {
   const timeoutMs = Math.min(Math.max(request.timeoutMs ?? DEFAULT_EXEC_MS, 1_000), MAX_EXEC_MS);
   try {
     mkdirSync(BOT_HOME, { recursive: true });
   } catch {
     // Not fatal: the command still runs with the image's home.
   }
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    HOME: BOT_HOME,
-    npm_config_prefix: `${BOT_HOME}/.npm-global`,
-    PIP_BREAK_SYSTEM_PACKAGES: "1",
-    PATH: `${BOT_HOME}/.local/bin:${BOT_HOME}/.npm-global/bin:${process.env.PATH ?? "/usr/bin:/bin"}`,
-    // Commands are not interactive: anything asking for input gets end-of-file.
-    DEBIAN_FRONTEND: "noninteractive",
-    GIT_TERMINAL_PROMPT: "0",
-  };
   // The control token is the daemon's own credential, never a command's.
-  delete env.OPENBOT_CONTROL_TOKEN;
+  const env = commandEnv(process.env, identity.secrets);
+  const { file, args } = execArgv(request.command);
   return new Promise((resolve) => {
-    const child = spawn("bash", ["-lc", request.command], {
+    const child = spawn(file, args, {
       cwd: request.cwd ?? defaults.cwd,
       env,
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],
+      ...(identity.uid !== undefined
+        ? { uid: identity.uid, gid: identity.gid ?? identity.uid }
+        : {}),
     });
     let stdout = "";
     let stderr = "";

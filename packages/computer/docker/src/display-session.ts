@@ -1,4 +1,3 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import {
   runObservationPipeline,
@@ -11,10 +10,23 @@ import {
 import type { Action, ActResult } from "@openbot/contracts";
 import { ScreenManager } from "./screen-manager.js";
 import { createShellExec } from "@openbot/computer/observation";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, statfsSync, writeFileSync } from "node:fs";
 // The daemon runs in the Linux container: its paths are POSIX paths.
 import { posix } from "node:path";
-import { SharedCookieJar, type BrowserCookie, type CookieAccess } from "./cookie-jar.js";
+import {
+  SharedCookieJar,
+  type BrowserCookie,
+  type CookieAccess,
+  type CookieSyncReport,
+} from "./cookie-jar.js";
+import {
+  DesktopSupervisor,
+  type ComponentSpec,
+  type ComponentStatus,
+  type SpawnFn,
+  type SupervisorEvent,
+} from "./desktop-supervisor.js";
+import { cdpAnswers, rfbGreets } from "./probes.js";
 
 export interface DisplaySessionOptions {
   maxScreens?: number;
@@ -53,6 +65,17 @@ export interface DisplaySessionOptions {
     debugPort: number,
     mode: ObservationMode,
   ) => Promise<ObservationResult>;
+  /** Starts the desktop's processes (stubbed in supervisor tests). */
+  spawn?: SpawnFn;
+  /** The box's telemetry: component crashes and restarts, sign-in restores. */
+  onTelemetry?: (event: SupervisorEvent | CookieSyncReport) => void;
+}
+
+/** One screen as `/health` reports it. */
+export interface ScreenHealth {
+  botId: string;
+  display: number;
+  components: ComponentStatus[];
 }
 
 /** Drives the page itself, in viewport coordinates, so window position doesn't matter. */
@@ -121,7 +144,7 @@ interface SessionState {
   debugPort: number;
   lastUsed: number;
   lastObservation?: ObservationResult;
-  processes: ChildProcess[];
+  supervisor?: DesktopSupervisor;
   ready: Promise<void>;
   /** Set once the browser answered on its DevTools port. */
   browserUp?: boolean;
@@ -147,8 +170,32 @@ export class DisplaySessionManager {
     this.waitForBrowser =
       options.waitForBrowser ?? (options.startDisplay ? async () => undefined : waitForPageTarget);
     this.jar = options.cookies
-      ? new SharedCookieJar(options.cookies, options.cookieFile)
+      ? new SharedCookieJar(options.cookies, options.cookieFile, undefined, (report) =>
+          options.onTelemetry?.(report),
+        )
       : undefined;
+  }
+
+  /** Every screen and the state of its processes. */
+  health(): ScreenHealth[] {
+    return [...this.sessions].map(([botId, s]) => ({
+      botId,
+      display: s.display,
+      components: s.supervisor?.status() ?? [],
+    }));
+  }
+
+  /** The last lines each process of a bot's screen wrote (diagnostics). */
+  logs(botId: string): Record<string, string[]> {
+    const supervisor = this.sessions.get(botId)?.supervisor;
+    if (!supervisor) return {};
+    const names = ["xvfb", "wm", "vnc", "browser"] as const;
+    return Object.fromEntries(names.map((n) => [n, supervisor.logTail(n, 40)]));
+  }
+
+  /** Stops every screen's processes (the daemon is shutting down). */
+  shutdown(): void {
+    for (const session of this.sessions.values()) session.supervisor?.stop();
   }
 
   /** The DevTools port of a bot's browser, if it has a screen. */
@@ -209,15 +256,7 @@ export class DisplaySessionManager {
     const display = this.screens.assign(botId);
     for (const [id, old] of this.sessions) {
       if ((id !== botId && old.display === display) || (id === botId && old.display !== display)) {
-        for (const child of old.processes) {
-          if (child.pid) {
-            try {
-              process.kill(-child.pid, "SIGTERM");
-            } catch {
-              // A desktop process may already have exited.
-            }
-          }
-        }
+        old.supervisor?.stop();
         this.sessions.delete(id);
         this.jar?.forget(old.debugPort);
         this.options.onEvict?.(old.display);
@@ -232,7 +271,6 @@ export class DisplaySessionManager {
         vncPort,
         debugPort,
         lastUsed: Date.now(),
-        processes: [],
         ready: Promise.resolve(),
       };
       this.sessions.set(botId, session);
@@ -251,25 +289,55 @@ export class DisplaySessionManager {
   async observe(botId: string, mode?: "dom" | "ax" | "ocr" | "auto"): Promise<ObservationResult> {
     const session = this.assign(botId);
     await session.ready;
+    session.supervisor?.assertUsable("browser");
     await this.shareSignIns(session);
-    const observation = this.options.observePage
-      ? await this.options.observePage(session.display, session.debugPort, mode ?? "auto")
-      : await runObservationPipeline(
-          {
-            mode: mode ?? "auto",
-            display: `:${session.display}`,
-            debugPort: session.debugPort,
-            cdpTimeoutMs: 30_000,
-          },
-          this.shell,
-        );
+    let observation: ObservationResult;
+    try {
+      observation = this.options.observePage
+        ? await this.options.observePage(session.display, session.debugPort, mode ?? "auto")
+        : await runObservationPipeline(
+            {
+              mode: mode ?? "auto",
+              display: `:${session.display}`,
+              debugPort: session.debugPort,
+              cdpTimeoutMs: 30_000,
+            },
+            this.shell,
+          );
+    } catch (error) {
+      throw this.explain(session, error);
+    }
     session.lastObservation = observation;
     return observation;
+  }
+
+  /**
+   * "The browser on your screen restarted" is a far more useful answer for a bot than a DevTools
+   * timeout: say so when the supervisor saw the browser go down.
+   */
+  private explain(session: SessionState, error: unknown): Error {
+    const base = error instanceof Error ? error : new Error(String(error));
+    const browser = session.supervisor?.status().find((c) => c.name === "browser");
+    if (!browser) return base;
+    if (!browser.up) {
+      return new Error(
+        `the browser on this screen went down (${browser.downReason ?? "unknown"}) and is being restarted; try again in a few seconds`,
+        { cause: base },
+      );
+    }
+    if (browser.lastExitAt && Date.now() - Date.parse(browser.lastExitAt) < 60_000) {
+      return new Error(
+        `the browser on this screen restarted (${browser.downReason ?? "unknown"}); open the page again`,
+        { cause: base },
+      );
+    }
+    return base;
   }
 
   async act(botId: string, action: Action): Promise<ActResult> {
     const session = this.assign(botId);
     await session.ready;
+    session.supervisor?.assertUsable("browser");
     await this.shareSignIns(session);
     const env = { ...process.env, DISPLAY: `:${session.display}` };
 
@@ -280,26 +348,14 @@ export class DisplaySessionManager {
         // Same tab over CDP: launching chromium again would open a new tab, and
         // OpenBot could end up reading a tab that isn't the one on screen.
         if (await this.navigateTab(session.debugPort, action.url)) return { ok: true };
-        spawn(
-          "chromium",
-          [
-            `--display=:${session.display}`,
-            "--no-sandbox",
-            // Hides the "unsupported command-line flag" bar in the live view.
-            "--test-type",
-            "--no-first-run",
-            "--disable-gpu",
-            "--disable-dev-shm-usage",
-            "--start-maximized",
-            "--remote-debugging-address=127.0.0.1",
-            `--remote-debugging-port=${session.debugPort}`,
-            `--user-data-dir=${this.profileDir(session.display)}`,
-            action.url,
-          ],
-          { detached: true, stdio: "ignore", env },
-        );
+        // The browser doesn't answer: the supervisor (the only launcher) restarts it on its
+        // profile, instead of a second Chromium handing its URL to a hung singleton.
+        if (!session.supervisor) return { ok: false, reason: "the browser is not reachable" };
+        await session.supervisor.relaunch("browser");
+        await this.shareSignIns(session);
         session.lastObservation = undefined;
-        return { ok: true };
+        if (await this.navigateTab(session.debugPort, action.url)) return { ok: true };
+        return { ok: false, reason: "the browser restarted but did not open the page" };
       case "scroll":
         // Mouse wheel: button 4 scrolls up, 5 down.
         await this.shell.run(
@@ -389,40 +445,48 @@ export class DisplaySessionManager {
 
   private discard(botId: string, session: SessionState): void {
     if (this.sessions.get(botId) !== session) return;
-    for (const child of session.processes) {
-      if (child.pid) {
-        try {
-          process.kill(-child.pid, "SIGTERM");
-        } catch {
-          // Already gone.
-        }
-      }
-    }
+    session.supervisor?.stop();
     this.sessions.delete(botId);
   }
 
   private async ensureDisplayRunning(session: SessionState): Promise<void> {
-    const displayStr = `:${session.display}`;
+    const display = session.display;
+    const displayStr = `:${display}`;
     const env = { ...process.env, DISPLAY: displayStr };
-    // A container that was stopped or crashed keeps its old X lock and browser profile lock,
-    // which make Xvfb and Chromium refuse to start (and VNC never comes up).
-    await removeStaleDesktopLocks(session.display, this.profileDir(session.display));
-    this.prepareProfile(session.display);
-    // A new browser on this screen: it has to receive the shared sign-ins from scratch.
-    this.jar?.forget(session.debugPort);
-    session.processes.push(
-      spawn("Xvfb", [displayStr, "-screen", "0", "1600x1000x24"], {
-        detached: true,
-        stdio: "ignore",
+    const profile = this.profileDir(display);
+    const specs: ComponentSpec[] = [
+      {
+        name: "xvfb",
+        command: "Xvfb",
+        // No TCP and no abstract socket: only the path socket, made root-only once it exists, so
+        // a bot's command cannot drive or read a screen through X.
+        args: [
+          displayStr,
+          "-screen",
+          "0",
+          "1600x1000x24",
+          "-nolisten",
+          "tcp",
+          "-nolisten",
+          "local",
+        ],
         env,
-      }),
-    );
-    await waitForDisplay(session.display);
-    const procs = [
-      spawn("fluxbox", ["-display", displayStr], { detached: true, stdio: "ignore", env }),
-      spawn(
-        "x11vnc",
-        [
+        // A container that was stopped or crashed keeps its old X lock.
+        prepare: () => removeStale([`/tmp/.X${display}-lock`, `/tmp/.X11-unix/X${display}`]),
+        ready: async () => {
+          await waitForDisplay(display);
+          try {
+            chmodSync(`/tmp/.X11-unix/X${display}`, 0o700);
+          } catch {
+            // Not fatal: the firewall and the user separation still apply.
+          }
+        },
+      },
+      { name: "wm", command: "fluxbox", args: ["-display", displayStr], env },
+      {
+        name: "vnc",
+        command: "x11vnc",
+        args: [
           "-display",
           displayStr,
           "-forever",
@@ -432,30 +496,74 @@ export class DisplaySessionManager {
           "-localhost",
           "-nopw",
         ],
-        { detached: true, stdio: "ignore", env },
-      ),
-      spawn(
-        "chromium",
-        [
-          `--display=${displayStr}`,
-          "--no-sandbox",
-          // Hides the "unsupported command-line flag" bar in the live view.
-          "--test-type",
-          "--no-first-run",
-          "--disable-gpu",
-          "--disable-dev-shm-usage",
-          "--start-maximized",
-          "--remote-debugging-address=127.0.0.1",
-          `--remote-debugging-port=${session.debugPort}`,
-          `--user-data-dir=${this.profileDir(session.display)}`,
-          "about:blank",
-        ],
-        { detached: true, stdio: "ignore", env },
-      ),
+        env,
+        ready: () => waitForPort(session.vncPort),
+        probe: () => rfbGreets(session.vncPort),
+      },
+      {
+        name: "browser",
+        command: "chromium",
+        args: chromiumArgs(displayStr, session.debugPort, profile),
+        env,
+        // A renderer eating memory must die before the desktop does.
+        oomScoreAdj: 300,
+        prepare: async () => {
+          // A browser that died keeps its profile lock, which makes the next one refuse to start.
+          await removeStale([
+            `${profile}/SingletonLock`,
+            `${profile}/SingletonSocket`,
+            `${profile}/SingletonCookie`,
+          ]);
+          this.prepareProfile(display);
+          // A new browser on this screen: it has to receive the shared sign-ins from scratch.
+          this.jar?.forget(session.debugPort);
+          session.browserUp = false;
+          session.lastObservation = undefined;
+        },
+        probe: () => cdpAnswers(session.debugPort),
+      },
     ];
-    session.processes.push(...procs);
-    await waitForPort(session.vncPort);
+    const supervisor = new DesktopSupervisor(specs, {
+      display,
+      ...(this.options.spawn ? { spawn: this.options.spawn } : {}),
+      onEvent: (event) => this.options.onTelemetry?.(event),
+    });
+    session.supervisor = supervisor;
+    await supervisor.start();
   }
+}
+
+/** Chromium's flags, in one place: the supervisor is the only launcher. */
+export function chromiumArgs(display: string, debugPort: number, profile: string): string[] {
+  return [
+    `--display=${display}`,
+    "--no-sandbox",
+    // Hides the "unsupported command-line flag" bar in the live view.
+    "--test-type",
+    "--no-first-run",
+    "--disable-gpu",
+    // Only with Docker's 64 MB default /dev/shm: the container gets 1 GB, which is faster.
+    ...(smallShm() ? ["--disable-dev-shm-usage"] : []),
+    "--start-maximized",
+    "--remote-debugging-address=127.0.0.1",
+    `--remote-debugging-port=${debugPort}`,
+    `--user-data-dir=${profile}`,
+    "about:blank",
+  ];
+}
+
+function smallShm(): boolean {
+  try {
+    const fs = statfsSync("/dev/shm");
+    return fs.blocks * fs.bsize < 512 * 1024 * 1024;
+  } catch {
+    return true;
+  }
+}
+
+async function removeStale(paths: string[]): Promise<void> {
+  const { rm } = await import("node:fs/promises");
+  for (const path of paths) await rm(path, { force: true }).catch(() => undefined);
 }
 
 /** Each screen's cookies, over the DevTools port of its browser. */
@@ -496,19 +604,6 @@ async function waitForPageTarget(debugPort: number, timeoutMs = 20_000): Promise
     await sleep(250);
   }
   throw new Error(`the browser on port ${debugPort} did not start`);
-}
-
-async function removeStaleDesktopLocks(display: number, profile: string): Promise<void> {
-  const { rm } = await import("node:fs/promises");
-  for (const path of [
-    `/tmp/.X${display}-lock`,
-    `/tmp/.X11-unix/X${display}`,
-    `${profile}/SingletonLock`,
-    `${profile}/SingletonSocket`,
-    `${profile}/SingletonCookie`,
-  ]) {
-    await rm(path, { force: true }).catch(() => undefined);
-  }
 }
 
 async function waitForDisplay(display: number, timeoutMs = 15_000): Promise<void> {

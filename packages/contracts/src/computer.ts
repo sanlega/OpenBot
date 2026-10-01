@@ -72,6 +72,34 @@ export interface ComputerProvider {
     timeoutMs?: number;
     stdin?: string;
   }): Promise<ExecResult>;
+  /** Runs the machine's self-checks (the virtual machine has them; D-034). */
+  diagnose?(): Promise<BoxDiagnostics>;
+}
+
+/** One self-check of the bots' machine: PASS/FAIL and what it found. */
+export interface BoxCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+/** The machine's self-checks, its screens' processes and its latest telemetry (D-034). */
+export interface BoxDiagnostics {
+  ok: boolean;
+  checks: BoxCheck[];
+  screens: Array<{
+    botId: string;
+    display: number;
+    components: Array<{
+      name: string;
+      up: boolean;
+      restartsInWindow: number;
+      crashloop: boolean;
+      downReason?: string;
+    }>;
+  }>;
+  /** The newest box telemetry events (component crashes, sign-in restores). */
+  telemetry: Array<Record<string, unknown>>;
 }
 
 export interface ComputerTaskRequest {

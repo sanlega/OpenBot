@@ -30,8 +30,51 @@ interface Entry {
   version: number;
 }
 
-const keyOf = (c: Pick<BrowserCookie, "name" | "domain" | "path">) =>
-  `${c.domain}\t${c.path}\t${c.name}`;
+/**
+ * Google rotates these in every browser on its own; handing one browser the copy another browser
+ * rotated looks like a stolen session to Google, which then signs every browser out. Each
+ * browser keeps its own (Grok Bot excludes the same names).
+ */
+export const ROTATING_COOKIES = new Set([
+  "__Secure-1PSIDTS",
+  "__Secure-3PSIDTS",
+  "SIDCC",
+  "__Secure-1PSIDCC",
+  "__Secure-3PSIDCC",
+]);
+
+/** What one delivery of shared sign-ins to a browser did (telemetry). */
+export interface CookieSyncReport {
+  kind: "cookie_sync";
+  port: number;
+  injected: number;
+  rejected: number;
+  removed: number;
+  outcome: "ok" | "partial" | "failed" | "empty";
+}
+
+const partitionOf = (c: Partial<Pick<BrowserCookie, "partitionKey">>): string => {
+  const key = c.partitionKey;
+  if (key === undefined || key === null) return "";
+  return typeof key === "string" ? key : JSON.stringify(key);
+};
+
+/** Partitioned cookies (CHIPS) with the same name on different top-level sites are different cookies. */
+const keyOf = (c: Pick<BrowserCookie, "name" | "domain" | "path"> & { partitionKey?: unknown }) =>
+  [c.domain, c.path, c.name, partitionOf(c)].join("\u0000");
+
+/**
+ * Whether Chrome would accept the cookie: one it rejects in `Network.setCookies` fails the
+ * whole batch. `__Host-` and `__Secure-` need `secure`, `__Host-` also `path=/` and no domain,
+ * and `SameSite=None` needs `secure`.
+ */
+export function acceptableCookie(c: BrowserCookie): boolean {
+  if (!c.name || !c.domain) return false;
+  if ((c.name.startsWith("__Host-") || c.name.startsWith("__Secure-")) && !c.secure) return false;
+  if (c.name.startsWith("__Host-") && c.path !== "/") return false;
+  if ((c.sameSite ?? "").toLowerCase() === "none" && !c.secure) return false;
+  return true;
+}
 
 /** The parts that matter when deciding whether a cookie changed. */
 const sameCookie = (a: BrowserCookie, b: BrowserCookie) =>
@@ -53,6 +96,13 @@ function settable(c: BrowserCookie): BrowserCookie {
   };
   if (c.sameSite) out.sameSite = c.sameSite;
   if (!c.session && typeof c.expires === "number" && c.expires > 0) out.expires = c.expires;
+  if (c.partitionKey !== undefined && c.partitionKey !== null) out.partitionKey = c.partitionKey;
+  if (c.name.startsWith("__Host-")) {
+    // Host-only: set through its URL, never with a domain (which would widen it).
+    const host = c.domain.replace(/^\./, "");
+    delete (out as Partial<BrowserCookie>).domain;
+    out.url = `https://${host}/`;
+  }
   return out;
 }
 
@@ -76,6 +126,7 @@ export class SharedCookieJar {
     private readonly access: CookieAccess,
     private readonly file?: string,
     private readonly now: () => number = () => Date.now() / 1000,
+    private readonly onReport?: (report: CookieSyncReport) => void,
   ) {
     this.load();
   }
@@ -110,7 +161,9 @@ export class SharedCookieJar {
     } catch {
       return; // that browser is gone or busy; the next step tries again
     }
-    const now = new Map(current.map((c) => [keyOf(c), c]));
+    const now = new Map(
+      current.filter((c) => !ROTATING_COOKIES.has(c.name)).map((c) => [keyOf(c), c]),
+    );
     const before = this.seen.get(port);
     let changed = false;
     for (const [key, cookie] of now) {
@@ -142,34 +195,90 @@ export class SharedCookieJar {
     const since = this.delivered.get(port) ?? 0;
     const have = this.seen.get(port) ?? new Map<string, BrowserCookie>();
     const nowSec = this.now();
-    const toSet: BrowserCookie[] = [];
-    const toRemove: Array<Pick<BrowserCookie, "name" | "domain" | "path">> = [];
+    const toSet: Array<{ key: string; cookie: BrowserCookie }> = [];
+    const toRemove: Array<{
+      key: string;
+      cookie: Pick<BrowserCookie, "name" | "domain" | "path">;
+    }> = [];
+    let rejected = 0;
     for (const [key, entry] of this.entries) {
       if (entry.version <= since && since > 0) continue;
       const mine = have.get(key);
       if (entry.cookie) {
+        if (ROTATING_COOKIES.has(entry.cookie.name)) continue;
         const expired =
           !entry.cookie.session &&
           typeof entry.cookie.expires === "number" &&
           entry.cookie.expires > 0 &&
           entry.cookie.expires < nowSec;
         if (expired) continue;
-        if (!mine || !sameCookie(mine, entry.cookie)) toSet.push(settable(entry.cookie));
+        if (mine && sameCookie(mine, entry.cookie)) continue;
+        if (!acceptableCookie(entry.cookie)) {
+          rejected += 1;
+          continue;
+        }
+        toSet.push({ key, cookie: entry.cookie });
       } else if (mine) {
-        toRemove.push({ name: mine.name, domain: mine.domain, path: mine.path });
+        toRemove.push({ key, cookie: { name: mine.name, domain: mine.domain, path: mine.path } });
       }
     }
+    if (toSet.length === 0 && toRemove.length === 0) {
+      this.delivered.set(port, this.version);
+      return;
+    }
+    let injected: typeof toSet = [];
     try {
-      if (toSet.length > 0) await this.access.set(port, toSet);
-      if (toRemove.length > 0) await this.access.remove(port, toRemove);
+      if (toSet.length > 0) {
+        try {
+          await this.access.set(
+            port,
+            toSet.map((s) => settable(s.cookie)),
+          );
+          injected = toSet;
+        } catch {
+          // One cookie Chrome refuses fails the whole batch: retry one by one, keep the rest.
+          for (const item of toSet) {
+            try {
+              await this.access.set(port, [settable(item.cookie)]);
+              injected.push(item);
+            } catch {
+              rejected += 1;
+            }
+          }
+          if (injected.length === 0) throw new Error("no cookie was accepted");
+        }
+      }
+      if (toRemove.length > 0) {
+        await this.access.remove(
+          port,
+          toRemove.map((r) => r.cookie),
+        );
+      }
     } catch {
+      this.onReport?.({
+        kind: "cookie_sync",
+        port,
+        injected: injected.length,
+        rejected,
+        removed: 0,
+        outcome: "failed",
+      });
       return; // delivered next time
     }
     this.delivered.set(port, this.version);
+    this.onReport?.({
+      kind: "cookie_sync",
+      port,
+      injected: injected.length,
+      rejected,
+      removed: toRemove.length,
+      outcome: rejected > 0 ? "partial" : "ok",
+    });
     // What we just gave it is not a change of its own.
     const updated = new Map(have);
-    for (const c of toSet) updated.set(keyOf(c), { ...(have.get(keyOf(c)) ?? {}), ...c });
-    for (const c of toRemove) updated.delete(keyOf(c));
+    for (const item of injected)
+      updated.set(item.key, { ...(have.get(item.key) ?? {}), ...item.cookie });
+    for (const item of toRemove) updated.delete(item.key);
     this.seen.set(port, updated);
   }
 

@@ -11,6 +11,7 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     OPENBOT_MAX_SCREENS=4 \
+    OPENBOT_BOX_UID=1000 \
     OPENBOT_CONTROL_PORT=8787 \
     NOVNC_PORT=6080
 
@@ -26,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
     git openssh-client python3-pip python3-venv build-essential \
     jq unzip zip wget less nano procps file ripgrep \
+    tini iptables tzdata util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
@@ -40,6 +42,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
+# The bots' commands run as `box` (uid 1000), never as root: no capabilities, no way to read the
+# daemon's token or the browser profiles, and no route to the daemon, CDP, VNC or X sockets
+# (entrypoint.sh). `apt-get install` still works through a root-only helper in the daemon.
+RUN useradd --uid 1000 --create-home --home-dir /home/box --shell /bin/bash box
+COPY images/desktop/box-apt.sh /usr/local/bin/openbot-apt
+RUN chmod 755 /usr/local/bin/openbot-apt     && ln -s /usr/local/bin/openbot-apt /usr/local/bin/apt-get     && ln -s /usr/local/bin/openbot-apt /usr/local/bin/apt     && ln -s /usr/local/bin/openbot-apt /usr/local/bin/sudo
+
 WORKDIR /opt/openbot
 RUN mkdir -p /root/.fluxbox
 COPY images/desktop/fluxbox-init /root/.fluxbox/init
@@ -47,7 +56,7 @@ COPY --from=build /repo/packages/computer/docker/dist/desktop-daemon.js ./deskto
 COPY images/desktop/entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
-RUN mkdir -p /workspace /data/browser
+RUN mkdir -p /workspace /data/browser /data/home /run/openbot
 VOLUME ["/workspace"]
 
 EXPOSE 8787 6080
@@ -55,4 +64,6 @@ EXPOSE 8787 6080
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD curl -fsS -H "Authorization: Bearer ${OPENBOT_CONTROL_TOKEN}" http://127.0.0.1:${OPENBOT_CONTROL_PORT}/health || exit 1
 
-ENTRYPOINT ["./entrypoint.sh"]
+# tini reaps Chromium's orphans and forwards signals (`docker stop` no longer waits 10 s). The
+# provider also sets `Init: true`; `-s` keeps tini working as a subreaper under Docker's init.
+ENTRYPOINT ["/usr/bin/tini", "-s", "-g", "--", "./entrypoint.sh"]
