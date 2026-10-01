@@ -14,7 +14,7 @@ import { startPackageHelper } from "./apt-helper.js";
 import { liveDoctorDeps, runBoxDoctor } from "./box-doctor.js";
 import { TelemetryLog } from "./telemetry.js";
 import { CdpProxy } from "./cdp-proxy.js";
-import { stripMeta } from "@openbot/computer/observation";
+import { setForeignTabs, stripMeta } from "@openbot/computer/observation";
 import type { Action } from "@openbot/contracts";
 
 /**
@@ -140,6 +140,11 @@ if (identity.uid !== undefined) startPackageHelper("/run/openbot/apt.sock");
 const cdp = new CdpProxy({
   debugPortFor: async (botId) => sessions.debugPort(botId),
   onRefused: (event) => telemetry.record({ kind: "cdp_refused", ...event }),
+  // N1: OpenBot's own browser tools leave a connector's tabs alone.
+  onTabs: (botId, targetIds) => {
+    const port = sessions.debugPort(botId);
+    if (port !== undefined) setForeignTabs(port, targetIds);
+  },
 });
 
 const server = createServer(async (req, res) => {

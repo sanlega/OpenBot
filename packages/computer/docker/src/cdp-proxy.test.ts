@@ -116,8 +116,13 @@ describe("CdpProxy (B5)", () => {
     wss.on("connection", (socket) =>
       socket.on("message", (data) => {
         received.push(data.toString());
-        const msg = JSON.parse(data.toString()) as { id: number };
-        socket.send(JSON.stringify({ id: msg.id, result: { ok: true } }));
+        const msg = JSON.parse(data.toString()) as { id: number; method?: string };
+        socket.send(
+          JSON.stringify({
+            id: msg.id,
+            result: msg.method === "Target.createTarget" ? { targetId: "T9" } : { ok: true },
+          }),
+        );
       }),
     );
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -125,8 +130,8 @@ describe("CdpProxy (B5)", () => {
     return { port: (server.address() as AddressInfo).port, received };
   }
 
-  async function proxyFor(port: number | undefined) {
-    const proxy = new CdpProxy({ debugPortFor: async () => port });
+  async function proxyFor(port: number | undefined, onTabs?: (bot: string, ids: string[]) => void) {
+    const proxy = new CdpProxy({ debugPortFor: async () => port, onTabs });
     const server = createServer((req, res) => {
       void proxy.handleHttp(req, res).then((handled) => {
         if (!handled) {
@@ -178,6 +183,24 @@ describe("CdpProxy (B5)", () => {
     proxy.revoke("bot_a");
     await closed;
     expect((await fetch(`${base}/cdp/${grant.token}/json/version`)).status).toBe(404);
+  });
+
+  it("reports the tabs a connector opens, so OpenBot leaves them alone (N1)", async () => {
+    const chrome = await fakeBrowser();
+    const seen: string[][] = [];
+    const { proxy, base } = await proxyFor(chrome.port, (_bot, ids) => seen.push(ids));
+    const grant = proxy.grant("bot_a", { allowHosts: ["*"], mode: "act" });
+    const ws = new WebSocket(
+      `${base.replace("http", "ws")}/cdp/${grant.token}/devtools/browser/abc`,
+    );
+    await new Promise((r) => ws.once("open", r));
+    ws.send(
+      JSON.stringify({ id: 7, method: "Target.createTarget", params: { url: "about:blank" } }),
+    );
+    await new Promise((r) => setTimeout(r, 150));
+    expect(seen.at(-1)).toEqual(["T9"]);
+    proxy.revoke("bot_a");
+    expect(seen.at(-1)).toEqual([]);
   });
 
   it("refuses unknown tokens and bots without a screen", async () => {

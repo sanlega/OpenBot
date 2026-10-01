@@ -92,7 +92,8 @@ export class DelegationTracker {
     text: string;
   }): OpenResult {
     // A worker that delegates onward keeps the user's conversation as the place results show.
-    const parent = this.current(input.requesterBotId);
+    // Its running turn's task, else (a wake turn, a direct message) the task it is working on.
+    const parent = this.current(input.requesterBotId) ?? this.openFor(input.requesterBotId);
     const ownerThread =
       (parent ? this.ctx.repos.threads.getById(parent.ownerThreadId) : undefined) ??
       this.ctx.repos.threads.getByBotId(input.requesterBotId);
@@ -185,17 +186,22 @@ export class DelegationTracker {
    * helpers have nobody to report to). The workers' turns are stopped; nobody is woken: whoever
    * cancelled already knows.
    */
-  async cancel(id: string, by: { name: string; botId?: string }): Promise<Delegation[]> {
+  async cancel(
+    id: string,
+    by: { name: string; botId?: string },
+    cascade = false,
+  ): Promise<Delegation[]> {
     const d = this.repo.getById(id);
     if (!d || !OPEN.has(d.state)) return [];
     const cancelled: Delegation[] = [];
     // Only the tasks handed out FOR this one (its helpers), not the worker's other work.
     for (const child of this.repo.list({ parentId: id, open: true })) {
-      cancelled.push(...(await this.cancel(child.id, by)));
+      cancelled.push(...(await this.cancel(child.id, by, true)));
     }
     const now = this.now();
-    // Whoever cancelled knows; the bot that asked is told when someone else did it.
-    const tellRequester = by.botId !== d.requesterBotId;
+    // Whoever cancelled knows; the bot that asked is told when someone else did it. Not inside a
+    // cascade: the asker's own task is being cancelled too, and a wake would restart its work.
+    const tellRequester = !cascade && by.botId !== d.requesterBotId;
     const updated = this.repo.update(
       id,
       {

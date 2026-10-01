@@ -7,6 +7,18 @@ interface CdpTarget {
   webSocketDebuggerUrl: string;
 }
 
+/**
+ * N1: tabs another tool (a connector through the DevTools proxy) opened in a browser, by
+ * DevTools port. OpenBot's own browser tools neither read from them nor close them.
+ */
+const foreignTabs = new Map<number, Set<string>>();
+
+export function setForeignTabs(debugPort: number, targetIds: Iterable<string>): void {
+  const ids = new Set(targetIds);
+  if (ids.size === 0) foreignTabs.delete(debugPort);
+  else foreignTabs.set(debugPort, ids);
+}
+
 /** Minimal Chrome DevTools Protocol client (DOM + Accessibility domains). */
 export class CdpClient {
   private ws: WebSocket | undefined;
@@ -23,7 +35,11 @@ export class CdpClient {
 
   async connect(timeoutMs = 30_000): Promise<void> {
     const targets = await this.waitForTargets(timeoutMs);
-    const page = targets.find((t) => t.type === "page") ?? targets[0];
+    const foreign = foreignTabs.get(this.port);
+    const page =
+      targets.find((t) => t.type === "page" && !foreign?.has(t.id)) ??
+      targets.find((t) => t.type === "page") ??
+      targets[0];
     if (!page?.webSocketDebuggerUrl) {
       throw new Error(`no CDP target on port ${this.port}`);
     }
@@ -120,7 +136,7 @@ export class CdpClient {
   async closeOtherTabs(): Promise<void> {
     const targets = await this.listTargets().catch(() => []);
     for (const t of targets) {
-      if (t.type === "page" && t.id !== this.targetId) {
+      if (t.type === "page" && t.id !== this.targetId && !foreignTabs.get(this.port)?.has(t.id)) {
         await fetch(`http://127.0.0.1:${this.port}/json/close/${t.id}`).catch(() => undefined);
       }
     }

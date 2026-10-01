@@ -381,3 +381,21 @@ describe("PermissionBroker refusals that close detours (C2)", () => {
     expect(refusalMessage("declined")).toMatch(/^The user declined/);
   });
 });
+
+describe("PermissionBroker waiters (N4)", () => {
+  it("keeps every waiter of a joined card; one turn ending leaves the others waiting", async () => {
+    const { broker, approvalStore } = setup(new StubRiskDecisionService(3, 0.6));
+    const first = await broker.evaluate(req({ action: "risky_tool" }), {
+      mode: "live",
+      preset: "workspace_write",
+    });
+    const id = first.approvalId as string;
+    const a = broker.waitForApproval(id, "turn_a");
+    const b = broker.waitForApproval(id, "turn_b");
+    expect(broker.abandonTurn("turn_a")).toEqual([]);
+    expect(await a).toBe("deny");
+    expect(approvalStore.get(id)?.status).toBe("pending");
+    broker.resolveApproval(id, "allow");
+    expect(await b).toBe("allow");
+  });
+});

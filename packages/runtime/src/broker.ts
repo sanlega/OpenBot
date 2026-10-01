@@ -73,10 +73,27 @@ export interface PermissionBrokerOptions {
  *   (`ask`).
  */
 export class PermissionBroker {
+  /**
+   * Cards someone waits on: one timer per card, and every waiter (the same action retried joins
+   * the open card, so a card can have several), each tagged with its turn (N4).
+   */
   private readonly pending = new Map<
     string,
-    { resolve: (o: "allow" | "deny") => void; timer: number; turnId?: string }
+    {
+      timer: number;
+      waiters: Array<{ resolve: (o: "allow" | "deny") => void; turnId?: string }>;
+    }
   >();
+
+  /** Ends a card's wait for everyone waiting on it. */
+  private settle(approvalId: string, outcome: "allow" | "deny"): boolean {
+    const pending = this.pending.get(approvalId);
+    if (!pending) return false;
+    this.opts.clock.clearTimeout(pending.timer);
+    this.pending.delete(approvalId);
+    for (const waiter of pending.waiters) waiter.resolve(outcome);
+    return true;
+  }
 
   constructor(private readonly opts: PermissionBrokerOptions) {}
 
@@ -247,17 +264,21 @@ export class PermissionBroker {
       return Promise.resolve(approval.resolution === "allow" ? "allow" : "deny");
     }
     return new Promise((resolvePromise) => {
+      const existing = this.pending.get(approvalId);
+      if (existing) {
+        existing.waiters.push({ resolve: resolvePromise, turnId });
+        return;
+      }
       const timeoutMs = Math.max(
         0,
         new Date(approval.expiresAt).getTime() - this.opts.clock.now().getTime(),
       );
       const timer = this.opts.clock.setTimeout(() => {
-        this.pending.delete(approvalId);
         this.opts.approvalStore.resolve(approvalId, "expired");
         this.emitResolved(approvalId, "expired");
-        resolvePromise("deny");
+        this.settle(approvalId, "deny");
       }, timeoutMs);
-      this.pending.set(approvalId, { resolve: resolvePromise, timer, turnId });
+      this.pending.set(approvalId, { timer, waiters: [{ resolve: resolvePromise, turnId }] });
     });
   }
 
@@ -268,16 +289,20 @@ export class PermissionBroker {
   abandonTurn(turnId: string): string[] {
     const abandoned: string[] = [];
     for (const [approvalId, pending] of [...this.pending]) {
-      // Only the cards THIS turn waits on: a background computer task's card outlives the turn
-      // that started it and is still answered.
-      if (pending.turnId !== turnId) continue;
+      // Only what THIS turn waits on: a background computer task's card outlives the turn that
+      // started it and is still answered.
+      const mine = pending.waiters.filter((w) => w.turnId === turnId);
+      if (mine.length === 0) continue;
       const approval = this.opts.approvalStore.get(approvalId);
       if (!approval || approval.kind === "bot_request" || approval.status !== "pending") continue;
+      pending.waiters = pending.waiters.filter((w) => w.turnId !== turnId);
+      for (const waiter of mine) waiter.resolve("deny");
+      // Someone else still waits on the card (another turn, a background task): it stays open.
+      if (pending.waiters.length > 0) continue;
       this.opts.clock.clearTimeout(pending.timer);
       this.pending.delete(approvalId);
       this.opts.approvalStore.resolve(approvalId, "expired");
       this.emitResolved(approvalId, "expired");
-      pending.resolve("deny");
       abandoned.push(approvalId);
     }
     return abandoned;
@@ -292,12 +317,7 @@ export class PermissionBroker {
   resolveApproval(approvalId: string, resolution: "allow" | "deny"): void {
     this.opts.approvalStore.resolve(approvalId, resolution);
     this.emitResolved(approvalId, resolution);
-    const pending = this.pending.get(approvalId);
-    if (pending) {
-      this.opts.clock.clearTimeout(pending.timer);
-      this.pending.delete(approvalId);
-      pending.resolve(resolution);
-    }
+    this.settle(approvalId, resolution);
   }
 
   /**
@@ -306,12 +326,7 @@ export class PermissionBroker {
    * `approval.resolved` itself), without writing or emitting again.
    */
   settleResolved(approvalId: string, resolution: "allow" | "deny"): boolean {
-    const pending = this.pending.get(approvalId);
-    if (!pending) return false;
-    this.opts.clock.clearTimeout(pending.timer);
-    this.pending.delete(approvalId);
-    pending.resolve(resolution);
-    return true;
+    return this.settle(approvalId, resolution);
   }
 
   private emitResolved(approvalId: string, resolution: "allow" | "deny" | "expired"): void {

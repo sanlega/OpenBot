@@ -764,6 +764,11 @@ async function submitWithFailover(
     };
   };
   let final: TurnOutcome | undefined;
+  // N3: cancelled while its turn was being prepared (routing, tools): nothing runs for it.
+  const task = args.delegationId ? tracker.get(args.delegationId) : undefined;
+  if (task && !["submitted", "working", "input_required"].includes(task.state)) {
+    return { status: "refused", reason: "stopped" };
+  }
   try {
     if (args.delegationId) await tracker.started(args.delegationId, turn.engine);
     final = await deps.runtime.mailbox.submit(bound(turn));

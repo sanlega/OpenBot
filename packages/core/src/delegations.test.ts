@@ -349,13 +349,13 @@ describe("cancel and depth (L1, L2)", () => {
     const { ctx, chief, worker, tracker, woken, open } = await setup();
     const helper = addBot(ctx, "Helper");
     const other = addBot(ctx, "Other");
+    // Work the worker handed out before it had this task: unrelated, it stays.
+    const unrelated = open("Book the room", worker, other);
     const parent = open("Research and write the report");
     // The worker's running turn is for the parent: what it hands out is the parent's helper work.
     tracker.bindTurn(worker.id, parent.id);
     const child = open("Collect the numbers", worker, helper);
     tracker.unbindTurn(worker.id, parent.id);
-    // Unrelated work the worker handed out for something else stays.
-    const unrelated = open("Book the room", worker, other);
     expect(child.parentId).toBe(parent.id);
     expect(unrelated.parentId).toBeUndefined();
     const stopped = mailboxSpy(ctx);
@@ -373,10 +373,19 @@ describe("cancel and depth (L1, L2)", () => {
       [helper.id, child.id],
       [worker.id, parent.id],
     ]);
-    // The Chief cancelled its own task: nobody is woken. The worker asked for the child task and
-    // did not cancel it itself: it is told.
-    expect(woken.map((d) => d.id)).toEqual([child.id]);
+    // The Chief cancelled its own task: nobody is woken. Nor is the worker about the child: its
+    // own task is being cancelled too, and a wake would restart that work.
+    expect(woken).toEqual([]);
     expect(await tracker.cancel(parent.id, { name: "Chief", botId: chief.id })).toEqual([]);
+  });
+
+  it("a hand-off from a turn not bound to a task still belongs to the task being worked on", async () => {
+    const { ctx, tracker, open, worker } = await setup();
+    const helper = addBot(ctx, "Helper2");
+    const parent = open("Write the launch post");
+    // The worker is woken about something else (no task bound) and hands work on.
+    const child = open("Find three quotes", worker, helper);
+    expect(child).toMatchObject({ parentId: parent.id, depth: 2 });
   });
 
   it("tells the bot that asked when the user cancels its task", async () => {
@@ -409,14 +418,23 @@ describe("cancel and depth (L1, L2)", () => {
     });
     expect(r).toMatchObject({ ok: false });
     expect(!r.ok && r.reason).toMatch(/do it yourself/);
-    // The same bot, asked directly by the user (no task bound to its turn), may hand off.
+    // Still working on that task, even outside a bound turn: still too deep.
     tracker.unbindTurn(c!.id, l3.id);
-    const direct = tracker.open({
-      requesterBotId: c!.id,
-      assigneeBotId: d!.id,
-      chainId: "chn_2",
+    expect(
+      tracker.open({
+        requesterBotId: c!.id,
+        assigneeBotId: d!.id,
+        chainId: "chn_2",
+        text: "again",
+      }),
+    ).toMatchObject({ ok: false });
+    // A bot with no task of its own starts a new chain.
+    const fresh = tracker.open({
+      requesterBotId: d!.id,
+      assigneeBotId: c!.id,
+      chainId: "chn_3",
       text: "fresh",
     });
-    expect(direct).toMatchObject({ ok: true, delegation: { depth: 1 } });
+    expect(fresh).toMatchObject({ ok: true, delegation: { depth: 1 } });
   });
 });

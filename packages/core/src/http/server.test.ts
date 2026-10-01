@@ -353,3 +353,35 @@ describe("routes the UI depends on", () => {
     expect(stopped).toEqual([created.bot.id]);
   });
 });
+
+describe("approver devices and the new owner actions (L1, M2)", () => {
+  it("cannot cancel a task or reset OpenBot", async () => {
+    const { app } = await boot();
+    await app.inject({
+      method: "POST",
+      url: "/api/devices/pair",
+      payload: { name: "owner", role: "owner" },
+    });
+    const paired = await app.inject({
+      method: "POST",
+      url: "/api/devices/pair",
+      payload: { name: "tablet", role: "approver" },
+    });
+    const headers = { authorization: `Bearer ${paired.json<{ token: string }>().token}` };
+    const cancel = await app.inject({
+      method: "POST",
+      url: "/api/tasks/dlg_x/cancel",
+      remoteAddress: REMOTE_IP,
+      headers,
+    });
+    expect(cancel.statusCode).toBe(403);
+    const reset = await app.inject({
+      method: "POST",
+      url: "/api/reset",
+      remoteAddress: REMOTE_IP,
+      headers,
+      payload: { confirm: "RESET" },
+    });
+    expect(reset.statusCode).toBe(403);
+  });
+});

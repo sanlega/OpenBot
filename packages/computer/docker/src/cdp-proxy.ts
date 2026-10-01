@@ -23,6 +23,8 @@ export interface CdpProxyOptions {
   browserHost?: string;
   now?: () => number;
   onRefused?: (event: { botId: string; method: string; reason: string }) => void;
+  /** N1: the tabs a bot's connectors opened, whenever they change. */
+  onTabs?: (botId: string, targetIds: string[]) => void;
 }
 
 /** Grants last a working day; a new grant for the same bot replaces the old one. */
@@ -39,6 +41,8 @@ const PATH_RE = /^\/cdp\/([0-9a-f]{48})(\/.*)?$/;
 export class CdpProxy {
   private readonly grants = new Map<string, CdpGrant>();
   private readonly sockets = new Map<string, Set<WebSocket>>();
+  /** Tabs each bot's connectors created (N1). */
+  private readonly tabs = new Map<string, Set<string>>();
   private readonly wss = new WebSocketServer({ noServer: true });
   private readonly now: () => number;
 
@@ -61,6 +65,7 @@ export class CdpProxy {
 
   /** The user took the screen over, or it went to another bot: the tool loses it at once. */
   revoke(botId: string): void {
+    if (this.tabs.delete(botId)) this.options.onTabs?.(botId, []);
     for (const [token, grant] of this.grants) {
       if (grant.botId !== botId) continue;
       this.grants.delete(token);
@@ -168,6 +173,13 @@ export class CdpProxy {
     this.sockets.set(grant.token, set);
     const upstream = new WebSocket(upstreamUrl, { perMessageDeflate: false });
     const queued: RawData[] = [];
+    /** Command ids of tab creations, to learn the tab each one made. */
+    const creating = new Set<string>();
+    const tabsOf = () => {
+      const set = this.tabs.get(grant.botId) ?? new Set<string>();
+      this.tabs.set(grant.botId, set);
+      return set;
+    };
     /** Which page each attached session is on, to keep a tool on the sites it may use. */
     const sessionTarget = new Map<string, string>();
     const targetUrl = new Map<string, string>();
@@ -200,6 +212,9 @@ export class CdpProxy {
         );
         return;
       }
+      if (command.method === "Target.createTarget" && command.id !== undefined) {
+        creating.add(`${command.sessionId ?? ""}:${command.id}`);
+      }
       if (upstream.readyState === WebSocket.OPEN) upstream.send(data.toString());
       else queued.push(data);
     };
@@ -208,12 +223,26 @@ export class CdpProxy {
       const text = data.toString();
       try {
         const event = JSON.parse(text) as {
+          id?: number;
+          sessionId?: string;
           method?: string;
+          result?: { targetId?: string };
           params?: {
             sessionId?: string;
+            targetId?: string;
             targetInfo?: { targetId?: string; url?: string };
           };
         };
+        const key = `${event.sessionId ?? ""}:${event.id ?? ""}`;
+        if (event.id !== undefined && creating.delete(key) && event.result?.targetId) {
+          tabsOf().add(event.result.targetId);
+          this.options.onTabs?.(grant.botId, [...tabsOf()]);
+        }
+        if (event.method === "Target.targetDestroyed" && event.params?.targetId) {
+          if (tabsOf().delete(event.params.targetId)) {
+            this.options.onTabs?.(grant.botId, [...tabsOf()]);
+          }
+        }
         const info = event.params?.targetInfo;
         if (info?.targetId && typeof info.url === "string") targetUrl.set(info.targetId, info.url);
         if (
