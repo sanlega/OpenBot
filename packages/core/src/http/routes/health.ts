@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { CoreContext, CustomEngineSpec } from "../../context.js";
 import { requireAuth, requireOwner } from "../auth.js";
 
-export const SERVER_VERSION = "0.1.19";
+export const SERVER_VERSION = "0.1.20";
 
 export function registerHealthRoutes(app: FastifyInstance, ctx: CoreContext): void {
   app.get("/health", async () => ({ status: "ok" }));

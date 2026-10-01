@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.20 — 2026-10-01
+
+- Fixed: asking the Chief of Staff to create a bot ("Create a bot called Researcher…") was
+  refused, and the Chief did the work itself. The check behind new bots now reads what you
+  asked in the chat.
+
 ## 0.1.19 — 2026-10-01
 
 - **Tasks screen.** See every job a bot handed to another bot, where it stands and what came
