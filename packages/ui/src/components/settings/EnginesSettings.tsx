@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ModelInfo, SetupState } from "@openbot/contracts";
-import { Cpu, Plus, Sparkle, SquareTerminal, Trash2 } from "lucide-react";
+import { Cpu, Plus, RefreshCw, Sparkle, SquareTerminal, Trash2 } from "lucide-react";
 import type { CustomEngine, EnginesResponse } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { cleanVersion, engineName } from "./settings-meta.js";
@@ -9,7 +9,16 @@ import { SettingRow, SettingsGroup, StatusPill } from "./SettingsPrimitives.js";
 type Engine = EnginesResponse["engines"][number];
 
 /** Settings > Engines: every engine OpenBot knows, local models, and owner-added ACP agents. */
-export function EnginesSettings({ engines, setup }: { engines: Engine[]; setup: SetupState }) {
+export function EnginesSettings({
+  engines,
+  setup,
+  onRefresh,
+}: {
+  engines: Engine[];
+  setup: SetupState;
+  /** Reloads the engine list (after "Check again" or a custom agent change). */
+  onRefresh?: () => Promise<void> | void;
+}) {
   const native = engines.filter((e) => (e.descriptor?.kind ?? "native") === "native");
   const acp = engines.filter((e) => e.descriptor?.kind === "acp" && !e.id.startsWith("acp-"));
   const custom = engines.filter((e) => e.id.startsWith("acp-"));
@@ -19,7 +28,7 @@ export function EnginesSettings({ engines, setup }: { engines: Engine[]; setup: 
         {native.length === 0 && acp.length === 0 ? (
           <SettingRow
             label="No engines detected"
-            help="Install Claude Code, Codex, Cursor or OpenCode, then restart OpenBot."
+            help="Install Claude Code, Codex, Cursor or OpenCode, then press Check again."
           />
         ) : (
           native.map((e) => <EngineRow key={e.id} engine={e} setup={setup} />)
@@ -33,7 +42,8 @@ export function EnginesSettings({ engines, setup }: { engines: Engine[]; setup: 
           <LocalModelsRow />
         </SettingsGroup>
       ) : null}
-      <CustomEngines detected={custom} />
+      <CheckAgain onRefresh={onRefresh} />
+      <CustomEngines detected={custom} onRefresh={onRefresh} />
     </>
   );
 }
@@ -60,9 +70,9 @@ function EngineRow({ engine, setup }: { engine: Engine; setup: SetupState }) {
       ? `Install it from ${engine.descriptor.installUrl} to let bots use it.`
       : "Install it to let bots use this engine."
     : !engine.login.ok
-      ? `Run \`${login}\` in a terminal, then restart OpenBot.`
+      ? `Run \`${login}\` in a terminal, then press Check again.`
       : engine.available === false
-        ? "Restart OpenBot to let bots use it."
+        ? "Press Check again to let bots use it."
         : null;
   return (
     <SettingRow
@@ -92,6 +102,49 @@ function EngineRow({ engine, setup }: { engine: Engine; setup: SetupState }) {
         <StatusPill tone="warning">Not logged in</StatusPill>
       )}
     </SettingRow>
+  );
+}
+
+/** P1: looks for engines installed or signed in since OpenBot started, no restart needed. */
+function CheckAgain({ onRefresh }: { onRefresh?: () => Promise<void> | void }) {
+  const { transport } = useOpenBot();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const check = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await transport.post<{ available: string[] }>("/api/engines/redetect", {});
+      await onRefresh?.();
+      const n = res.available.length;
+      setNote(
+        n === 0
+          ? "No engine is ready yet."
+          : `${n} engine${n === 1 ? " is" : "s are"} ready for your bots.`,
+      );
+    } catch {
+      setNote("Couldn't check the engines. Try again in a moment.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <SettingsGroup>
+      <SettingRow
+        label="Installed or signed in to an engine?"
+        help={note ?? "OpenBot looks again and lets your bots use it right away."}
+      >
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          disabled={busy}
+          onClick={() => void check()}
+        >
+          <RefreshCw size={14} className={busy ? "spin" : undefined} aria-hidden />
+          {busy ? "Checking…" : "Check again"}
+        </button>
+      </SettingRow>
+    </SettingsGroup>
   );
 }
 
@@ -162,7 +215,13 @@ function slugOf(label: string): string {
 }
 
 /** Other ACP agents (Goose, Qwen Code, Copilot CLI...) added by their command line. */
-function CustomEngines({ detected }: { detected: Engine[] }) {
+function CustomEngines({
+  detected,
+  onRefresh,
+}: {
+  detected: Engine[];
+  onRefresh?: () => Promise<void> | void;
+}) {
   const { transport } = useOpenBot();
   const [list, setList] = useState<CustomEngine[] | null>(null);
   const [label, setLabel] = useState("");
@@ -184,11 +243,17 @@ function CustomEngines({ detected }: { detected: Engine[] }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await transport.put<{ engines: CustomEngine[] }>("/api/engines/custom", {
-        engines: next,
-      });
+      const res = await transport.put<{ engines: CustomEngine[]; restartRequired?: boolean }>(
+        "/api/engines/custom",
+        { engines: next },
+      );
       setList(res.engines);
-      setNotice("Saved. Restart OpenBot to use the change.");
+      setNotice(
+        res.restartRequired === false
+          ? "Saved. Your bots can use it now."
+          : "Saved. Restart OpenBot to use the change.",
+      );
+      await onRefresh?.();
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");

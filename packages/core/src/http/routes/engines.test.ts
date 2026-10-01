@@ -64,6 +64,35 @@ describe("engine routes", () => {
     expect(engines.find((e) => e.id === "claude")).toMatchObject({ available: true });
   });
 
+  it("detects the engines again on request (P1)", async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: "POST", url: "/api/engines/redetect" });
+    expect(res.statusCode).toBe(501);
+    testContext!.ctx.redetectEngines = async () => {
+      testContext!.ctx.availableEngines = ["claude", "cursor"];
+      return ["claude", "cursor"];
+    };
+    const again = await app.inject({ method: "POST", url: "/api/engines/redetect" });
+    expect(again.json()).toEqual({ available: ["claude", "cursor"] });
+    const listed = await app.inject({ method: "GET", url: "/api/engines" });
+    const engines = (listed.json() as { engines: Array<Record<string, unknown>> }).engines;
+    expect(engines.find((e) => e.id === "cursor")).toMatchObject({ available: true });
+  });
+
+  it("wires a saved custom agent at once when it can detect again", async () => {
+    const { app } = await setup();
+    testContext!.ctx.redetectEngines = async () => ["claude", "acp-goose"];
+    const res = await app.inject({
+      method: "PUT",
+      url: "/api/engines/custom",
+      payload: { engines: [{ slug: "goose", label: "Goose", command: "goose", args: ["acp"] }] },
+    });
+    expect(res.json()).toMatchObject({
+      restartRequired: false,
+      available: ["claude", "acp-goose"],
+    });
+  });
+
   it("saves custom ACP engines and asks for a restart", async () => {
     const { app, saved } = await setup();
     const res = await app.inject({

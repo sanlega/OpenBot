@@ -181,6 +181,8 @@ export interface CoreContext {
   onApprovalResolved?: (approvalId: string, resolution: "allow" | "deny") => void;
   /** Wired in by WS13 bootstrap; populated for `/api/engines` and routing. */
   availableEngines?: EngineId[];
+  /** P1: detects the engines again (installed or signed in since start-up), without a restart. */
+  redetectEngines?: () => Promise<EngineId[]>;
   engineStatuses?: Partial<Record<EngineId, EngineStatus>>;
   /** What each known engine is (label, kind, login command), also the ones not installed. */
   engineDescriptors?: Partial<Record<EngineId, EngineDescriptor>>;

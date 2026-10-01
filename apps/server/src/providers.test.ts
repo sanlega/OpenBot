@@ -223,6 +223,32 @@ describe("bootstrapProviders", () => {
     process.env = prev;
   });
 
+  it("picks up an engine signed in after start-up, keeping the wired ones (P1)", async () => {
+    const prev = { ...process.env };
+    delete process.env.OPENBOT_FAKE_ENGINES;
+    try {
+      const ctx = await testContext();
+      let codex = missingEngine;
+      const detection = mockDetection({ detectCodex: vi.fn(async () => codex) });
+      const result = await bootstrapProviders(ctx, detection);
+      expect(result.availableEngines).toEqual(["claude"]);
+      const claude = result.drivers.claude;
+
+      codex = readyCodex;
+      const available = await ctx.redetectEngines!();
+
+      expect(available).toEqual(["claude", "codex"]);
+      // The same map the runtime holds gets the new driver; the wired one is kept.
+      expect(result.drivers.codex).toBeInstanceOf(CodexDriver);
+      expect(result.drivers.claude).toBe(claude);
+      expect(ctx.availableEngines).toEqual(["claude", "codex"]);
+      expect(ctx.engineStatuses?.codex?.login.ok).toBe(true);
+      ctx.closeDb();
+    } finally {
+      process.env = prev;
+    }
+  });
+
   it("uses LocalProvider when the user opts in", async () => {
     const prev = { ...process.env };
     delete process.env.OPENBOT_FAKE_COMPUTER;

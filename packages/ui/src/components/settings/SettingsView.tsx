@@ -335,7 +335,18 @@ export function SettingsView() {
               title="Engines"
               description="The agents your bots run on: Claude Code, Codex, Cursor, OpenCode (with local models) and more. OpenBot uses your own logins and keys."
             >
-              {setup ? <EnginesSettings engines={engines} setup={setup} /> : null}
+              {setup ? (
+                <EnginesSettings
+                  engines={engines}
+                  setup={setup}
+                  onRefresh={async () => {
+                    const eng = await transport
+                      .get<EnginesResponse>("/api/engines")
+                      .catch(() => undefined);
+                    if (eng) setEngines(eng.engines);
+                  }}
+                />
+              ) : null}
             </SettingsSection>
 
             <SettingsSection

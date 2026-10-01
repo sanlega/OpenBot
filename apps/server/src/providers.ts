@@ -125,6 +125,8 @@ export async function bootstrapProviders(
   ctx.availableEngines = availableEngines;
   ctx.engineStatuses = engineStatuses;
   ctx.engineDescriptors = engineDescriptors;
+  // P1: engines installed or signed in while OpenBot runs are picked up without a restart.
+  ctx.redetectEngines = () => redetectEngines(ctx, drivers, detection);
   const home = ctx.config.openbotHome;
   ctx.customEngines = {
     list: () => readEnginePrefs(home).custom,
@@ -159,6 +161,30 @@ function resolveDecisionService(ctx: CoreContext): DecisionService {
       createDecisionService({ apiKey, baseUrl, decisionLog: new DecisionLog(ctx.repos.decisions) }),
     probeKey: (apiKey) => new JevClient({ apiKey, baseUrl }).validateKey(),
   });
+}
+
+/**
+ * P1: detects the engines again and plugs newly ready ones into the same `drivers` map the
+ * runtime and the turn builder hold (they see them at once). A driver that is already wired is
+ * kept (its sessions and app-server stay); one that is no longer ready simply stops being offered.
+ */
+export async function redetectEngines(
+  ctx: CoreContext,
+  drivers: Partial<Record<EngineId, EngineDriver>>,
+  detection: ProviderDetection = defaultDetection,
+): Promise<EngineId[]> {
+  const fresh = await resolveEngineDrivers(ctx, detection);
+  for (const [id, driver] of Object.entries(fresh.drivers) as Array<[EngineId, EngineDriver]>) {
+    if (drivers[id]) {
+      if (drivers[id] !== driver) await driver.dispose().catch(() => undefined);
+    } else {
+      drivers[id] = driver;
+    }
+  }
+  ctx.availableEngines = fresh.availableEngines;
+  ctx.engineStatuses = fresh.engineStatuses;
+  ctx.engineDescriptors = fresh.engineDescriptors;
+  return fresh.availableEngines;
 }
 
 async function resolveEngineDrivers(

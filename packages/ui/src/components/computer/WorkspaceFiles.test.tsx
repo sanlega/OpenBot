@@ -49,6 +49,28 @@ describe("WorkspaceFiles (N2)", () => {
     expect(await screen.findByText("reports")).toBeTruthy();
   });
 
+  it("opens a link to a file as a file, and never one pointing outside", async () => {
+    const at = "2026-10-01T10:00:00Z";
+    const get = vi.fn(async (path: string) => {
+      if (path === "/api/workspace/files?path=")
+        return {
+          entries: [
+            { name: "latest.md", kind: "link", target: "file", size: 0, modifiedAt: at },
+            { name: "escape", kind: "link", target: "outside", size: 0, modifiedAt: at },
+          ],
+        };
+      if (path.startsWith("/api/workspace/file?path=latest.md"))
+        return { path: "latest.md", size: 3, binary: false, truncated: false, text: "# L" };
+      if (path === "/api/bots/bot_a/commands") return { commands: [] };
+      throw new Error(path);
+    });
+    transport = { get } as unknown as Transport;
+    render(<WorkspaceFiles botId="bot_a" />);
+    await userEvent.click(await screen.findByText("latest.md"));
+    expect(await screen.findByText("# L")).toBeTruthy();
+    expect(screen.getByText("escape").closest("button")).toBeDisabled();
+  });
+
   it("formats sizes", () => {
     expect([sizeLabel(512), sizeLabel(2048), sizeLabel(5 * 1024 * 1024)]).toEqual([
       "512 B",

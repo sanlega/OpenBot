@@ -513,7 +513,12 @@ export class MockClientApiServer {
       if (!Array.isArray(engines))
         return sendJson(res, 400, { error: "expected { engines: [...] }" });
       this.customEngines = engines as typeof this.customEngines;
-      return sendJson(res, 200, { engines: this.customEngines, restartRequired: true });
+      return sendJson(res, 200, { engines: this.customEngines, restartRequired: false });
+    }
+    if (method === "POST" && path === "/api/engines/redetect") {
+      return sendJson(res, 200, {
+        available: SEED_ENGINES.filter((e) => e.available).map((e) => e.id),
+      });
     }
     // N2: same shapes as packages/core/src/http/routes/workspace.ts.
     if (method === "GET" && path === "/api/workspace/files") {

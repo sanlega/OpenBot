@@ -153,6 +153,23 @@ describe("Mailbox basic turn lifecycle (against @openbot/engines-fake)", () => {
     ).toBe(true);
   });
 
+  it("a plan update is not a tool call: it keeps the answer and isn't counted", async () => {
+    const script = async (hooks: TurnHooks): Promise<TurnResult> => {
+      hooks.emit({ type: "text_delta", text: "Here is the full answer." });
+      hooks.emit({
+        type: "tool_started",
+        toolName: "update_plan",
+        input: { todos: [{ content: "Answer", status: "completed" }] },
+        toolUseId: "plan-1",
+      });
+      hooks.emit({ type: "tool_completed", toolUseId: "plan-1", output: "", isError: false });
+      return turnResult();
+    };
+    const runtime = buildRuntime(new ScriptedEngineDriver(script));
+    const outcome = await runtime.mailbox.submit(makeInput(runtime));
+    expect(outcome.text).toBe("Here is the full answer.");
+  });
+
   it("the reply is the text after the last tool call, not the narration between tools", async () => {
     const tool = (hooks: TurnHooks, id: string) => {
       hooks.emit({ type: "tool_started", toolName: "browser_click", input: {}, toolUseId: id });

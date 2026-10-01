@@ -6,8 +6,16 @@ import { relativeTime } from "../activity/format.js";
 interface Entry {
   name: string;
   kind: "dir" | "file" | "link";
+  /** For a link: what it opens as inside the workspace, or "outside" (not opened). */
+  target?: "dir" | "file" | "outside";
   size: number;
   modifiedAt: string;
+}
+
+/** How a row opens: a link opens as what it points to inside the workspace. */
+function opensAs(e: Entry): "dir" | "file" | undefined {
+  if (e.kind !== "link") return e.kind;
+  return e.target === "dir" || e.target === "file" ? e.target : undefined;
 }
 
 interface Preview {
@@ -132,13 +140,19 @@ export function WorkspaceFiles({ botId }: { botId: string }) {
                 <button
                   type="button"
                   className="files-row"
+                  disabled={e.kind === "link" && e.target !== "dir" && e.target !== "file"}
+                  title={
+                    e.kind === "link" && e.target !== "dir" && e.target !== "file"
+                      ? "A link to somewhere outside the workspace"
+                      : undefined
+                  }
                   onClick={() =>
-                    e.kind === "file"
+                    opensAs(e) === "file"
                       ? void openFile(e.name)
                       : (setPreview(null), setPath(path ? `${path}/${e.name}` : e.name))
                   }
                 >
-                  {e.kind === "dir" ? (
+                  {opensAs(e) === "dir" ? (
                     <Folder size={15} aria-hidden />
                   ) : (
                     <File size={15} aria-hidden />

@@ -91,6 +91,34 @@ describe("EnginesSettings", () => {
     expect(screen.getByText("goose acp --flag")).toBeInTheDocument();
   });
 
+  it("checks the engines again without a restart (P1)", async () => {
+    fakeTransport([]);
+    const post = vi.fn(async () => ({ available: ["claude", "cursor"] }));
+    (transport as unknown as { post: typeof post }).post = post;
+    const onRefresh = vi.fn(async () => undefined);
+    render(<EnginesSettings engines={engines} setup={setup} onRefresh={onRefresh} />);
+    expect(
+      screen.getByText(/cursor-agent login` in a terminal, then press Check again/),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(post).toHaveBeenCalledWith("/api/engines/redetect", {});
+    expect(onRefresh).toHaveBeenCalled();
+    expect(await screen.findByText("2 engines are ready for your bots.")).toBeInTheDocument();
+  });
+
+  it("says a saved agent is ready when the harness wired it", async () => {
+    const { put } = fakeTransport([]);
+    put.mockImplementation(async (_p: string, body: { engines: never[] }) => ({
+      engines: body.engines,
+      restartRequired: false,
+    }));
+    render(<EnginesSettings engines={engines} setup={setup} />);
+    await userEvent.type(await screen.findByLabelText("Agent name"), "Goose");
+    await userEvent.type(screen.getByLabelText("Command line"), "goose acp");
+    await userEvent.click(screen.getByRole("button", { name: /Add/ }));
+    expect(await screen.findByText("Saved. Your bots can use it now.")).toBeInTheDocument();
+  });
+
   it("splits a command line, keeping quoted parts", () => {
     expect(splitCommandLine('"C:\\Program Files\\Agent\\agent.exe" acp --name "my bot"')).toEqual([
       "C:\\Program Files\\Agent\\agent.exe",

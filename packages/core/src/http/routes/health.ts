@@ -24,7 +24,14 @@ export function registerHealthRoutes(app: FastifyInstance, ctx: CoreContext): vo
     return { engines };
   });
 
-  /** Owner-added ACP agents (D-031). A change needs a restart to wire the engine. */
+  // P1: "Check again" in Settings > Engines (after installing or signing in to a CLI).
+  app.post("/api/engines/redetect", async (_req, reply) => {
+    if (!ctx.redetectEngines) return reply.code(501).send({ error: "not wired" });
+    const available = await ctx.redetectEngines();
+    return { available };
+  });
+
+  /** Owner-added ACP agents (D-031), wired at once by detecting the engines again. */
   app.get("/api/engines/custom", async () => ({ engines: ctx.customEngines?.list() ?? [] }));
 
   app.put("/api/engines/custom", async (req, reply) => {
@@ -32,7 +39,15 @@ export function registerHealthRoutes(app: FastifyInstance, ctx: CoreContext): vo
     const parsed = parseCustomEngines((req.body as { engines?: unknown } | undefined)?.engines);
     if ("error" in parsed) return reply.code(400).send({ error: parsed.error });
     await ctx.customEngines.save(parsed.engines);
-    return { engines: parsed.engines, restartRequired: true };
+    // A new agent is wired now; removing one stops offering it (its process ends with its turn).
+    const available = ctx.redetectEngines
+      ? await ctx.redetectEngines().catch(() => undefined)
+      : undefined;
+    return {
+      engines: parsed.engines,
+      restartRequired: !available,
+      ...(available ? { available } : {}),
+    };
   });
 
   app.get("/api/models", async () => {

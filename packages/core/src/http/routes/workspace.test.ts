@@ -67,7 +67,7 @@ describe("workspace files (N2)", () => {
       // Listed as a link, without the details of what it points to.
       const listed = (await app.inject({ method: "GET", url: "/api/workspace/files" })).json();
       expect(listed.entries).toContainEqual(
-        expect.objectContaining({ name: "escape", kind: "link", size: 0 }),
+        expect.objectContaining({ name: "escape", kind: "link", size: 0, target: "outside" }),
       );
       expect(await insideWorkspace(ws, "escape/secret.txt")).toBeUndefined();
       const res = await app.inject({
@@ -76,6 +76,27 @@ describe("workspace files (N2)", () => {
       });
       expect(res.statusCode).toBe(404);
     }
+  });
+
+  it("a link inside the workspace opens as what it points to", async () => {
+    t = await createTestContext();
+    const ws = t.ctx.config.workspaceDir;
+    mkdirSync(join(ws, "reports"), { recursive: true });
+    writeFileSync(join(ws, "reports", "a.md"), "# A");
+    try {
+      symlinkSync(join(ws, "reports"), join(ws, "latest"), "junction");
+    } catch {
+      return; // no link privileges on this machine
+    }
+    app = await buildServer(t.ctx);
+    const listed = (await app.inject({ method: "GET", url: "/api/workspace/files" })).json();
+    expect(listed.entries).toContainEqual(
+      expect.objectContaining({ name: "latest", kind: "link", target: "dir" }),
+    );
+    const inside = (
+      await app.inject({ method: "GET", url: "/api/workspace/file?path=latest/a.md" })
+    ).json();
+    expect(inside).toMatchObject({ text: "# A" });
   });
 
   it("keeps each bot's latest VM commands with how they ended", async () => {

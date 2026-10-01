@@ -93,7 +93,18 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
             // lstat: a link shows as a link, never with the details of what it points to.
             const s = await lstat(join(dir, name));
             const link = s.isSymbolicLink();
+            // What a link opens as: only a link that stays inside the workspace opens at all.
+            let target: "dir" | "file" | "outside" | undefined;
+            if (link) {
+              const real = await insideWorkspace(
+                ctx.config.workspaceDir,
+                path ? `${path}/${name}` : name,
+              );
+              const t = real ? await stat(real).catch(() => undefined) : undefined;
+              target = t?.isDirectory() ? "dir" : t?.isFile() ? "file" : "outside";
+            }
             return {
+              ...(target ? { target } : {}),
               name,
               kind: link
                 ? ("link" as const)
@@ -131,10 +142,12 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
     const file = await insideWorkspace(ctx.config.workspaceDir, path);
     if (!file) return reply.code(404).send({ error: "not_found", reason: "no such file" });
     let size: number;
+    let checked: { dev: bigint; ino: bigint };
     try {
-      const s = await stat(file);
+      const s = await stat(file, { bigint: true });
       if (!s.isFile()) return reply.code(404).send({ error: "not_found", reason: "not a file" });
-      size = s.size;
+      size = Number(s.size);
+      checked = { dev: s.dev, ino: s.ino };
     } catch {
       return reply.code(404).send({ error: "not_found", reason: "no such file" });
     }
@@ -145,8 +158,10 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: CoreContext):
       // Locked or unreadable: a plain answer, never an error page with local paths.
       return reply.code(409).send({ error: "unreadable", reason: "this file can't be opened now" });
     }
-    // A path component swapped for a link between the check and the open: refuse.
-    if ((await insideWorkspace(ctx.config.workspaceDir, path)) !== file) {
+    // The file actually opened must be the one checked inside the workspace: a path component
+    // swapped for a link between the check and the open opens something else, refused.
+    const opened = await handle.stat({ bigint: true }).catch(() => undefined);
+    if (!opened || opened.dev !== checked.dev || opened.ino !== checked.ino) {
       await handle.close();
       return reply.code(404).send({ error: "not_found", reason: "no such file" });
     }

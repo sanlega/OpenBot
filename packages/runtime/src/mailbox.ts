@@ -337,7 +337,9 @@ export class Mailbox {
             sawTool = true;
             mark({ firstToolAt: nowIso() });
           }
-          if (e.type === "tool_started") {
+          // The engine's todo list (TodoWrite, Codex's plan) is bookkeeping, not work: it neither
+          // counts as a tool call nor turns what the bot said before it into narration.
+          if (e.type === "tool_started" && !isPlanTool(e.toolName)) {
             toolCallCount += 1;
             if (replyText.trim()) lastSaid = replyText;
             replyText = "";
@@ -552,7 +554,12 @@ export class Mailbox {
         // K3: the engine's own tools (shell, files) are watched too; a loop is recorded and, for
         // engines that take text mid-turn, answered with a reminder. OpenBot's own tools are
         // watched (and answered) by the MCP server itself.
-        if (call && this.nativeLoops && !call.name.startsWith("mcp__openbot")) {
+        if (
+          call &&
+          this.nativeLoops &&
+          !call.name.startsWith("mcp__openbot") &&
+          !isPlanTool(call.name)
+        ) {
           const output =
             typeof event.output === "string" ? event.output : JSON.stringify(event.output ?? null);
           const action = this.nativeLoops.observe(turnId, call.name, call.input, output, botId);
@@ -691,4 +698,9 @@ export class Mailbox {
     }
     return answer;
   }
+}
+
+/** The engine's own todo list: Claude's TodoWrite, Codex's plan updates (N3). */
+function isPlanTool(name: string): boolean {
+  return name === "TodoWrite" || name === "update_plan";
 }
