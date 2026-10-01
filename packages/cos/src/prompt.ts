@@ -8,6 +8,31 @@ export interface CosPromptContext {
   caps: AutonomyCaps;
   cosCreatedBotCount: number;
   spawnsLeftToday: number;
+  /** Bots the user removed, newest first, with the last thing each one reported. */
+  formerBots?: FormerBot[];
+}
+
+export interface FormerBot {
+  name: string;
+  description: string;
+  removedAt: string;
+  /** Its last replies (newest first), shortened. */
+  lastWork: string[];
+}
+
+/** What the Chief remembers of a removed bot: who it was and what it last reported. */
+function formerBotsBlock(former: FormerBot[] | undefined): string {
+  if (!former || former.length === 0) return "";
+  const lines = former.map((b) => {
+    const work = b.lastWork.length
+      ? b.lastWork.map((w) => `\n    last reported: ${w}`).join("")
+      : "\n    (no replies recorded)";
+    return `- ${b.name}, removed ${b.removedAt.slice(0, 10)}: ${b.description}${work}`;
+  });
+  return `\n\nBOTS THE USER REMOVED (no longer on the team; their files stay in the workspace)
+${lines.join("\n")}
+Use this when the user refers to one of them or to their work; if that work must go on, give
+it to a current bot (or create one) and pass on what you know.`;
 }
 
 /**
@@ -30,7 +55,7 @@ reach you, so you hand real work to bots and stay available. Delegating is the
 default; doing the work yourself is the exception.
 
 CURRENT TEAM
-${rosterLines || "(no bots yet)"}
+${rosterLines || "(no bots yet)"}${formerBotsBlock(ctx.formerBots)}
 Limits right now: ${ctx.cosCreatedBotCount}/${ctx.caps.cosCreatedBotsMax} bots, ${ctx.spawnsLeftToday} new bots
 left today. You cannot change these limits.
 

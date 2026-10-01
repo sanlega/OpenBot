@@ -9,7 +9,12 @@ import {
   type TurnInput,
 } from "@openbot/contracts";
 import { delegationsOf, type CoreContext, type TurnMailbox } from "@openbot/core";
-import { buildCosSystemPrompt, type AutonomyCaps, type CapCounterService } from "@openbot/cos";
+import {
+  buildCosSystemPrompt,
+  type AutonomyCaps,
+  type CapCounterService,
+  type FormerBot,
+} from "@openbot/cos";
 import { McpComposer, removeTokenFileIfUnchanged, type SessionTokenService } from "@openbot/mcp";
 import {
   COMPUTER_RULE_BLOCK,
@@ -184,6 +189,41 @@ export function createEngineChooser(ctx: CoreContext, deps: TurnMailboxDeps): En
   return chooseEngine;
 }
 
+/** How many removed bots, and for how long, the Chief keeps in mind. */
+const FORMER_BOTS_MAX = 8;
+const FORMER_BOTS_DAYS = 90;
+
+/** Bots the user removed recently, with their last replies, for the Chief's prompt. */
+export function formerBotsOf(ctx: CoreContext, roster: Bot[]): FormerBot[] {
+  const since = ctx.clock.now().getTime() - FORMER_BOTS_DAYS * 86_400_000;
+  return roster
+    .filter((b) => b.archivedAt && new Date(b.archivedAt).getTime() >= since)
+    .sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? ""))
+    .slice(0, FORMER_BOTS_MAX)
+    .map((b) => {
+      const thread = ctx.repos.threads.getByBotId(b.id);
+      const replies = thread
+        ? ctx.repos.messages
+            .list({ threadId: thread.id })
+            // Newest first already.
+            .filter((m) => m.author.type === "bot" && m.text.trim())
+            .slice(0, 2)
+            .map((m) => shorten(m.text, 280))
+        : [];
+      return {
+        name: b.name,
+        description: shorten(b.description, 200),
+        removedAt: b.archivedAt!,
+        lastWork: replies,
+      };
+    });
+}
+
+function shorten(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
 export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): TurnBuilder {
   /** Token files written for turns that are still running. */
   const tokenFiles = new Map<string, { file: string; token: string }>();
@@ -208,6 +248,7 @@ export function createTurnBuilder(ctx: CoreContext, deps: TurnMailboxDeps): Turn
     return `${bot.description}\n\n${buildCosSystemPrompt({
       userName: "the user",
       roster,
+      formerBots: formerBotsOf(ctx, roster),
       caps: deps.autonomyCaps,
       cosCreatedBotCount: roster.filter((b) => b.createdBy !== "user" && !b.archivedAt).length,
       spawnsLeftToday: Math.max(0, deps.autonomyCaps.newBotsPerDay - deps.caps.spawnsInLast24h()),

@@ -30,6 +30,36 @@ describe("CoS system prompt", () => {
     expect(flat).toContain("If you are unsure whether to delegate: delegate.");
   });
 
+  it("remembers bots the user removed and what they last reported", () => {
+    const prompt = buildCosSystemPrompt({
+      userName: "Alice",
+      roster: [],
+      caps: STRICT_CAPS,
+      cosCreatedBotCount: 0,
+      spawnsLeftToday: 2,
+      formerBots: [
+        {
+          name: "Scout",
+          description: "Researches competitors",
+          removedAt: "2026-09-30T12:00:00.000Z",
+          lastWork: ["Report saved to /workspace/competitors.md"],
+        },
+      ],
+    });
+    expect(prompt).toContain("BOTS THE USER REMOVED");
+    expect(prompt).toContain("- Scout, removed 2026-09-30: Researches competitors");
+    expect(prompt).toContain("last reported: Report saved to /workspace/competitors.md");
+    // Nothing about removed bots when there are none.
+    const none = buildCosSystemPrompt({
+      userName: "Alice",
+      roster: [],
+      caps: STRICT_CAPS,
+      cosCreatedBotCount: 0,
+      spawnsLeftToday: 2,
+    });
+    expect(none).not.toContain("BOTS THE USER REMOVED");
+  });
+
   it("fills roster and limits placeholders", () => {
     const prompt = buildCosSystemPrompt({
       userName: "Bob",

@@ -6,6 +6,7 @@ import { useOpenBot } from "../../state/context.js";
 import { getStoredTheme, setTheme, type ThemePreference } from "../../state/theme.js";
 import { ScreenHeader } from "../common/ScreenHeader.js";
 import { ComputerImageCard } from "./ComputerImageCard.js";
+import { DataSettings } from "./DataSettings.js";
 import { EnginesSettings } from "./EnginesSettings.js";
 import { SavedLogins } from "./SavedLogins.js";
 import { SpendingToday } from "./SpendingToday.js";
@@ -30,6 +31,7 @@ const SECTIONS = [
   { id: "computer", label: "Computer" },
   { id: "notifications", label: "Notifications" },
   { id: "spending", label: "Spending" },
+  { id: "data", label: "Data" },
   { id: "about", label: "About" },
 ] as const;
 
@@ -343,6 +345,14 @@ export function SettingsView() {
                   help="Each routine has its own per-run and daily limits, set when you create it."
                 />
               </SettingsGroup>
+            </SettingsSection>
+
+            <SettingsSection
+              id="data"
+              title="Data"
+              description="What OpenBot keeps on this computer."
+            >
+              <DataSettings />
             </SettingsSection>
 
             <SettingsSection id="about" title="About">

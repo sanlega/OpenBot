@@ -42,6 +42,11 @@ export class MessagesRepo {
       .run();
   }
 
+  /** Removes every message of a thread (the user cleared the chat); returns how many. */
+  deleteForThread(threadId: string): number {
+    return this.db.delete(messages).where(eq(messages.threadId, threadId)).run().changes;
+  }
+
   getById(id: string): Message | undefined {
     const row = this.db.select().from(messages).where(eq(messages.id, id)).get();
     return row ? toMessage(row) : undefined;

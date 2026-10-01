@@ -3,6 +3,22 @@ import type { CoreContext } from "../../context.js";
 import { requireAuth } from "../auth.js";
 import { ActivityQuery, MessagesQuery } from "../schemas.js";
 
+/** A turn still running (or waiting for an approval) for this Bot. */
+function isWorking(ctx: CoreContext, botId: string): boolean {
+  return ctx.repos.turns.listOpen().some((t) => t.botId === botId);
+}
+
+async function clearThread(ctx: CoreContext, threadId: string, botId: string): Promise<number> {
+  const removed = ctx.repos.messages.deleteForThread(threadId);
+  ctx.repos.engineSessions.deleteForBot(botId);
+  // Forms still waiting in the cleared chat have nowhere to show any more.
+  for (const input of ctx.repos.inputRequests.list({ status: "pending", botId })) {
+    ctx.repos.inputRequests.resolve(input.id, "cancelled", ctx.clock.now());
+  }
+  await ctx.eventBus.publish({ type: "thread.cleared", botId, threadId, payload: { removed } });
+  return removed;
+}
+
 /** Threads, messages, and the activity log (plan §4.7). */
 export function registerThreadRoutes(app: FastifyInstance, ctx: CoreContext): void {
   // One DM thread per visible Bot, shaped for the chat list (title, preview).
@@ -32,6 +48,36 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: CoreContext): vo
     const query = ActivityQueryFromMessages(request.query);
     if (!query) return reply.code(400).send({ error: "invalid_request" });
     return { messages: ctx.repos.messages.list({ threadId: id, delivery: query.delivery }) };
+  });
+
+  // Clears a chat: its messages go, and the Bot's engines start a new conversation next time.
+  // Its files, routines, logins and settings stay.
+  app.post("/api/threads/:id/clear", async (request, reply) => {
+    if (!requireAuth(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const thread = ctx.repos.threads.getById(id);
+    if (!thread) return reply.code(404).send({ error: "not_found" });
+    if (isWorking(ctx, thread.botId)) {
+      return reply.code(409).send({ error: "busy", reason: "This bot is working. Stop it first." });
+    }
+    const removed = await clearThread(ctx, thread.id, thread.botId);
+    return { ok: true, removed };
+  });
+
+  // Settings > Data: every chat at once (the bots themselves stay).
+  app.post("/api/threads/clear-all", async (request, reply) => {
+    if (!requireAuth(request, reply)) return;
+    const threads = ctx.repos.threads.list();
+    const busy = threads.filter((t) => isWorking(ctx, t.botId));
+    if (busy.length > 0) {
+      const names = busy.map((t) => ctx.repos.bots.getById(t.botId)?.name ?? t.botId).join(", ");
+      return reply
+        .code(409)
+        .send({ error: "busy", reason: `Still working: ${names}. Stop them first.` });
+    }
+    let removed = 0;
+    for (const thread of threads) removed += await clearThread(ctx, thread.id, thread.botId);
+    return { ok: true, removed, threads: threads.length };
   });
 
   // Stops the Bot's active turn and drops its queued ones (M1 "stop mid-turn").

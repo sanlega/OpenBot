@@ -44,6 +44,7 @@ const payloads = {
   "bot.created": { botId: "bot_01ARZ3NDEKTSV4RRFFQ69G5FAV", payload: { createdBy: "user" } },
   "bot.updated": { botId: "bot_01ARZ3NDEKTSV4RRFFQ69G5FAV", payload: { fields: ["description"] } },
   "bot.archived": { botId: "bot_01ARZ3NDEKTSV4RRFFQ69G5FAV", payload: {} },
+  "thread.cleared": { botId: "bot_01ARZ3NDEKTSV4RRFFQ69G5FAV", threadId: "thr_01ARZ3NDEKTSV4RRFFQ69G5FAV", payload: { removed: 12 } },
   "bot.archive_suggested": { botId: "bot_01ARZ3NDEKTSV4RRFFQ69G5FAV", payload: { idleDays: 7 } },
   "route.decided": { botId: "bot_01ARZ3NDEKTSV4RRFFQ69G5FAV", payload: { engine: "claude", model: "claude-opus", confidence: 0.9 } },
   "gate.decided": { botId: "bot_01ARZ3NDEKTSV4RRFFQ69G5FAV", payload: { gate: "spawn", allowed: false, reason: "cap_s1", suggestion: "reuse research-bot" } },

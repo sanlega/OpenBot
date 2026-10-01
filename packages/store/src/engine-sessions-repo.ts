@@ -55,6 +55,11 @@ export class EngineSessionsRepo {
       .run();
   }
 
+  /** Forgets every engine session of a Bot: its next turn starts a new conversation. */
+  deleteForBot(botId: string): void {
+    this.db.delete(engineSessions).where(eq(engineSessions.botId, botId)).run();
+  }
+
   deleteForBotAndEngine(botId: string, engine: string): void {
     this.db
       .delete(engineSessions)

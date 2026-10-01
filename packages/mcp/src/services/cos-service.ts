@@ -53,7 +53,7 @@ export class McpCosServiceAdapter implements McpCosService {
 
     const bot: Bot = {
       id: newId("bot"),
-      slug: slugify(input.name),
+      slug: this.freeSlug(slugify(input.name)),
       name: input.name,
       description: input.description,
       pinned: false,
@@ -150,6 +150,14 @@ export class McpCosServiceAdapter implements McpCosService {
       pushed: message?.pushed,
       messageId: message?.id ?? newId("message"),
     });
+  }
+
+  /** Slugs are unique, also among archived Bots: a second "Researcher" becomes researcher-2. */
+  private freeSlug(base: string): string {
+    const root = base || "bot";
+    let slug = root;
+    for (let n = 2; this.ctx.repos.bots.getBySlug(slug); n += 1) slug = `${root}-${n}`;
+    return slug;
   }
 }
 

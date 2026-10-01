@@ -245,9 +245,19 @@ function resolveComputerProvider(
   // Keep the provider wired even while Docker Desktop is starting. Its start
   // operation checks the daemon again, so opening Docker needs no app restart.
   // D-032: the virtual machine sees the bots' workspace at /workspace (same files everywhere).
+  // A second desktop next to the installed app's (live tests on a copied home): its own
+  // container, ports and browser volume.
+  const port = (name: string) => {
+    const value = Number(process.env[name]);
+    return Number.isInteger(value) && value > 0 ? value : undefined;
+  };
   return createDockerProvider({
     workspaceMount: ctx.config.workspaceDir,
     image,
+    containerName: process.env.OPENBOT_DESKTOP_CONTAINER?.trim() || undefined,
+    controlPort: port("OPENBOT_DESKTOP_CONTROL_PORT"),
+    liveViewPort: port("OPENBOT_DESKTOP_VIEW_PORT"),
+    browserVolume: process.env.OPENBOT_DESKTOP_VOLUME?.trim() || undefined,
     ensureImage: imageManager?.ensure ? () => imageManager.ensure!() : undefined,
   });
 }

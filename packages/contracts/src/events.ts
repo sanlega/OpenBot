@@ -27,6 +27,7 @@ export const EventType = z.enum([
   "bot.created",
   "bot.updated",
   "bot.archived",
+  "thread.cleared",
   "bot.archive_suggested",
   "route.decided",
   "gate.decided",

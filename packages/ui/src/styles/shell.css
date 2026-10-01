@@ -579,3 +579,124 @@ body {
 [data-desktop="mac"] .screen-header select {
   -webkit-app-region: no-drag;
 }
+
+/* A roster row: the bot button plus a "⋯" actions button that shows on hover or focus. */
+.bot-row {
+  position: relative;
+}
+
+.bot-row .bot-item {
+  padding-right: 34px;
+}
+
+.bot-row-more {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--surface-3);
+  color: var(--text-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.bot-row:hover .bot-row-more,
+.bot-row:focus-within .bot-row-more,
+.bot-row[data-menu-open] .bot-row-more {
+  opacity: 1;
+}
+
+.bot-row-more:hover {
+  color: var(--text);
+}
+
+.bot-row-more:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* Touch screens have no hover: the button is always there. */
+@media (hover: none) {
+  .bot-row-more {
+    opacity: 1;
+  }
+}
+
+.bot-menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 6px;
+  z-index: 20;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  box-shadow: var(--shadow-2);
+  animation: dialog-in var(--fast) var(--ease);
+}
+
+.bot-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bot-menu-item:hover,
+.bot-menu-item:focus-visible {
+  outline: none;
+  background: var(--surface-2);
+}
+
+.bot-menu-item[data-danger] {
+  color: var(--danger);
+}
+
+.bot-menu-item[data-danger]:hover,
+.bot-menu-item[data-danger]:focus-visible {
+  background: var(--danger-soft);
+}
+
+.bot-rename {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.bot-rename input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+
+.bot-rename input:focus {
+  outline: none;
+  box-shadow: var(--focus);
+}

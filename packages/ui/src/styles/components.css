@@ -615,3 +615,25 @@ kbd {
 .ctask-input .field {
   flex: 1;
 }
+
+/* A confirm dialog's action button is solid red: it does something that can't be undone. */
+.dialog-confirm {
+  width: min(440px, 100%);
+}
+
+.dialog-confirm .dialog-text p {
+  margin: 0;
+}
+
+.btn-danger-solid,
+.dialog-confirm .btn-danger {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+}
+
+.btn-danger-solid:hover:not(:disabled),
+.dialog-confirm .btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  filter: brightness(1.08);
+}

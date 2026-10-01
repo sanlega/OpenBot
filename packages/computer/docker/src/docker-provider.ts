@@ -33,6 +33,10 @@ export interface DockerProviderOptions {
   containerName?: string;
   workspaceMount?: string;
   controlPort?: number;
+  /** Host port of the live view (noVNC); 6080 by default. */
+  liveViewPort?: number;
+  /** Docker volume for browser profiles and sign-ins (`openbot-browser` by default). */
+  browserVolume?: string;
   liveViewBaseUrl?: string;
   controlClient?: ControlDaemonClient;
   idleStopMs?: number;
@@ -64,10 +68,10 @@ export const BROWSER_DIR = "/data/browser";
  * the same on the host, in the VM and for every bot; and the browser volume, so sign-ins
  * survive the container.
  */
-export function desktopBinds(workspaceMount?: string): string[] {
+export function desktopBinds(workspaceMount?: string, browserVolume = BROWSER_VOLUME): string[] {
   return [
     ...(workspaceMount ? [`${workspaceMount}:/workspace`] : []),
-    `${BROWSER_VOLUME}:${BROWSER_DIR}`,
+    `${browserVolume}:${BROWSER_DIR}`,
   ];
 }
 
@@ -137,7 +141,9 @@ export class DockerProvider implements ComputerProvider {
       if (!savedToken) throw new Error(`desktop container ${name} has no control token`);
       const binds = info.HostConfig?.Binds ?? [];
       const outdated =
-        desktopBinds(this.options.workspaceMount).some((b) => !binds.includes(b)) ||
+        desktopBinds(this.options.workspaceMount, this.options.browserVolume).some(
+          (b) => !binds.includes(b),
+        ) ||
         // Made from another image (an older OpenBot): the daemon inside must match this app.
         (info.Config?.Image !== undefined && info.Config.Image !== image);
       if (outdated && container.remove) {
@@ -163,10 +169,12 @@ export class DockerProvider implements ComputerProvider {
           `OPENBOT_BROWSER_DIR=${BROWSER_DIR}`,
         ],
         HostConfig: {
-          Binds: desktopBinds(this.options.workspaceMount),
+          Binds: desktopBinds(this.options.workspaceMount, this.options.browserVolume),
           PortBindings: {
             "8787/tcp": [{ HostIp: "127.0.0.1", HostPort: String(port) }],
-            "6080/tcp": [{ HostIp: "127.0.0.1", HostPort: "6080" }],
+            "6080/tcp": [
+              { HostIp: "127.0.0.1", HostPort: String(this.options.liveViewPort ?? 6080) },
+            ],
           },
           AutoRemove: false,
         },
@@ -195,7 +203,15 @@ export class DockerProvider implements ComputerProvider {
   async screen(botId: string): Promise<Screen> {
     if (!this.started) throw new Error("DockerProvider.screen() called before ensureStarted()");
     const display = this.screens.assign(botId);
-    return new DockerScreen(botId, display, this.controlClient(), this.options.liveViewBaseUrl);
+    return new DockerScreen(
+      botId,
+      display,
+      this.controlClient(),
+      this.options.liveViewBaseUrl ??
+        (this.options.liveViewPort && this.options.liveViewPort !== 6080
+          ? `http://127.0.0.1:${this.options.liveViewPort}/vnc.html`
+          : undefined),
+    );
   }
 
   async exec(request: {

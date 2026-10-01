@@ -189,6 +189,33 @@ function applyEvent(state: UiState, event: OBEvent): void {
       if (bot) state.bots.set(botId, { ...bot, archivedAt: event.ts });
       break;
     }
+    case "thread.cleared": {
+      // The chat was cleared: its messages, turns and open forms go (a replay re-adds older
+      // messages first; this event comes after them and clears them again).
+      const threadId = String(event.threadId ?? "");
+      state.messagesByThread.set(threadId, []);
+      const thread = state.threads.get(threadId);
+      if (thread) {
+        state.threads.set(threadId, {
+          ...thread,
+          lastMessagePreview: undefined,
+          lastMessageAt: undefined,
+          lastMessageAuthor: undefined,
+        });
+      }
+      const botId = event.botId ?? thread?.botId;
+      if (botId) {
+        state.turns = new Map([...state.turns].filter(([, t]) => t.botId !== botId));
+        state.inputs = new Map(
+          [...state.inputs].map(([id, input]) =>
+            input.botId === botId && input.status === "pending"
+              ? [id, { ...input, status: "cancelled" as const }]
+              : [id, input],
+          ),
+        );
+      }
+      break;
+    }
     case "message.created": {
       const threadId = String(event.threadId ?? "");
       const msg: Message = {

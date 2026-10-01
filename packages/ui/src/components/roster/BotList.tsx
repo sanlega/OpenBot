@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { Bot } from "@openbot/contracts";
+import { Eraser, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { ThreadView } from "../../api/types.js";
 import { useOpenBot } from "../../state/context.js";
 import { BotAvatar, type BotStatus } from "../common/BotAvatar.js";
+import { ConfirmDialog } from "../common/ConfirmDialog.js";
 import { shortTime } from "../common/time.js";
 import { plainText } from "../activity/format.js";
 
@@ -21,7 +23,11 @@ export function BotList({
   onSelect,
   highlightSelection = true,
 }: BotListProps) {
-  const { bots, threads, selectedThreadId, selectThread, pendingApprovals, state } = useOpenBot();
+  const { bots, threads, selectedThreadId, selectThread, pendingApprovals, state, transport } =
+    useOpenBot();
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: "clear" | "delete"; bot: Bot } | null>(null);
 
   const statusOf = (botId: string): BotStatus => {
     if (pendingApprovals.some((a) => a.botId === botId)) return "needs-you";
@@ -46,38 +52,86 @@ export function BotList({
     const status = statusOf(bot.id);
     const active = highlightSelection && selectedThreadId === thread.id;
     return (
-      <button
+      <div
         key={thread.id}
-        type="button"
-        className="bot-item"
-        data-active={active}
-        aria-current={active ? "page" : undefined}
-        data-status={status}
-        onClick={() => {
-          selectThread(thread.id);
-          onSelect?.();
+        className="bot-row"
+        data-menu-open={menuFor === bot.id || undefined}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenuFor(bot.id);
         }}
       >
-        <BotAvatar bot={bot} size={32} status={status} />
-        <span className="bot-meta">
-          <span className="bot-name-row">
-            <span className="bot-name">{thread.title || bot.name}</span>
-            {status === "needs-you" ? (
-              <span className="pill pill-warning">Needs you</span>
-            ) : thread.lastMessageAt ? (
-              <span className="bot-time">{shortTime(thread.lastMessageAt)}</span>
-            ) : null}
-          </span>
-          <span className="bot-preview">
-            {status === "working"
-              ? "Working…"
-              : thread.lastMessagePreview
-                ? `${thread.lastMessageAuthor === "user" ? "You: " : ""}${plainText(thread.lastMessagePreview)}`
-                : (bot.label ?? bot.description)}
-          </span>
-        </span>
-      </button>
+        {renaming === bot.id ? (
+          <RenameForm bot={bot} onDone={() => setRenaming(null)} />
+        ) : (
+          <button
+            type="button"
+            className="bot-item"
+            data-active={active}
+            aria-current={active ? "page" : undefined}
+            data-status={status}
+            onClick={() => {
+              selectThread(thread.id);
+              onSelect?.();
+            }}
+          >
+            <BotAvatar bot={bot} size={32} status={status} />
+            <span className="bot-meta">
+              <span className="bot-name-row">
+                <span className="bot-name">{bot.name}</span>
+                {status === "needs-you" ? (
+                  <span className="pill pill-warning">Needs you</span>
+                ) : thread.lastMessageAt ? (
+                  <span className="bot-time">{shortTime(thread.lastMessageAt)}</span>
+                ) : null}
+              </span>
+              <span className="bot-preview">
+                {status === "working"
+                  ? "Working…"
+                  : thread.lastMessagePreview
+                    ? `${thread.lastMessageAuthor === "user" ? "You: " : ""}${plainText(thread.lastMessagePreview)}`
+                    : (bot.label ?? bot.description)}
+              </span>
+            </span>
+          </button>
+        )}
+        {renaming === bot.id ? null : (
+          <button
+            type="button"
+            className="bot-row-more"
+            aria-label={`More actions for ${bot.name}`}
+            aria-haspopup="menu"
+            aria-expanded={menuFor === bot.id}
+            onClick={() => setMenuFor(menuFor === bot.id ? null : bot.id)}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+        )}
+        {menuFor === bot.id ? (
+          <BotMenu
+            bot={bot}
+            onClose={() => setMenuFor(null)}
+            onRename={() => setRenaming(bot.id)}
+            onClear={() => setConfirm({ kind: "clear", bot })}
+            onDelete={() => setConfirm({ kind: "delete", bot })}
+          />
+        ) : null}
+      </div>
     );
+  };
+
+  const runConfirmed = async () => {
+    if (!confirm) return;
+    const thread = threads.find((t) => t.botId === confirm.bot.id);
+    if (confirm.kind === "clear") {
+      if (thread) await transport.post(`/api/threads/${thread.id}/clear`, {});
+      return;
+    }
+    await transport.delete(`/api/bots/${confirm.bot.id}`);
+    if (thread && selectedThreadId === thread.id) {
+      const next = rows.find((r) => r.bot.id !== confirm.bot.id);
+      selectThread(next?.thread.id ?? null);
+    }
   };
 
   return (
@@ -98,7 +152,133 @@ export function BotList({
           </button>
         </div>
       ) : null}
+      {confirm ? (
+        <ConfirmDialog
+          title={
+            confirm.kind === "clear"
+              ? `Clear the chat with ${confirm.bot.name}?`
+              : `Delete ${confirm.bot.name}?`
+          }
+          confirmLabel={confirm.kind === "clear" ? "Clear chat" : "Delete bot"}
+          danger
+          onConfirm={runConfirmed}
+          onClose={() => setConfirm(null)}
+        >
+          {confirm.kind === "clear" ? (
+            <p>
+              Its messages are removed and it starts a fresh conversation. Its instructions, files,
+              routines and saved logins stay.
+            </p>
+          ) : (
+            <p>
+              {confirm.bot.name} leaves the team and its chat leaves the sidebar. The Chief of Staff
+              keeps a note of what it did, and its files stay in the workspace.
+            </p>
+          )}
+        </ConfirmDialog>
+      ) : null}
     </div>
+  );
+}
+
+/** Rename, clear chat, delete: from the "⋯" button or a right-click on the row. */
+function BotMenu({
+  bot,
+  onClose,
+  onRename,
+  onClear,
+  onDelete,
+}: {
+  bot: Bot;
+  onClose: () => void;
+  onRename: () => void;
+  onClear: () => void;
+  onDelete: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      // Arrow keys move between the items, as in any menu.
+      const items = [...(ref.current?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      const next = items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+      next?.focus();
+      e.preventDefault();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  const item = (label: string, icon: ReactNode, run: () => void, danger = false) => (
+    <button
+      type="button"
+      role="menuitem"
+      className="bot-menu-item"
+      data-danger={danger || undefined}
+      onClick={() => {
+        onClose();
+        run();
+      }}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+  return (
+    <div className="bot-menu" role="menu" aria-label={`${bot.name} actions`} ref={ref}>
+      {item("Rename", <Pencil size={14} />, onRename)}
+      {item("Clear chat", <Eraser size={14} />, onClear)}
+      {bot.isChiefOfStaff ? null : item("Delete bot", <Trash2 size={14} />, onDelete, true)}
+    </div>
+  );
+}
+
+function RenameForm({ bot, onDone }: { bot: Bot; onDone: () => void }) {
+  const { transport } = useOpenBot();
+  const [name, setName] = useState(bot.name);
+  const [error, setError] = useState<string | null>(null);
+  const saving = useRef(false);
+  const save = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (saving.current) return;
+    const next = name.trim();
+    if (!next || next === bot.name) return onDone();
+    saving.current = true;
+    try {
+      await transport.patch(`/api/bots/${bot.id}`, { name: next });
+      onDone();
+    } catch (err) {
+      saving.current = false;
+      setError(err instanceof Error ? err.message : "Could not rename");
+    }
+  };
+  return (
+    <form className="bot-rename" onSubmit={(e) => void save(e)}>
+      <BotAvatar bot={bot} size={32} status="idle" />
+      <input
+        aria-label={`New name for ${bot.name}`}
+        value={name}
+        autoFocus
+        maxLength={60}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onDone();
+        }}
+        aria-invalid={error ? true : undefined}
+      />
+      {error ? <span className="form-error">{error}</span> : null}
+    </form>
   );
 }
 

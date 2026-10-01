@@ -382,6 +382,32 @@ export class MockClientApiServer {
       if (delivery) messages = messages.filter((m) => m.delivery === delivery);
       return sendJson(res, 200, { messages });
     }
+    // Same as the harness: clear one chat, or all of them (Settings > Data).
+    const clear = (threadId: string): number => {
+      const before = this.messages.length;
+      this.messages = this.messages.filter((m) => m.threadId !== threadId);
+      const removed = before - this.messages.length;
+      const thread = SEED_THREADS.find((t) => t.id === threadId);
+      this.appendEvent({
+        ts: new Date().toISOString(),
+        type: "thread.cleared",
+        botId: thread?.botId,
+        threadId,
+        payload: { removed },
+      });
+      return removed;
+    };
+    if (method === "POST" && path.match(/^\/api\/threads\/[^/]+\/clear$/)) {
+      const threadId = path.split("/")[3]!;
+      if (!SEED_THREADS.some((t) => t.id === threadId)) {
+        return sendJson(res, 404, { error: "not_found" });
+      }
+      return sendJson(res, 200, { ok: true, removed: clear(threadId) });
+    }
+    if (method === "POST" && path === "/api/threads/clear-all") {
+      const removed = SEED_THREADS.reduce((sum, t) => sum + clear(t.id), 0);
+      return sendJson(res, 200, { ok: true, removed, threads: SEED_THREADS.length });
+    }
     if (method === "GET" && path === "/api/approvals") {
       return sendJson(res, 200, {
         approvals: this.approvals.filter((a) => a.status === "pending"),
@@ -673,6 +699,12 @@ export class MockClientApiServer {
       if (idx < 0) return sendJson(res, 404, { error: "not_found" });
       const patch = await readJson<Partial<Bot>>(req);
       SEED_BOTS[idx] = { ...SEED_BOTS[idx]!, ...patch };
+      this.appendEvent({
+        ts: new Date().toISOString(),
+        type: "bot.updated",
+        botId,
+        payload: { patch, bot: SEED_BOTS[idx] },
+      });
       return sendJson(res, 200, { bot: SEED_BOTS[idx] });
     }
     if (method === "DELETE" && path.match(/^\/api\/bots\/[^/]+$/)) {
@@ -680,6 +712,7 @@ export class MockClientApiServer {
       const idx = SEED_BOTS.findIndex((b) => b.id === botId);
       if (idx < 0) return sendJson(res, 404, { error: "not_found" });
       SEED_BOTS[idx] = { ...SEED_BOTS[idx]!, archivedAt: new Date().toISOString() };
+      this.appendEvent({ ts: new Date().toISOString(), type: "bot.archived", botId, payload: {} });
       return sendJson(res, 200, { ok: true });
     }
     if (method === "GET" && path.match(/^\/api\/bots\/[^/]+\/route$/)) {

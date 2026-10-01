@@ -86,9 +86,9 @@ describe("WS5 extended screens", () => {
 
     await waitForBots();
     const roster = () => within(screen.getByTestId("bot-list"));
-    await user.click(roster().getByRole("button", { name: /Research/i }));
+    await user.click(roster().getByRole("button", { name: /^Research/i }));
     await waitFor(() =>
-      expect(roster().getByRole("button", { name: /Research/i })).toHaveAttribute(
+      expect(roster().getByRole("button", { name: /^Research/i })).toHaveAttribute(
         "data-active",
         "true",
       ),
@@ -97,7 +97,7 @@ describe("WS5 extended screens", () => {
     expect(await screen.findByTestId("bot-why-panel")).toBeInTheDocument();
     expect(screen.getByText("Long-form research with citations")).toBeInTheDocument();
 
-    await user.click(roster().getByRole("button", { name: /Chief of Staff/i }));
+    await user.click(roster().getByRole("button", { name: /^Chief of Staff/i }));
     await user.click(screen.getByRole("button", { name: "Chat" }));
     expect(await screen.findByTestId("digest-message")).toBeInTheDocument();
   });
