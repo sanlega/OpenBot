@@ -1,11 +1,16 @@
 # Project state
 
-_Last updated: 2026-10-01 by Claude (VM-first bots on branch sanlega/add-local-and-cli, not released)_
+_Last updated: 2026-10-01 by Claude (v0.1.17 released and installed)_
 
 ## In progress
+- **v0.1.17 RELEASED and installed on the Windows dev machine (2026-10-01)**: tag `v0.1.17`,
+  CI green on all three OSes (macOS file-watch flake rerun, then the test was made robust),
+  release workflow green, all installers + SHA256SUMS, Windows installer hash verified, GHCR
+  image `:v0.1.17` checked (gh, /exec); the installed app reports 0.1.17 and replaced the old
+  VM container on start (browser volume kept). Install path on Windows:
+  `%LOCALAPPDATA%\Programs\@openbotdesktop\openbot.exe`.
 - **VM-first bots, loop-proof computer control, bot management UX (2026-10-01, D-033, plan
-  `.ai/memory/plans/2026-10-01-polish-vm-loops.md`), on branch `sanlega/add-local-and-cli`
-  (pushed; `main` has everything before it), NOT released**. Done: a Bot with
+  `.ai/memory/plans/2026-10-01-polish-vm-loops.md`), shipped in v0.1.17**. Done: a Bot with
   `computer: "docker"` has no host shell/files (Claude `--tools`, Codex features off, broker
   backstop) and works through `vm_shell`/`vm_*_file` (daemon `/exec`) and `browser_*` tools
   (refs + page text); Jev loop guards (repeats, scroll budget, revisited states, no progress,
@@ -18,10 +23,10 @@ _Last updated: 2026-10-01 by Claude (VM-first bots on branch sanlega/add-local-a
   files, installs, Leave-site dialog, sign-in shared between bots on a real site and kept across a
   new container); `scripts/live/vmbot.mjs` 11/11 with real Claude and real Codex (VM tools only,
   host file unreadable, page read with browser_read); `drive.mjs` variant c: right person, 0
-  cards, 1 form, ~1.5 min. Full unit suite green. **Next**: delegated Full access (T9), UX pass
-  with screenshots (T10), E2E, then release v0.1.17 (owner's OK) — the desktop image must be
-  republished (`/exec` endpoint, new tools in the image); an old image answers 404 and the tools
-  say to update it in Settings.
+  cards, 1 form, ~1.5 min. Full unit suite green. **Next**: the owner tries real tasks on the
+  installed app (LinkedIn sign-in shared between bots, VM-only coding work); backlog candidates
+  in the plan's outcome (todo list per turn, box self-check, terminal/file panel, first-run
+  greeting, per-bot memory, ACP engines inside the VM).
 - **v0.1.16 (2026-09-30, D-032), installed**: shared VM for real (one set of sign-ins via
   `SharedCookieJar`, profiles on the `openbot-browser` volume, workspace mounted at `/workspace`,
   downloads to `workspace/downloads`) and the macOS app ad-hoc signed (CI verifies the signature
