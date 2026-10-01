@@ -73,3 +73,8 @@ export {
 } from "./connector-service.js";
 export * from "./memory.js";
 export * from "./bot-defaults.js";
+export {
+  LOCAL_OWNER_KEY_FILE,
+  LOCAL_OWNER_KEY_HEADER,
+  loadOrCreateLocalOwnerKey,
+} from "./local-owner-key.js";

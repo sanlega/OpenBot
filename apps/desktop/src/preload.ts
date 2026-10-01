@@ -4,6 +4,7 @@ import type { DeepLinkTarget, OpenbotDesktopApi } from "./types";
 const api: OpenbotDesktopApi = {
   platform: process.platform,
   getHarnessStatus: () => ipcRenderer.invoke("openbot:harness-status") as Promise<string>,
+  getLocalOwnerKey: () => (ipcRenderer.sendSync("openbot:local-owner-key") as string) || undefined,
   getLocalComputerPermissions: () =>
     ipcRenderer.invoke("openbot:local-computer-permissions") as Promise<
       ReturnType<OpenbotDesktopApi["getLocalComputerPermissions"]> extends Promise<infer T>

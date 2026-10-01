@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -25,6 +25,10 @@ export interface HarnessOptions {
 export interface TestHarness {
   baseUrl: string;
   home: string;
+  /** D-036: this install's owner key (the app's own requests carry it). */
+  localKey: string;
+  /** The app's address with the owner key, as `openbot serve` prints it. */
+  appUrl: string;
   /** Stops the server; the data dir survives until {@link TestHarness.close}. */
   stop: () => Promise<void>;
   /** Stops the server and deletes its data dir. */
@@ -100,9 +104,12 @@ export async function startTestHarness(options: HarnessOptions = {}): Promise<Te
     });
   };
 
+  const localKey = (await readFile(join(home, "local-owner.key"), "utf8")).trim();
   return {
     baseUrl,
     home,
+    localKey,
+    appUrl: `${baseUrl}/app/#key=${localKey}`,
     stop,
     close: async () => {
       await stop();
@@ -138,6 +145,7 @@ export async function api<T = Record<string, unknown>>(
     method: init.method ?? (init.body === undefined ? "GET" : "POST"),
     headers: {
       ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+      "x-openbot-local-key": harness.localKey,
       ...init.headers,
     },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
@@ -224,7 +232,9 @@ export interface StreamedEvent {
 
 /** Opens `/api/ws` as the local owner and subscribes to the live event stream. */
 export async function connectWs(harness: TestHarness): Promise<WsClient> {
-  const socket = new WebSocket(`${harness.baseUrl.replace("http", "ws")}/api/ws`);
+  const socket = new WebSocket(
+    `${harness.baseUrl.replace("http", "ws")}/api/ws?key=${harness.localKey}`,
+  );
   const events: StreamedEvent[] = [];
   const eventWaiters: Array<() => void> = [];
   const results: Array<(frame: Record<string, unknown>) => void> = [];

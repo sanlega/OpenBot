@@ -3,7 +3,7 @@
 // real Docker VM, the local Linkup site. Acts as the user: answers data forms only; any approval
 // card is counted as a failure (then allowed so the run can finish).
 import { spawn } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,7 +34,11 @@ const base = `http://127.0.0.1:${PORT}`;
 const api = async (path, body) => {
   const res = await fetch(base + path, {
     method: body === undefined ? "GET" : "POST",
-    headers: body === undefined ? {} : { "content-type": "application/json" },
+    headers: {
+      // D-036: the copied home's owner key (the harness writes it on start).
+      "x-openbot-local-key": readFileSync(join(HOME, "local-owner.key"), "utf8").trim(),
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };

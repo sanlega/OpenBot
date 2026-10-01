@@ -99,6 +99,31 @@ export const SENSITIVE_COMPUTER_TARGET_RE = new RegExp(
   "iu",
 );
 
+/**
+ * Tools that only read, search or change files never open a connection, so naming the harness's
+ * address in them (a file about OpenBot, a grep for it) is fine; nor do the VM's own tools, whose
+ * loopback is the VM's, not this computer's.
+ */
+const NO_CONNECTION_TOOLS = new Set([
+  "Read",
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "NotebookEdit",
+  "apply_patch",
+  "Grep",
+  "Glob",
+  "LS",
+  "TodoWrite",
+  "update_plan",
+]);
+
+function reachesOut(req: BrokerRequest): boolean {
+  if (req.kind !== "tool") return req.kind === "connector_action";
+  if (NO_CONNECTION_TOOLS.has(req.action)) return false;
+  return !/^mcp__openbot__vm_/.test(req.action);
+}
+
 function harnessAddressRe(port: number): RegExp {
   return new RegExp(
     `(?:127(?:\\.\\d{1,3}){3}|localhost|\\[?::1\\]?|0\\.0\\.0\\.0|\\[?::\\]?)\\s*:\\s*${port}(?!\\d)`,
@@ -124,7 +149,7 @@ export function builtinDenyReason(
   const haystack = haystackOf(req);
   // OpenBot's own API on this computer answers loopback as the owner: a Bot's command must never
   // reach it (to approve its own cards, change its permissions, add an engine...).
-  if (opts.harnessPort && harnessAddressRe(opts.harnessPort).test(haystack)) {
+  if (opts.harnessPort && reachesOut(req) && harnessAddressRe(opts.harnessPort).test(haystack)) {
     return "calls OpenBot's own API; use the OpenBot tools instead";
   }
   if (

@@ -1,3 +1,4 @@
+import { localOwnerKey } from "../transport/local-key.js";
 import {
   createContext,
   useCallback,
@@ -202,5 +203,8 @@ export function useOptionalOpenBot(): OpenBotContextValue | null {
 }
 
 export function useLocalTransport(baseUrl: string): Transport {
-  return useMemo(() => createTransport({ baseUrl, mode: "local" }), [baseUrl]);
+  return useMemo(
+    () => createTransport({ baseUrl, mode: "local", localKey: localOwnerKey }),
+    [baseUrl],
+  );
 }

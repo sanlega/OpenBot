@@ -12,6 +12,12 @@ import { applyStoredTheme } from "../state/theme.js";
 applyStoredTheme();
 markDesktopPlatform();
 
+/** Opened on the computer running OpenBot (where its own key, not pairing, lets you in). */
+function isThisComputer(): boolean {
+  if (typeof window === "undefined") return false;
+  return ["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname);
+}
+
 export interface OpenBotAppProps {
   transport: Transport;
 }
@@ -47,6 +53,13 @@ export function OpenBotApp({ transport }: OpenBotAppProps) {
     };
   }, [transport, attempt]);
 
+  // Pasting the `openbot serve` link (#key=…) into an open page: try again at once.
+  useEffect(() => {
+    const retry = () => setAttempt((a) => a + 1);
+    window.addEventListener("hashchange", retry);
+    return () => window.removeEventListener("hashchange", retry);
+  }, []);
+
   if (setupComplete === null) {
     return (
       <div className="app-status" data-testid="app-connecting">
@@ -54,11 +67,18 @@ export function OpenBotApp({ transport }: OpenBotAppProps) {
         {unreachable === "unpaired" ? (
           <>
             <h1>This device isn't paired</h1>
-            <p>
-              OpenBot is running, but only paired devices can use it from another computer or phone.
-              On the computer running OpenBot, open Devices, choose Pair a phone and scan the code
-              with your phone.
-            </p>
+            {isThisComputer() ? (
+              <p>
+                OpenBot only opens for its owner. Use the desktop app, or the link{" "}
+                <code>openbot serve</code> printed when it started (it ends in <code>#key=…</code>).
+              </p>
+            ) : (
+              <p>
+                OpenBot is running, but only paired devices can use it from another computer or
+                phone. On the computer running OpenBot, open Devices, choose Pair a phone and scan
+                the code with your phone.
+              </p>
+            )}
           </>
         ) : unreachable ? (
           <>

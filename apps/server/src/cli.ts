@@ -2,6 +2,8 @@ import {
   buildServer,
   computeBindHostFlags,
   createCoreContext,
+  LOCAL_OWNER_KEY_FILE,
+  LOCAL_OWNER_KEY_HEADER,
   loadConfig,
   resolveBindHost,
   runDoctor,
@@ -43,6 +45,16 @@ async function serve(): Promise<void> {
   ctx.bindHost = host;
   const address = await app.listen({ port: ctx.config.port, host });
   console.log(`OpenBot server listening on ${address} (bind host: ${host})`);
+  // D-036: the app opens for its owner with this install's key. Shown only on a terminal (never
+  // through console.*, which also writes the log file).
+  if (ctx.localOwnerKey) {
+    const link = `http://127.0.0.1:${ctx.config.port}/app/#key=${ctx.localOwnerKey}`;
+    process.stdout.write(
+      process.stdout.isTTY
+        ? `Open OpenBot: ${link}\n`
+        : `Open OpenBot at http://127.0.0.1:${ctx.config.port}/app/#key=<the key in ${LOCAL_OWNER_KEY_FILE}>\n`,
+    );
+  }
   // Bring back the owner's Cloudflare tunnel, if one is configured; in the background.
   void resumeCloudflareTunnel(ctx).then((result) => {
     if (result && !result.ok) console.warn(`Cloudflare tunnel didn't start: ${result.reason}`);
@@ -80,6 +92,8 @@ async function pair(args: string[]): Promise<void> {
       method: "POST",
       url: "/api/devices/pair",
       payload: { name, role, via: "lan" },
+      // The CLI runs as the owner on this computer: it presents the install's key (D-036).
+      headers: ctx.localOwnerKey ? { [LOCAL_OWNER_KEY_HEADER]: ctx.localOwnerKey } : {},
     });
     if (response.statusCode !== 201) {
       console.error(`Pairing failed (${response.statusCode}): ${response.body}`);

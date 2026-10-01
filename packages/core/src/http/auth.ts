@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { DeviceIdentity } from "../device-auth.js";
 import type { CoreContext } from "../context.js";
 import { openSecret } from "@openbot/remote";
+import { LOCAL_OWNER_KEY_HEADER, localOwnerKeyMatches } from "../local-owner-key.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -32,10 +33,25 @@ export function resolveDeviceIdentity(
   if (authHeader?.startsWith("Bearer ")) {
     return ctx.deviceAuth.verifyToken(authHeader.slice("Bearer ".length));
   }
-  if (isLocalOwnerRequest(request)) {
+  if (isLocalOwnerRequest(request) && presentsLocalOwnerKey(ctx, request)) {
     return { deviceId: "local", role: "owner" };
   }
   return undefined;
+}
+
+/**
+ * D-036: the install's local owner key, from the header OpenBot's own app sends (or `?key=` on
+ * the event stream, where a browser can't set headers). No key configured: loopback is enough.
+ */
+function presentsLocalOwnerKey(
+  ctx: CoreContext,
+  request: { headers: Record<string, string | string[] | undefined>; query?: unknown },
+): boolean {
+  if (!ctx.localOwnerKey) return true;
+  const header = request.headers[LOCAL_OWNER_KEY_HEADER];
+  const fromQuery = (request.query as { key?: unknown } | undefined)?.key;
+  const presented = (Array.isArray(header) ? header[0] : header) ?? fromQuery;
+  return localOwnerKeyMatches(ctx.localOwnerKey, presented);
 }
 
 /** Headers a reverse proxy adds (Tailscale serve and Funnel, cloudflared, others). */

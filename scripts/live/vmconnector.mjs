@@ -5,7 +5,7 @@
 // pointed at the bot's VM browser through the filtered DevTools proxy, and answer from a page it
 // opened with it, with no approval card and no browser on this computer.
 import { spawn } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,7 +48,11 @@ const base = `http://127.0.0.1:${PORT}`;
 const api = async (path, body, method) => {
   const res = await fetch(base + path, {
     method: method ?? (body === undefined ? "GET" : "POST"),
-    headers: body === undefined ? {} : { "content-type": "application/json" },
+    headers: {
+      // D-036: the copied home's owner key (the harness writes it on start).
+      "x-openbot-local-key": readFileSync(join(HOME, "local-owner.key"), "utf8").trim(),
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };

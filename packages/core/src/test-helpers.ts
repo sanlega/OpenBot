@@ -43,6 +43,8 @@ export async function createTestContext(
       port: 0,
     },
     disableNdjson: options.disableNdjson ?? true,
+    // Route tests act as the local owner over inject(); D-036 has its own tests.
+    localOwnerKey: options.localOwnerKey ?? false,
   });
 
   return {

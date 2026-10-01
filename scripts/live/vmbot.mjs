@@ -30,7 +30,11 @@ const base = `http://127.0.0.1:${PORT}`;
 const api = async (path, body, method) => {
   const res = await fetch(base + path, {
     method: method ?? (body === undefined ? "GET" : "POST"),
-    headers: body === undefined ? {} : { "content-type": "application/json" },
+    headers: {
+      // D-036: the copied home's owner key (the harness writes it on start).
+      "x-openbot-local-key": readFileSync(join(HOME, "local-owner.key"), "utf8").trim(),
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };

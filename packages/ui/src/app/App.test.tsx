@@ -20,7 +20,8 @@ describe("OpenBotApp connection screen (R1)", () => {
   it("tells an unpaired device how to pair instead of saying OpenBot is unreachable", async () => {
     render(<OpenBotApp transport={failingTransport(401)} />);
     expect(await screen.findByText("This device isn't paired")).toBeInTheDocument();
-    expect(screen.getByText(/choose Pair a phone/)).toBeInTheDocument();
+    // On the computer running OpenBot (the test page is on localhost): its own link opens it.
+    expect(screen.getByText(/only opens for its owner/)).toBeInTheDocument();
     expect(screen.queryByText("Can't reach OpenBot")).toBeNull();
   });
 

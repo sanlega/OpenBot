@@ -12,7 +12,7 @@ test.describe("M1 in the real UI (PWA served by the harness)", () => {
         routing: { mode: "pinned", engine: "fake" },
       });
 
-      await page.goto(`${harness.baseUrl}/app/`);
+      await page.goto(harness.appUrl);
       await page.getByText("Helper").first().click();
 
       await page.getByLabel("Message").fill("summarize my notes");
@@ -53,7 +53,7 @@ test.describe("First run in the real UI", () => {
     const harness = await startTestHarness();
     try {
       await api(harness, "/api/setup/complete", { body: {} });
-      await page.goto(`${harness.baseUrl}/app/`);
+      await page.goto(harness.appUrl);
       const roster = page.getByTestId("bot-list");
       await expect(roster).toContainText("Chief of Staff");
 
@@ -85,7 +85,7 @@ test.describe("Turn steps in the real UI", () => {
         description: "helps",
         routing: { mode: "pinned", engine: "fake" },
       });
-      await page.goto(`${harness.baseUrl}/app/`);
+      await page.goto(harness.appUrl);
       await page.getByTestId("bot-list").getByText("Helper").click();
       await page.getByLabel("Message").fill("@tool list_bots {}");
       await page.getByRole("button", { name: "Send" }).click();
@@ -107,7 +107,7 @@ test.describe("Bot profile in the real UI", () => {
     try {
       await api(harness, "/api/setup/complete", { body: {} });
       const { bot } = await createBot(harness, { name: "Helper", description: "helps" });
-      await page.goto(`${harness.baseUrl}/app/`);
+      await page.goto(harness.appUrl);
       await page.getByTestId("bot-list").getByText("Helper").click();
       await page.getByRole("button", { name: "Profile", exact: true }).click();
 
@@ -169,12 +169,12 @@ test.describe("Every screen of the real UI loads against the harness", () => {
         ["Devices", "devices-view"],
       ];
       for (const [tab, testId] of screens) {
-        await page.goto(`${harness.baseUrl}/app/`);
+        await page.goto(harness.appUrl);
         await page.getByRole("button", { name: tab, exact: true }).first().click();
         await expect(page.getByTestId(testId)).toBeVisible();
       }
 
-      await page.goto(`${harness.baseUrl}/app/`);
+      await page.goto(harness.appUrl);
       await page.getByTestId("bot-list").getByText("Helper").click();
       await page.getByRole("button", { name: "Profile", exact: true }).click();
       await expect(page.getByTestId("bot-profile")).toBeVisible();

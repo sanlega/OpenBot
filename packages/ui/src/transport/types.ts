@@ -8,6 +8,8 @@ export interface TransportOptions {
   mode?: TransportMode;
   /** Device token for remote transports (WS11). */
   deviceToken?: string;
+  /** D-036: this computer's owner key (OpenBot's own app on the computer running it). */
+  localKey?: string | (() => string | undefined);
 }
 
 /**

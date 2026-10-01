@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -7,6 +8,24 @@ export const APP_NAME = "OpenBot";
 
 export function defaultOpenbotHome(): string {
   return process.env.OPENBOT_HOME ?? join(homedir(), ".openbot");
+}
+
+/**
+ * D-036: this install's owner key, which the harness writes on its first start. The app sends it
+ * on its own requests (and hands it to its own window); undefined until the harness made it.
+ */
+export function readLocalOwnerKey(openbotHome: string): string | undefined {
+  try {
+    const key = readFileSync(join(openbotHome, "local-owner.key"), "utf8").trim();
+    return /^[0-9a-f]{64}$/.test(key) ? key : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The event stream's address with the owner key (a WebSocket can't carry it in a header). */
+export function withLocalOwnerKey(url: string, key: string | undefined): string {
+  return key ? `${url}${url.includes("?") ? "&" : "?"}key=${key}` : url;
 }
 
 export function harnessBaseUrl(port = DEFAULT_PORT): string {

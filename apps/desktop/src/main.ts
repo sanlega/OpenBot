@@ -22,6 +22,8 @@ import {
   defaultOpenbotHome,
   harnessBaseUrl,
   harnessWsUrl,
+  readLocalOwnerKey,
+  withLocalOwnerKey,
 } from "./config.js";
 import {
   createNodeForkFactory,
@@ -150,7 +152,8 @@ function startEventStream(): void {
   eventStream = new HarnessEventStream(harnessWsUrl(port), {
     OPEN: WebSocket.OPEN,
     create(url: string) {
-      const ws = new WebSocket(url);
+      // Read on every (re)connect: the harness writes the key on its first start.
+      const ws = new WebSocket(withLocalOwnerKey(url, readLocalOwnerKey(openbotHome)));
       return {
         readyState: ws.readyState,
         send: (data) => ws.send(data),
@@ -187,6 +190,11 @@ function startEventStream(): void {
 
 function setupIpc(): void {
   ipcMain.handle("openbot:harness-status", async () => fetchHarnessStatus(harnessBaseUrl(port)));
+  // D-036: only this app's own window gets the owner key (synchronously, before it calls the API).
+  ipcMain.on("openbot:local-owner-key", (event) => {
+    const fromOwnWindow = event.senderFrame?.url.startsWith(harnessBaseUrl(port)) ?? false;
+    event.returnValue = fromOwnWindow ? (readLocalOwnerKey(openbotHome) ?? "") : "";
+  });
 
   ipcMain.handle("openbot:local-computer-permissions", async () =>
     getLocalComputerPermissions(process.platform, process.env.XDG_SESSION_TYPE, systemPreferences),
@@ -324,6 +332,11 @@ app.on("open-url", (event, url) => {
 
 // Dev runs inherit "Electron" from the bundle; the packaged app is named by electron-builder.
 app.setName(APP_NAME);
+
+// A second copy next to an installed app (tests, development): its own profile, so its own
+// single-instance lock.
+const userDataOverride = process.env.OPENBOT_DESKTOP_USER_DATA?.trim();
+if (userDataOverride) app.setPath("userData", userDataOverride);
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

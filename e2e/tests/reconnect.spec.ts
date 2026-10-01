@@ -13,7 +13,7 @@ test.describe("The open app after OpenBot restarts (R3)", () => {
         routing: { mode: "pinned", engine: "fake" },
       });
 
-      await page.goto(`${harness.baseUrl}/app/`);
+      await page.goto(harness.appUrl);
       await page.getByText("Helper").first().click();
       await page.getByLabel("Message").fill("first question");
       await page.getByRole("button", { name: "Send" }).click();

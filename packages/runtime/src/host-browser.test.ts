@@ -192,6 +192,22 @@ describe("a Bot's command never reaches OpenBot's own API", () => {
     expect(reason).toMatch(/OpenBot's own API/);
   });
 
+  it("files and searches that mention the address are fine, and so is the VM's own loopback", () => {
+    for (const action of ["Write", "Edit", "Grep", "mcp__openbot__vm_shell"]) {
+      expect(
+        builtinDenyReason(
+          req({
+            computerAccess: "docker+local",
+            action,
+            args: { content: "base = http://127.0.0.1:4577", command: "curl localhost:4577" },
+          }),
+          { harnessPort: 4577 },
+        ),
+        action,
+      ).toBeUndefined();
+    }
+  });
+
   it("another local port is fine", () => {
     expect(
       builtinDenyReason(

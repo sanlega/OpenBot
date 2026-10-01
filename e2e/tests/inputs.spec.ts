@@ -26,7 +26,7 @@ test.describe("Bots ask the user with forms (ask_user)", () => {
         description: "helps",
         routing: { mode: "pinned", engine: "fake" },
       });
-      await page.goto(`${harness.baseUrl}/app/`);
+      await page.goto(harness.appUrl);
       await page.getByTestId("bot-list").getByText("Helper").click();
       await page.getByLabel("Message").fill(`@tool ask_user ${JSON.stringify(form)}`);
       await page.getByRole("button", { name: "Send" }).click();

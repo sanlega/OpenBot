@@ -1,3 +1,4 @@
+import { loadOrCreateLocalOwnerKey } from "./local-owner-key.js";
 import { mkdir } from "node:fs/promises";
 import type {
   Clock,
@@ -181,6 +182,8 @@ export interface CoreContext {
   onApprovalResolved?: (approvalId: string, resolution: "allow" | "deny") => void;
   /** Wired in by WS13 bootstrap; populated for `/api/engines` and routing. */
   availableEngines?: EngineId[];
+  /** D-036: what a request on this computer must present to be the owner (unset: loopback is enough). */
+  localOwnerKey?: string;
   /** P1: detects the engines again (installed or signed in since start-up), without a restart. */
   redetectEngines?: () => Promise<EngineId[]>;
   engineStatuses?: Partial<Record<EngineId, EngineStatus>>;
@@ -227,6 +230,12 @@ export interface CreateCoreContextOptions {
   computerProvider?: ComputerProvider;
   /** Skips writing NDJSON to disk (tests). */
   disableNdjson?: boolean;
+  /**
+   * D-036: the key the local owner must present. Default: this install's key file (created on
+   * first run) for a real database; none for an in-memory one (unit tests), where loopback alone
+   * is the owner as before.
+   */
+  localOwnerKey?: string | false;
 }
 
 const VAULT_DEVICE_SECRET_KEY = "core.deviceTokenSecret";
@@ -249,6 +258,13 @@ export async function createCoreContext(
     : new NdjsonWriter(config.logsThreadsDir);
   const eventBus = new EventBus(new EventStore(db), ndjson, clock);
   const deviceAuth = new DeviceAuth(new DevicesRepo(db), await loadOrCreateDeviceSecret(vault));
+  const localOwnerKey =
+    options.localOwnerKey === false
+      ? undefined
+      : (options.localOwnerKey ??
+        (config.dbPath !== ":memory:"
+          ? await loadOrCreateLocalOwnerKey(config.openbotHome)
+          : undefined));
 
   return {
     config,
@@ -258,6 +274,7 @@ export async function createCoreContext(
     eventBus,
     vault,
     deviceAuth,
+    localOwnerKey,
     decisionService: options.decisionService,
     computerProvider: options.computerProvider,
     validators: {},

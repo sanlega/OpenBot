@@ -2,7 +2,20 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 const desktopRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -15,6 +28,9 @@ test.describe("OpenBot desktop shell", () => {
       env: {
         ...process.env,
         OPENBOT_HOME: openbotHome,
+        // Runs next to an installed OpenBot: its own profile (lock) and port.
+        OPENBOT_DESKTOP_USER_DATA: join(openbotHome, "electron"),
+        PORT: String(await freePort()),
         OPENBOT_FAKE_JEV: "1",
         OPENBOT_FAKE_ENGINES: "1",
         OPENBOT_FAKE_COMPUTER: "1",
@@ -25,6 +41,7 @@ test.describe("OpenBot desktop shell", () => {
 
     try {
       const window = await app.firstWindow({ timeout: 45_000 });
+      // The wizard only shows once the API answered: the window got this install's key (D-036).
       await expect(window.getByTestId("setup-wizard")).toBeVisible({ timeout: 30_000 });
       await window.close();
       expect(app.windows().length).toBe(0);

@@ -6,6 +6,7 @@ import type {
   WsInbound,
   WsOutbound,
 } from "./types.js";
+import { LOCAL_KEY_HEADER } from "./local-key.js";
 
 function joinUrl(base: string, path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
@@ -17,6 +18,7 @@ export class HttpTransport implements Transport {
   readonly mode: TransportMode;
   readonly baseUrl: string;
   private readonly deviceToken?: string;
+  private readonly localKeySource?: string | (() => string | undefined);
   /** Aborted by close(): a closed transport's requests never settle (nothing is left to answer). */
   private readonly lifetime = new AbortController();
 
@@ -24,6 +26,13 @@ export class HttpTransport implements Transport {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.mode = options.mode ?? "local";
     this.deviceToken = options.deviceToken;
+    this.localKeySource = options.localKey;
+  }
+
+  /** Read on every request: the desktop app's key can appear after the page loaded. */
+  private localKey(): string | undefined {
+    const source = this.localKeySource;
+    return typeof source === "function" ? source() : source;
   }
 
   private headers(extra?: HeadersInit): HeadersInit {
@@ -33,6 +42,8 @@ export class HttpTransport implements Transport {
     if (this.deviceToken) {
       headers.Authorization = `Bearer ${this.deviceToken}`;
     }
+    const localKey = this.localKey();
+    if (localKey) headers[LOCAL_KEY_HEADER] = localKey;
     return { ...headers, ...extra };
   }
 
@@ -99,7 +110,10 @@ export class HttpTransport implements Transport {
     onClose?: () => void,
     onOpen?: () => void,
   ): { subscribe(since: number): void; send(command: WsCommand): void; close(): void } {
-    const wsUrl = joinUrl(this.baseUrl, "/api/ws").replace(/^http/, "ws");
+    // A browser can't set headers on a WebSocket: the key rides in the address (loopback only).
+    const wsUrl =
+      joinUrl(this.baseUrl, "/api/ws").replace(/^http/, "ws") +
+      (this.localKey() ? `?key=${encodeURIComponent(this.localKey()!)}` : "");
     const ws = new WebSocket(wsUrl);
 
     ws.addEventListener("message", (ev) => {
