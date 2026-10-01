@@ -40,6 +40,11 @@ export class DelegationTracker {
   private readonly lastTouch = new Map<string, number>();
   /** Bot id -> the delegation its running turn works on (tools called in that turn belong to it). */
   private readonly bound = new Map<string, string>();
+  /**
+   * Bot id -> the task a wake turn (a helper reported back) is about: hand-offs it makes belong
+   * to that task (parent and depth), but nothing else changes (R1).
+   */
+  private readonly context = new Map<string, string>();
   /** Delegation id -> turns queued or running for it: it settles when the last one ends. */
   private readonly pendingTurns = new Map<string, number>();
   /** Delegation id -> forms/approvals the human still owes: it works again when none remain. */
@@ -79,6 +84,18 @@ export class DelegationTracker {
     if (this.bound.get(botId) === delegationId) this.bound.delete(botId);
   }
 
+  /** A wake turn of this bot is about its open task `delegationId` (R1). */
+  setContext(botId: string, delegationId: string | undefined): void {
+    if (delegationId) this.context.set(botId, delegationId);
+    else this.context.delete(botId);
+  }
+
+  private contextTask(botId: string): Delegation | undefined {
+    const id = this.context.get(botId);
+    const d = id ? this.repo.getById(id) : undefined;
+    return d && OPEN.has(d.state) && d.assigneeBotId === botId ? d : undefined;
+  }
+
   /** A turn for this delegation is queued: it must not settle before that turn ends. */
   expectTurn(id: string): void {
     this.pendingTurns.set(id, (this.pendingTurns.get(id) ?? 0) + 1);
@@ -92,10 +109,12 @@ export class DelegationTracker {
     text: string;
   }): OpenResult {
     // A worker that delegates onward keeps the user's conversation as the place results show.
-    // Its running turn's task, else (a wake turn, a direct message) the task it is working on.
-    const parent = this.current(input.requesterBotId) ?? this.openFor(input.requesterBotId);
+    const bound = this.current(input.requesterBotId);
+    // The task the hand-off belongs to: the running turn's, else a wake turn's (never a direct
+    // conversation with the user, which starts a chain of its own).
+    const parent = bound ?? this.contextTask(input.requesterBotId);
     const ownerThread =
-      (parent ? this.ctx.repos.threads.getById(parent.ownerThreadId) : undefined) ??
+      (bound ? this.ctx.repos.threads.getById(bound.ownerThreadId) : undefined) ??
       this.ctx.repos.threads.getByBotId(input.requesterBotId);
     if (!ownerThread) return { ok: false, reason: `no thread for bot ${input.requesterBotId}` };
     const existing = this.repo.findOpenBetween(input.requesterBotId, input.assigneeBotId);

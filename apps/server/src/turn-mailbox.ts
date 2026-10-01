@@ -645,13 +645,29 @@ export function wakeRequesterOnDelegations(
       );
     }
     const wakeText = lines.join("\n");
-    const turn = await buildTurn({
+    const built = await buildTurn({
       bot: requester,
       text: wakeText,
       chainId,
       threadId: thread.id,
       mode: "live",
     });
+    // R1: what the requester hands out while handling this report belongs to its own task.
+    const ownTask = requester.isChiefOfStaff ? undefined : tracker.openFor(requester.id);
+    const turn =
+      "error" in built || !ownTask
+        ? built
+        : {
+            ...built,
+            prepareTurn: async (turnId: string) => {
+              tracker.setContext(requester.id, ownTask.id);
+              return (await built.prepareTurn?.(turnId)) ?? {};
+            },
+            finishTurn: async (turnId: string) => {
+              tracker.setContext(requester.id, undefined);
+              await built.finishTurn?.(turnId);
+            },
+          };
     if ("error" in turn) {
       await ctx.eventBus.publish({
         type: "turn.failed",
@@ -770,7 +786,13 @@ async function submitWithFailover(
     return { status: "refused", reason: "stopped" };
   }
   try {
-    if (args.delegationId) await tracker.started(args.delegationId, turn.engine);
+    if (args.delegationId) {
+      await tracker.started(args.delegationId, turn.engine);
+      const now = tracker.get(args.delegationId);
+      if (now && !["submitted", "working", "input_required"].includes(now.state)) {
+        return { status: "refused", reason: "stopped" };
+      }
+    }
     final = await deps.runtime.mailbox.submit(bound(turn));
     if (final.status === "failed" && isOutOfService(final.reason)) {
       const until = healthOf(deps).markOutOfService(turn.engine, final.reason);

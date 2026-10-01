@@ -1169,3 +1169,140 @@
     gap: 6px;
   }
 }
+
+/* ---------- Computer > Files (N2) ---------- */
+
+.files-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+
+.files-crumb-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.files-crumb {
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+  font: inherit;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.files-crumb:hover {
+  background: var(--surface-2);
+}
+
+.files-list,
+.files-commands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.files-list li + li,
+.files-commands li + li {
+  border-top: 1px solid var(--border);
+}
+
+.files-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px var(--space-3);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.files-row:hover {
+  background: var(--surface-2);
+}
+
+.files-row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.files-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.files-preview {
+  margin-top: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.files-preview-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--surface-2);
+  font-size: var(--text-sm);
+}
+
+.files-preview-head strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-text {
+  margin: 0;
+  max-height: 420px;
+  overflow: auto;
+  padding: var(--space-3);
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.files-commands li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px var(--space-3);
+}
+
+.files-command {
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

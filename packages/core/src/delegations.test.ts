@@ -379,13 +379,21 @@ describe("cancel and depth (L1, L2)", () => {
     expect(await tracker.cancel(parent.id, { name: "Chief", botId: chief.id })).toEqual([]);
   });
 
-  it("a hand-off from a turn not bound to a task still belongs to the task being worked on", async () => {
+  it("a wake turn's hand-off belongs to the bot's task; a direct chat starts its own chain", async () => {
     const { ctx, tracker, open, worker } = await setup();
     const helper = addBot(ctx, "Helper2");
     const parent = open("Write the launch post");
-    // The worker is woken about something else (no task bound) and hands work on.
+    // A wake turn about that task (a helper reported back): what it hands out belongs to it.
+    tracker.setContext(worker.id, parent.id);
     const child = open("Find three quotes", worker, helper);
+    tracker.setContext(worker.id, undefined);
     expect(child).toMatchObject({ parentId: parent.id, depth: 2 });
+    // The user talking to the worker directly: unrelated work, in the worker's own chat.
+    const other = addBot(ctx, "Other2");
+    const direct = open("Book a table", worker, other);
+    expect(direct.parentId).toBeUndefined();
+    expect(direct.depth).toBe(1);
+    expect(direct.ownerThreadId).toBe(ctx.repos.threads.getByBotId(worker.id)!.id);
   });
 
   it("tells the bot that asked when the user cancels its task", async () => {
@@ -418,8 +426,9 @@ describe("cancel and depth (L1, L2)", () => {
     });
     expect(r).toMatchObject({ ok: false });
     expect(!r.ok && r.reason).toMatch(/do it yourself/);
-    // Still working on that task, even outside a bound turn: still too deep.
+    // In a wake turn about that task: still too deep.
     tracker.unbindTurn(c!.id, l3.id);
+    tracker.setContext(c!.id, l3.id);
     expect(
       tracker.open({
         requesterBotId: c!.id,
@@ -428,6 +437,7 @@ describe("cancel and depth (L1, L2)", () => {
         text: "again",
       }),
     ).toMatchObject({ ok: false });
+    tracker.setContext(c!.id, undefined);
     // A bot with no task of its own starts a new chain.
     const fresh = tracker.open({
       requesterBotId: d!.id,

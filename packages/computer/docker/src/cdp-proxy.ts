@@ -14,6 +14,8 @@ export interface CdpGrant extends CdpGrantPolicy {
   token: string;
   botId: string;
   expires: number;
+  /** The DevTools port of the bot's browser when the grant was made (its screen). */
+  port?: number;
 }
 
 export interface CdpProxyOptions {
@@ -23,8 +25,8 @@ export interface CdpProxyOptions {
   browserHost?: string;
   now?: () => number;
   onRefused?: (event: { botId: string; method: string; reason: string }) => void;
-  /** N1: the tabs a bot's connectors opened, whenever they change. */
-  onTabs?: (botId: string, targetIds: string[]) => void;
+  /** N1: the tabs a bot's connectors opened in the browser on `port`, whenever they change. */
+  onTabs?: (botId: string, targetIds: string[], port: number | undefined) => void;
 }
 
 /** Grants last a working day; a new grant for the same bot replaces the old one. */
@@ -41,8 +43,9 @@ const PATH_RE = /^\/cdp\/([0-9a-f]{48})(\/.*)?$/;
 export class CdpProxy {
   private readonly grants = new Map<string, CdpGrant>();
   private readonly sockets = new Map<string, Set<WebSocket>>();
-  /** Tabs each bot's connectors created (N1). */
+  /** Tabs each bot's connectors created (N1), and the port of the browser they are in. */
   private readonly tabs = new Map<string, Set<string>>();
+  private readonly ports = new Map<string, number>();
   private readonly wss = new WebSocketServer({ noServer: true });
   private readonly now: () => number;
 
@@ -50,22 +53,31 @@ export class CdpProxy {
     this.now = options.now ?? Date.now;
   }
 
-  grant(botId: string, policy: CdpGrantPolicy, ttlMs = CDP_GRANT_MS): CdpGrant {
-    this.revoke(botId);
+  grant(botId: string, policy: CdpGrantPolicy, ttlMs = CDP_GRANT_MS, port?: number): CdpGrant {
+    // A new grant (every turn composes its tools) replaces the old URL, but the connector's tabs
+    // stay protected: only a takeover or the screen going away forgets them (R2).
+    this.revokeTokens(botId);
     const grant: CdpGrant = {
       token: randomBytes(24).toString("hex"),
       botId,
       allowHosts: policy.allowHosts.length ? policy.allowHosts : ["*"],
       mode: policy.mode,
       expires: this.now() + ttlMs,
+      ...(port !== undefined ? { port } : {}),
     };
+    if (port !== undefined) this.ports.set(botId, port);
     this.grants.set(grant.token, grant);
     return grant;
   }
 
   /** The user took the screen over, or it went to another bot: the tool loses it at once. */
   revoke(botId: string): void {
-    if (this.tabs.delete(botId)) this.options.onTabs?.(botId, []);
+    if (this.tabs.delete(botId)) this.options.onTabs?.(botId, [], this.ports.get(botId));
+    this.ports.delete(botId);
+    this.revokeTokens(botId);
+  }
+
+  private revokeTokens(botId: string): void {
     for (const [token, grant] of this.grants) {
       if (grant.botId !== botId) continue;
       this.grants.delete(token);
@@ -236,11 +248,11 @@ export class CdpProxy {
         const key = `${event.sessionId ?? ""}:${event.id ?? ""}`;
         if (event.id !== undefined && creating.delete(key) && event.result?.targetId) {
           tabsOf().add(event.result.targetId);
-          this.options.onTabs?.(grant.botId, [...tabsOf()]);
+          this.options.onTabs?.(grant.botId, [...tabsOf()], grant.port);
         }
         if (event.method === "Target.targetDestroyed" && event.params?.targetId) {
           if (tabsOf().delete(event.params.targetId)) {
-            this.options.onTabs?.(grant.botId, [...tabsOf()]);
+            this.options.onTabs?.(grant.botId, [...tabsOf()], grant.port);
           }
         }
         const info = event.params?.targetInfo;

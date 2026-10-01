@@ -4,6 +4,7 @@ import type { ComputerStatusResponse, LiveViewResponse } from "../../api/types.j
 import { computerStatusView } from "../../api/adapters.js";
 import { useOpenBot } from "../../state/context.js";
 import { ComputerTasks } from "./ComputerTasks.js";
+import { WorkspaceFiles } from "./WorkspaceFiles.js";
 
 interface ComputerPanelProps {
   botId: string;
@@ -150,6 +151,7 @@ export function ComputerPanel({ botId }: ComputerPanelProps) {
       </section>
 
       <ComputerTasks botId={botId} />
+      {status?.provider === "docker" ? <WorkspaceFiles botId={botId} /> : null}
     </div>
   );
 }

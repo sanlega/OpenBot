@@ -199,6 +199,11 @@ describe("CdpProxy (B5)", () => {
     );
     await new Promise((r) => setTimeout(r, 150));
     expect(seen.at(-1)).toEqual(["T9"]);
+    // The next turn re-grants (new URL): the connector's tab is still protected (R2).
+    const count = seen.length;
+    proxy.grant("bot_a", { allowHosts: ["*"], mode: "act" });
+    expect(seen.length).toBe(count);
+    // A takeover or the screen going away forgets them.
     proxy.revoke("bot_a");
     expect(seen.at(-1)).toEqual([]);
   });

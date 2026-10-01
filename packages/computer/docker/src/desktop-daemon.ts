@@ -79,6 +79,8 @@ const sessions = new DisplaySessionManager({
       leases.delete(owner);
       cdp.revoke(owner);
     }
+    // The screen's next browser starts with no connector tabs, whoever owned it.
+    setForeignTabs(9220 + display, []);
     displayOwner.delete(display);
   },
 });
@@ -141,8 +143,7 @@ const cdp = new CdpProxy({
   debugPortFor: async (botId) => sessions.debugPort(botId),
   onRefused: (event) => telemetry.record({ kind: "cdp_refused", ...event }),
   // N1: OpenBot's own browser tools leave a connector's tabs alone.
-  onTabs: (botId, targetIds) => {
-    const port = sessions.debugPort(botId);
+  onTabs: (_botId, targetIds, port) => {
     if (port !== undefined) setForeignTabs(port, targetIds);
   },
 });
@@ -226,7 +227,7 @@ const server = createServer(async (req, res) => {
     } catch (error) {
       return json(res, 500, { ok: false, reason: errorText(error) });
     }
-    const grant = cdp.grant(botId, { allowHosts, mode });
+    const grant = cdp.grant(botId, { allowHosts, mode }, undefined, sessions.debugPort(botId));
     return json(res, 200, {
       path: `/cdp/${grant.token}`,
       expiresAt: new Date(grant.expires).toISOString(),

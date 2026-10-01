@@ -36,10 +36,14 @@ export class CdpClient {
   async connect(timeoutMs = 30_000): Promise<void> {
     const targets = await this.waitForTargets(timeoutMs);
     const foreign = foreignTabs.get(this.port);
-    const page =
-      targets.find((t) => t.type === "page" && !foreign?.has(t.id)) ??
-      targets.find((t) => t.type === "page") ??
-      targets[0];
+    let page = targets.find((t) => t.type === "page" && !foreign?.has(t.id));
+    if (!page && foreign?.size) {
+      // Only a connector's tabs are open: OpenBot opens its own instead of driving theirs (R3).
+      page = await fetch(`http://127.0.0.1:${this.port}/json/new?about:blank`, { method: "PUT" })
+        .then((r) => r.json() as Promise<CdpTarget & { type?: string }>)
+        .catch(() => undefined);
+    }
+    page ??= targets.find((t) => t.type === "page") ?? targets[0];
     if (!page?.webSocketDebuggerUrl) {
       throw new Error(`no CDP target on port ${this.port}`);
     }

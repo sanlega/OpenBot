@@ -515,6 +515,51 @@ export class MockClientApiServer {
       this.customEngines = engines as typeof this.customEngines;
       return sendJson(res, 200, { engines: this.customEngines, restartRequired: true });
     }
+    // N2: same shapes as packages/core/src/http/routes/workspace.ts.
+    if (method === "GET" && path === "/api/workspace/files") {
+      const dir = url.searchParams.get("path") ?? "";
+      const entries =
+        dir === ""
+          ? [
+              { name: "reports", kind: "dir", size: 0, modifiedAt: "2026-09-30T09:00:00.000Z" },
+              {
+                name: "notes.md",
+                kind: "file",
+                size: 1830,
+                modifiedAt: "2026-09-30T10:00:00.000Z",
+              },
+            ]
+          : dir === "reports"
+            ? [
+                {
+                  name: "crm-comparison.md",
+                  kind: "file",
+                  size: 5400,
+                  modifiedAt: "2026-09-30T11:00:00.000Z",
+                },
+              ]
+            : null;
+      if (!entries) return sendJson(res, 404, { error: "not_found" });
+      return sendJson(res, 200, { path: dir, entries, more: false });
+    }
+    if (method === "GET" && path === "/api/workspace/file") {
+      const file = url.searchParams.get("path") ?? "";
+      return sendJson(res, 200, {
+        path: file,
+        size: 1830,
+        binary: false,
+        truncated: false,
+        text: "# Notes\n\nThe Researcher keeps its findings here.\n",
+      });
+    }
+    if (method === "GET" && path.match(/^\/api\/bots\/[^/]+\/commands$/)) {
+      return sendJson(res, 200, {
+        commands: [
+          { command: "npm test", at: "2026-09-30T11:05:00.000Z", exitCode: 0, timedOut: false },
+          { command: "git status", at: "2026-09-30T11:04:00.000Z", exitCode: 0, timedOut: false },
+        ],
+      });
+    }
     // Same shape as GET /api/usage (packages/core/src/http/routes/remote-and-audit.ts).
     if (method === "GET" && path === "/api/usage") {
       const botId = url.searchParams.get("botId");

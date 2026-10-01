@@ -815,7 +815,8 @@ describe("Mailbox says refusals and loops to the engine (K1, K2, K3)", () => {
     }
     async dispose() {}
   }
-  const tick = () => new Promise((r) => setTimeout(r, 5));
+  // Generous: the whole suite runs in parallel and timers slip under load.
+  const tick = () => new Promise((r) => setTimeout(r, 25));
 
   it("K1: a refused action is followed by the anti-detour text in the running turn", async () => {
     const driver = new SteerableDriver(async (hooks) => {
