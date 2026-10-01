@@ -1,0 +1,6 @@
+{
+  "id": "plain-request",
+  "description": "A simple request gets a reply, with no approval card.",
+  "prompt": "summarize my notes",
+  "expect": { "status": "completed", "replyIncludes": ["help"], "maxApprovals": 0 }
+}

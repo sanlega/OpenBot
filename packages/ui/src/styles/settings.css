@@ -706,6 +706,10 @@ a.pair-url:hover {
   .set-row[data-stacked="true"] .set-row-control,
   .set-row-control:has(.segmented),
   .set-row-control:has(.set-hours),
+  .set-row-control > .btn-ghost:first-child,
+  .set-row-control .set-inline-actions > .btn-ghost:first-child {
+    margin-left: calc(-1 * var(--space-2));
+  }
   .set-row-control:has(.set-select),
   .set-row-control:has(.set-inline-actions .btn) {
     max-width: none;

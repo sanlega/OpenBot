@@ -213,8 +213,7 @@ export function TasksView({ onOpenThread }: { onOpenThread?: (threadId: string) 
                         {t.state === "input_required" ? (
                           <p className="task-status task-status-waiting">
                             {t.assigneeName ?? "The bot"} needs an answer
-                            {t.statusMessage ? `: ${t.statusMessage}` : "."} It's waiting in the
-                            conversation where this task started.
+                            {t.statusMessage ? `: ${t.statusMessage}` : "."}
                           </p>
                         ) : t.statusMessage ? (
                           <p className="task-status">{t.statusMessage}</p>

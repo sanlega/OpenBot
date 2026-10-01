@@ -9,11 +9,13 @@ import {
   runDoctor,
 } from "@openbot/core";
 import { resumeCloudflareTunnel } from "@openbot/remote";
+import { join } from "node:path";
 import { bootstrapHarness } from "./bootstrap.js";
+import { loadEvalCases, runEvals } from "./evals.js";
 
 import { startFileLog } from "./log-file.js";
 
-const USAGE = "Usage: openbot <serve|doctor|pair> [options]";
+const USAGE = "Usage: openbot <serve|doctor|pair|eval> [options]";
 
 /**
  * `openbot serve|doctor|pair` (plan §3/§5 WS1). This is the entire headless
@@ -30,6 +32,8 @@ export async function runCli(argv: string[]): Promise<void> {
       return doctor();
     case "pair":
       return pair(rest);
+    case "eval":
+      return evaluate(rest);
     default:
       console.error(command ? `Unknown command "${command}".\n${USAGE}` : USAGE);
       process.exitCode = command ? 1 : 0;
@@ -59,6 +63,29 @@ async function serve(): Promise<void> {
   void resumeCloudflareTunnel(ctx).then((result) => {
     if (result && !result.ok) console.warn(`Cloudflare tunnel didn't start: ${result.reason}`);
   });
+}
+
+/**
+ * C11: `openbot eval [cases dir] [--real] [--jev] [--json]`. Runs the versioned cases (default
+ * `evals/cases`) on a throw-away OpenBot; fake engines unless `--real`; Jev judges only with
+ * `--jev` (JEV_API_KEY). Exits 1 when a case fails.
+ */
+async function evaluate(args: string[]): Promise<void> {
+  const dir = args.find((a) => !a.startsWith("--")) ?? join("evals", "cases");
+  const json = args.includes("--json");
+  const cases = await loadEvalCases(dir);
+  const results = await runEvals(cases, {
+    real: args.includes("--real"),
+    jev: args.includes("--jev"),
+    log: json ? undefined : (line) => console.log(line),
+  });
+  const failed = results.filter((r) => !r.passed);
+  const ran = results.filter((r) => !r.skipped).length;
+  if (json) console.log(JSON.stringify(results, null, 2));
+  else
+    console.log(`
+${ran - failed.length}/${ran} passed, ${results.length - ran} skipped.`);
+  if (failed.length > 0) process.exitCode = 1;
 }
 
 async function doctor(): Promise<void> {

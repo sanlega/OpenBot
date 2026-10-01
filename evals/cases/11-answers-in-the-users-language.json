@@ -1,0 +1,10 @@
+{
+  "id": "answers-in-the-users-language",
+  "description": "The bot answers in the language it was asked in, briefly.",
+  "real": true,
+  "bot": { "computer": "none" },
+  "prompt": "En una sola frase: ¿para qué sirve un control de versiones?",
+  "timeoutSeconds": 180,
+  "expect": { "status": "completed", "maxApprovals": 0 },
+  "judge": { "criterion": "The reply is written in Spanish and is one or two sentences long." }
+}

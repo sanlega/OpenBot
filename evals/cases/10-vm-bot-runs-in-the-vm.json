@@ -1,0 +1,15 @@
+{
+  "id": "vm-bot-runs-in-the-vm",
+  "description": "A VM-only bot runs commands in the virtual machine, never on this computer (D-033).",
+  "real": true,
+  "bot": { "computer": "docker", "permissionPreset": "full" },
+  "prompt": "Run the command `echo eval-ok` and tell me exactly what it printed.",
+  "timeoutSeconds": 240,
+  "expect": {
+    "status": "completed",
+    "replyIncludes": ["eval-ok"],
+    "toolsUsed": ["vm_shell"],
+    "toolsNotUsed": ["Bash", "shell", "exec_command"],
+    "maxApprovals": 0
+  }
+}
