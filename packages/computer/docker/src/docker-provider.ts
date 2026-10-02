@@ -434,6 +434,11 @@ class DockerScreen implements Screen {
     return observation;
   }
 
+  async screenshot(): Promise<{ mime: "image/jpeg"; data: string }> {
+    if (!this.control.screenshot) throw new Error("this machine's daemon can't take screenshots");
+    return this.track(() => this.control.screenshot!(this.botId, this.display));
+  }
+
   async act(action: Action): Promise<ActResult> {
     if (this.takenOver && action.op !== "wait" && action.op !== "done") {
       return { ok: false, reason: "screen is under user takeover" };

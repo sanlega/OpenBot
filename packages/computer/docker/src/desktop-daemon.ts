@@ -247,6 +247,17 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // V4: a picture of the bot's page for an image decision model; same lease as /observe.
+  if (req.method === "GET" && url.pathname === "/screenshot") {
+    const botId = url.searchParams.get("botId") ?? "unknown";
+    if (!leaseHolder(req, botId)) return json(res, 403, { ok: false, reason: "no screen lease" });
+    try {
+      return json(res, 200, { mime: "image/jpeg", data: await sessions.screenshot(botId) });
+    } catch (error) {
+      return json(res, 500, { ok: false, reason: errorText(error) });
+    }
+  }
+
   if (req.method === "POST" && url.pathname === "/act") {
     try {
       const body = await parseBody(req);

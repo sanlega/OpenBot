@@ -9,6 +9,8 @@ import type {
 /** HTTP control daemon inside `images/desktop` (plan WS9). */
 export interface ControlDaemonClient {
   observe(botId: string, display: number): Promise<Observation>;
+  /** V4: a scaled JPEG of the bot's page (base64). Older daemons don't have it. */
+  screenshot?(botId: string, display: number): Promise<{ mime: "image/jpeg"; data: string }>;
   act(botId: string, display: number, action: Action): Promise<ActResult>;
   liveView(botId: string): Promise<{ url: string; token: string; expiresAt: string }>;
   health(): Promise<{ ok: boolean; protocol?: number }>;
@@ -131,6 +133,19 @@ export class HttpControlDaemonClient implements ControlDaemonClient {
     );
     if (!res.ok) throw await failure("observe", res);
     return (await res.json()) as Observation;
+  }
+
+  async screenshot(botId: string, display: number): Promise<{ mime: "image/jpeg"; data: string }> {
+    const url = new URL(`${this.options.baseUrl}/screenshot`);
+    url.searchParams.set("botId", botId);
+    url.searchParams.set("display", String(display));
+    const res = await call("screenshot", () =>
+      this.withLease(botId, (headers) =>
+        fetch(url, { headers, signal: AbortSignal.timeout(15_000) }),
+      ),
+    );
+    if (!res.ok) throw await failure("screenshot", res);
+    return (await res.json()) as { mime: "image/jpeg"; data: string };
   }
 
   async act(botId: string, display: number, action: Action): Promise<ActResult> {

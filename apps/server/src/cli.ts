@@ -12,10 +12,11 @@ import { resumeCloudflareTunnel } from "@openbot/remote";
 import { join } from "node:path";
 import { bootstrapHarness } from "./bootstrap.js";
 import { loadEvalCases, runEvals } from "./evals.js";
+import { compareDecisions, formatReport } from "./decisions-compare.js";
 
 import { startFileLog } from "./log-file.js";
 
-const USAGE = "Usage: openbot <serve|doctor|pair|eval> [options]";
+const USAGE = "Usage: openbot <serve|doctor|pair|eval|decisions compare> [options]";
 
 /**
  * `openbot serve|doctor|pair` (plan §3/§5 WS1). This is the entire headless
@@ -34,6 +35,8 @@ export async function runCli(argv: string[]): Promise<void> {
       return pair(rest);
     case "eval":
       return evaluate(rest);
+    case "decisions":
+      return decisionsCommand(rest);
     default:
       console.error(command ? `Unknown command "${command}".\n${USAGE}` : USAGE);
       process.exitCode = command ? 1 : 0;
@@ -87,6 +90,50 @@ async function evaluate(args: string[]): Promise<void> {
   // Explicit exit (nothing left running may keep the command alive), once the output has
   // reached a pipe in full.
   process.stdout.write(out, () => process.exit(failed.length > 0 ? 1 : 0));
+}
+
+/** The value after `--name` (or `--name=value`). */
+function flag(args: string[], name: string): string | undefined {
+  const i = args.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
+  if (i < 0) return undefined;
+  const arg = args[i]!;
+  return arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : args[i + 1];
+}
+
+/**
+ * V2: `openbot decisions compare --url <jev-compatible server> [--key K] [--purpose p]
+ * [--limit n] [--json]`. Replays decisions that kept what they saw against another provider and
+ * prints how often it agrees with what was decided. Reads only; never calls TypeSafe.
+ */
+async function decisionsCommand(args: string[]): Promise<void> {
+  const [sub, ...rest] = args;
+  const url = flag(rest, "url");
+  if (sub !== "compare" || !url) {
+    console.error(
+      "Usage: openbot decisions compare --url <http://host:port> [--key K] [--purpose p] [--limit n] [--json]",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const ctx = await createCoreContext();
+  try {
+    const decisions = ctx.repos.decisions.listWithRequests({
+      purpose: flag(rest, "purpose"),
+      limit: Number(flag(rest, "limit") ?? 200) || 200,
+    });
+    const json = rest.includes("--json");
+    const reports = await compareDecisions(decisions, {
+      url,
+      key: flag(rest, "key"),
+      onProgress: json
+        ? undefined
+        : (done, total) => process.stderr.write(`\rReplaying ${done}/${total}…`),
+    });
+    if (!json) process.stderr.write("\n");
+    process.stdout.write(`${json ? JSON.stringify(reports, null, 2) : formatReport(reports)}\n`);
+  } finally {
+    ctx.closeDb();
+  }
 }
 
 async function doctor(): Promise<void> {

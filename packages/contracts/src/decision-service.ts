@@ -133,6 +133,8 @@ export interface DecisionService {
   band(confidence: number, purpose: Purpose): Band;
   budgets(): Record<Budget, BudgetStatus>;
   validateKey(key: string): Promise<{ ok: boolean; rpmLimit?: number }>;
+  /** V4: true when pictures sent with a decision are read (an image decision model is set up). */
+  canSeeImages?(): boolean;
 }
 
 /**

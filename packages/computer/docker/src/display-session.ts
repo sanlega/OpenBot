@@ -308,6 +308,15 @@ export class DisplaySessionManager {
     return session;
   }
 
+  /** V4: a scaled JPEG (base64) of the bot's page; only for a screen the bot already has. */
+  async screenshot(botId: string): Promise<string> {
+    const session = this.sessions.get(botId);
+    if (!session) throw new Error("this bot has no screen yet");
+    await session.ready;
+    session.supervisor?.assertUsable("browser");
+    return withCdp(session.debugPort, (client) => client.screenshotJpeg(), 10_000);
+  }
+
   async observe(botId: string, mode?: "dom" | "ax" | "ocr" | "auto"): Promise<ObservationResult> {
     const session = this.assign(botId);
     await session.ready;

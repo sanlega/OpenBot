@@ -8,6 +8,7 @@ import { ScreenHeader } from "../common/ScreenHeader.js";
 import { ComputerHealthCard } from "./ComputerHealthCard.js";
 import { ComputerImageCard } from "./ComputerImageCard.js";
 import { DataSettings } from "./DataSettings.js";
+import { DecisionProviderCard } from "./DecisionProviderCard.js";
 import { EnginesSettings } from "./EnginesSettings.js";
 import { SavedLogins } from "./SavedLogins.js";
 import { SpeedCard } from "./SpeedCard.js";
@@ -356,6 +357,7 @@ export function SettingsView() {
               description="Jev (by TypeSafe) makes the fast yes/no calls behind every new bot, notification, and risky step."
             >
               <JevKeyCard setup={setup} onSetup={setSetup} />
+              {saved ? <DecisionProviderCard settings={saved} onSaved={setSaved} /> : null}
               <SettingsGroup title="Decision budgets">
                 {budgetKeys.map((key) => {
                   const meta = metaFor(BUDGET_META, key);

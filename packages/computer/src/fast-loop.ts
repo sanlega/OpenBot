@@ -146,7 +146,16 @@ export async function runFastLoop(options: FastLoopOptions): Promise<FastLoopRes
   });
   if (result.status !== "escalated" && result.status !== "failed") return result;
   if (!result.lastObservation || options.shouldStop?.()) return result;
-  const met = await goalAlreadyMet(options, result.lastObservation, history.slice(-6));
+  const met =
+    (await goalAlreadyMet(options, result.lastObservation, history.slice(-6))) ??
+    (await lookAtScreen(options, result.lastObservation));
+  if (met && "wall" in met) {
+    // V4: the picture shows why it stopped; say so (the engine reads the summary).
+    return {
+      ...result,
+      summary: `${result.summary ? `${result.summary}. ` : ""}The screen shows a sign-in page, a CAPTCHA or a bot check: the user has to get past it on the bot's screen.`,
+    };
+  }
   if (!met) return result;
   options.onStep?.({
     step: result.steps + 1,
@@ -165,6 +174,67 @@ export async function runFastLoop(options: FastLoopOptions): Promise<FastLoopRes
 }
 
 const GOAL_CHECK_CONFIDENCE = 0.85;
+/** A picture is only believed when the image model is sure (V4). */
+const VISUAL_CHECK_CONFIDENCE = 0.9;
+
+/**
+ * V4: when the page's text didn't show the goal done and an image decision model is set up
+ * (Settings > Jev > Visual checks), it looks at a screenshot: is the goal done, or is a wall
+ * (sign-in, CAPTCHA, bot check) in the way? Any failure leaves the result as it was.
+ */
+async function lookAtScreen(
+  options: FastLoopOptions,
+  observation: Observation,
+): Promise<{ decisionId: string } | { wall: true } | undefined> {
+  const service = options.decisionService;
+  if (!options.screen.screenshot || !service.canSeeImages?.()) return undefined;
+  try {
+    const picture = await withDeadline(options.screen.screenshot(), 10_000, "screenshot timed out");
+    const decision = await withDeadline(
+      service.decide({
+        purpose: "computer",
+        state: buildDecisionState({
+          goal: options.goal,
+          url: observation.url,
+          title: observation.title,
+        }),
+        questions: {
+          goal_met: {
+            type: "choice",
+            instructions:
+              "Does the screenshot show that `goal` is accomplished (the requested page or result is on screen)?",
+            criteria: {
+              yes: "The screen shows the goal is done",
+              no: "The goal is not done, or the screen doesn't show it",
+            },
+          },
+          wall: {
+            type: "noul",
+            instructions:
+              "The screenshot shows a sign-in page, a CAPTCHA or a bot check that blocks the page.",
+          },
+        },
+        images: [picture],
+      }),
+      options.timeouts?.decide ?? 20_000,
+      "visual check timed out",
+    );
+    if (!isModelProvider(decision.provider)) return undefined;
+    const goal = decision.answers.goal_met;
+    if (
+      goal?.type === "choice" &&
+      goal.choice === "yes" &&
+      (goal.confidence ?? 0) >= VISUAL_CHECK_CONFIDENCE
+    ) {
+      return { decisionId: decision.decisionId };
+    }
+    const wall = decision.answers.wall;
+    if (wall?.type === "noul" && wall.noul >= VISUAL_CHECK_CONFIDENCE) return { wall: true };
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 async function goalAlreadyMet(
   options: FastLoopOptions,

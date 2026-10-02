@@ -188,6 +188,7 @@ export class MockClientApiServer {
       updatedAt: "2026-09-30T09:00:00.000Z",
     },
   ];
+  private decisionKeySaved = false;
   private customEngines: Array<{ slug: string; label: string; command: string; args: string[] }> =
     [];
   private computerImage: ComputerImageStatus = {
@@ -498,8 +499,56 @@ export class MockClientApiServer {
         this.settings.quietHours = patch.quietHours as typeof this.settings.quietHours;
       if (patch.botDefaults)
         this.settings.botDefaults = patch.botDefaults as typeof this.settings.botDefaults;
+      // Same merge as packages/core's settings route (D-037): "" clears an address.
+      if (patch.decisions) {
+        const d = patch.decisions as Record<string, unknown>;
+        const cur = this.settings.decisions ?? { keepRequests: true, mode: "jev" as const };
+        const next = { ...cur, ...d } as Record<string, unknown>;
+        for (const k of ["localUrl", "visionUrl"]) if (next[k] === "") delete next[k];
+        if (next.mode !== "jev" && !next.localUrl) {
+          return sendJson(res, 400, {
+            error: "invalid_request",
+            reason: "add the local decision server's address before switching to it",
+          });
+        }
+        this.settings.decisions = next as typeof this.settings.decisions;
+      }
       this.settings.updatedAt = new Date().toISOString();
       return sendJson(res, 200, { settings: this.settings });
+    }
+    // D-037: same shapes as packages/core/src/http/routes/decision-provider.ts.
+    if (method === "GET" && path === "/api/decisions") {
+      return sendJson(res, 200, {
+        decisions: [
+          ...Array.from({ length: 40 }, () => ({ provider: "jev" })),
+          ...Array.from({ length: 12 }, () => ({ provider: "local" })),
+          { provider: "heuristic" },
+        ],
+      });
+    }
+    if (method === "GET" && path === "/api/decisions/local-key") {
+      return sendJson(res, 200, { saved: this.decisionKeySaved });
+    }
+    if (method === "PUT" && path === "/api/decisions/local-key") {
+      const body = await readJson<{ key?: string }>(req);
+      this.decisionKeySaved = Boolean(body.key?.trim());
+      return sendJson(res, 200, { saved: this.decisionKeySaved });
+    }
+    if (method === "POST" && path === "/api/decisions/check") {
+      const body = await readJson<{ url?: string; kind?: string }>(req);
+      if (!body.url || /:9(\/|$)/.test(body.url)) {
+        return sendJson(res, 200, {
+          ok: false,
+          reason: "Nothing answers at that address. Is the server running?",
+          latencyMs: 3,
+        });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        model: body.kind === "vision" ? "imajev-4b" : "laya-multilingual",
+        latencyMs: body.kind === "vision" ? 1150 : 41,
+        correct: true,
+      });
     }
     if (method === "GET" && path === "/api/engines") {
       return sendJson(res, 200, { engines: SEED_ENGINES });

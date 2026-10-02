@@ -168,6 +168,32 @@ export class CdpClient {
     return this.send("Accessibility.getFullAXTree");
   }
 
+  /**
+   * V4: what the page shows, as a JPEG of at most `maxPixels` (image decision models take
+   * 400,000), base64. The visible part of the page, scaled down, never the whole scroll height.
+   */
+  async screenshotJpeg(maxPixels = 400_000): Promise<string> {
+    const metrics = (await this.send("Page.getLayoutMetrics")) as {
+      cssVisualViewport?: {
+        pageX: number;
+        pageY: number;
+        clientWidth: number;
+        clientHeight: number;
+      };
+    };
+    const view = metrics.cssVisualViewport;
+    const width = Math.max(1, Math.round(view?.clientWidth ?? 1280));
+    const height = Math.max(1, Math.round(view?.clientHeight ?? 800));
+    const scale = Math.min(1, Math.sqrt(maxPixels / (width * height)));
+    const result = (await this.send("Page.captureScreenshot", {
+      format: "jpeg",
+      quality: 70,
+      clip: { x: view?.pageX ?? 0, y: view?.pageY ?? 0, width, height, scale },
+    })) as { data?: string };
+    if (!result.data) throw new Error("captureScreenshot returned no data");
+    return result.data;
+  }
+
   async screenshot(): Promise<Buffer> {
     const result = (await this.send("Page.captureScreenshot", { format: "png" })) as {
       data?: string;
