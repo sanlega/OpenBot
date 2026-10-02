@@ -24,6 +24,7 @@ export class SettingsRepo {
         budgets: next.budgets,
         quietHours: next.quietHours,
         botDefaults: next.botDefaults,
+        decisions: next.decisions,
         updatedAt: new Date(next.updatedAt),
       })
       .onConflictDoUpdate({
@@ -33,6 +34,7 @@ export class SettingsRepo {
           budgets: next.budgets,
           quietHours: next.quietHours,
           botDefaults: next.botDefaults,
+          decisions: next.decisions,
           updatedAt: new Date(next.updatedAt),
         },
       })
@@ -47,6 +49,7 @@ function toSettings(row: SettingsRow): Settings {
     budgets: row.budgets,
     quietHours: row.quietHours ?? undefined,
     ...(row.botDefaults ? { botDefaults: row.botDefaults } : {}),
+    ...(row.decisions ? { decisions: row.decisions } : {}),
     updatedAt: row.updatedAt.toISOString(),
   };
 }

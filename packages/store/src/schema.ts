@@ -4,6 +4,7 @@ import type {
   EngineAuthOverride,
   BotJustification,
   BotDefaults,
+  DecisionSettings,
   MessageAuthor,
   RoutineTrigger,
   RoutineLimits,
@@ -292,6 +293,11 @@ export const decisions = sqliteTable(
     provider: text("provider").notNull(),
     model: text("model").notNull(),
     stateHash: text("state_hash").notNull(),
+    /** V1: what the decision saw (redacted, capped); cleared after 30 days. */
+    request: text("request", { mode: "json" }).$type<{
+      state: unknown;
+      questions: Record<string, unknown>;
+    }>(),
     answers: text("answers", { mode: "json" }).notNull().$type<Record<string, unknown>>(),
     thresholds: text("thresholds", { mode: "json" }).$type<Record<string, number>>(),
     band: text("band").notNull(),
@@ -328,6 +334,7 @@ export const settings = sqliteTable("settings", {
   }>(),
   /** M1: what new bots start with. */
   botDefaults: text("bot_defaults", { mode: "json" }).$type<BotDefaults>(),
+  decisions: text("decisions", { mode: "json" }).$type<DecisionSettings>(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 

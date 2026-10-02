@@ -79,6 +79,7 @@ export class DecisionServiceImpl implements DecisionService {
         provider: "jev",
         model: jevResult.response.model,
         state: req.state,
+        questions: req.questions,
         answers: jevResult.response.answers,
         requestId: jevResult.requestId,
         primaryAnswerId: primaryAnswerIdForPurpose(req.purpose, req.questions),
@@ -99,6 +100,7 @@ export class DecisionServiceImpl implements DecisionService {
         provider: fallback.provider,
         model: fallback.model,
         state: req.state,
+        questions: req.questions,
         answers: fallback.answers,
         primaryAnswerId: primaryAnswerIdForPurpose(req.purpose, req.questions),
       });

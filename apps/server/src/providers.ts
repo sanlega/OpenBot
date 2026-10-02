@@ -25,6 +25,7 @@ import {
   FakeDecisionService,
   JevClient,
   KeyedDecisionService,
+  RoutedDecisionService,
 } from "@openbot/decisions";
 import {
   AcpDriver,
@@ -43,6 +44,8 @@ export const VAULT_KEYS = {
   typesafe: "typesafe.apiKey",
   anthropic: "anthropic.apiKey",
   openai: "openai.apiKey",
+  /** D-037: a local Jev-compatible decision server's key, when it needs one. */
+  localDecisions: "decisions.localKey",
 } as const;
 
 export interface ProviderDetection {
@@ -154,12 +157,23 @@ function resolveDecisionService(ctx: CoreContext): DecisionService {
 
   // JEV_BASE_URL points at another Jev-compatible endpoint (a proxy, or a fake in E2E).
   const baseUrl = process.env.JEV_BASE_URL || undefined;
-  return new KeyedDecisionService({
+  const decisionSettings = () => ctx.repos.settings.get()?.decisions;
+  // Every decision lands in the `decisions` table (Audit, and diagnosing a task later), with what
+  // it saw unless the owner turned that off (V1).
+  const decisionLog = new DecisionLog(ctx.repos.decisions, {
+    keepRequests: () => decisionSettings()?.keepRequests ?? true,
+  });
+  const jev = new KeyedDecisionService({
     getApiKey: async () => process.env.JEV_API_KEY || (await ctx.vault.get(VAULT_KEYS.typesafe)),
-    // Every decision lands in the `decisions` table (Audit, and diagnosing a task later).
-    create: (apiKey) =>
-      createDecisionService({ apiKey, baseUrl, decisionLog: new DecisionLog(ctx.repos.decisions) }),
+    create: (apiKey) => createDecisionService({ apiKey, baseUrl, decisionLog }),
     probeKey: (apiKey) => new JevClient({ apiKey, baseUrl }).validateKey(),
+  });
+  // D-037: Jev, a local Jev-compatible server, or both by question (Settings > Jev).
+  return new RoutedDecisionService({
+    jev,
+    settings: decisionSettings,
+    localKey: () => ctx.vault.get(VAULT_KEYS.localDecisions),
+    log: decisionLog,
   });
 }
 

@@ -402,9 +402,13 @@ export type DecisionOutcome = z.infer<typeof DecisionOutcome>;
 export const Decision = z.object({
   id: z.string(),
   purpose: z.string(),
-  provider: z.enum(["jev", "llm", "heuristic"]),
+  provider: z.enum(["jev", "local", "llm", "heuristic"]),
   model: z.string(),
   stateHash: z.string(),
+  /** V1: what the decision saw (redacted, capped), to replay it against another provider. */
+  request: z
+    .object({ state: z.unknown(), questions: z.record(z.string(), z.unknown()) })
+    .optional(),
   answers: z.record(z.string(), z.unknown()),
   thresholds: z.record(z.string(), z.number()).optional(),
   band: z.enum(["auto", "confirm", "human"]),
@@ -433,12 +437,39 @@ export const BotDefaults = z.object({
 });
 export type BotDefaults = z.infer<typeof BotDefaults>;
 
+/** Confidence bands of one decision provider: `auto` at or above `autoMin`, `confirm` from `confirmMin`. */
+export const ProviderBands = z.object({
+  autoMin: z.number().min(0).max(1),
+  confirmMin: z.number().min(0).max(1),
+});
+export type ProviderBands = z.infer<typeof ProviderBands>;
+
+/** Stricter until a comparison on the owner's own decisions says otherwise (D-037). */
+export const DEFAULT_LOCAL_BANDS: ProviderBands = { autoMin: 0.95, confirmMin: 0.6 };
+
+/**
+ * D-037: where decisions go. `jev` (TypeSafe, the default); `local`, a Jev-compatible server on
+ * this computer (Laya, ImaJev...) for every decision, with no TypeSafe key; `hybrid`, the local
+ * server for small yes/no and few-option questions and Jev for the rest. `visionUrl` is an
+ * optional Jev-compatible server that reads screenshots (ImaJev) for the computer's goal check.
+ */
+export const DecisionSettings = z.object({
+  /** Keep what each decision saw (redacted, 30 days), to compare providers later. */
+  keepRequests: z.boolean().default(true),
+  mode: z.enum(["jev", "local", "hybrid"]).default("jev"),
+  localUrl: z.string().url().optional(),
+  localBands: ProviderBands.optional(),
+  visionUrl: z.string().url().optional(),
+});
+export type DecisionSettings = z.infer<typeof DecisionSettings>;
+
 export const Settings = z.object({
   id: z.literal("singleton").default("singleton"),
   caps: z.record(z.string(), z.number()),
   budgets: z.record(z.string(), z.number()),
   quietHours: z.object({ enabled: z.boolean(), start: z.string(), end: z.string() }).optional(),
   botDefaults: BotDefaults.optional(),
+  decisions: DecisionSettings.optional(),
   updatedAt: isoTimestamp(),
 });
 export type Settings = z.infer<typeof Settings>;

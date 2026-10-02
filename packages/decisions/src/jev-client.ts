@@ -25,6 +25,8 @@ export interface SystemOneCall {
   state: JevState;
   questions: Record<string, JevQuestion>;
   timeoutMs: number;
+  /** Image decision servers only (ImaJev): data URLs. Jev itself never gets them. */
+  images?: string[];
 }
 
 export interface SystemOneResult {
@@ -103,6 +105,7 @@ export class JevClient {
             model: this.model,
             state: call.state,
             questions: call.questions,
+            ...(call.images?.length ? { images: call.images } : {}),
           }),
           signal: controller.signal,
         });

@@ -20,6 +20,7 @@ import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { registerResetRoutes } from "./routes/reset.js";
 import { registerWorkspaceRoutes } from "./routes/workspace.js";
+import { registerDecisionProviderRoutes } from "./routes/decision-provider.js";
 import { registerWebSocketRoute } from "../ws.js";
 
 export interface BuildServerOptions {
@@ -124,6 +125,7 @@ export async function buildServer(
   registerTaskRoutes(app, ctx);
   registerResetRoutes(app, ctx);
   registerWorkspaceRoutes(app, ctx);
+  registerDecisionProviderRoutes(app, ctx);
   registerWebSocketRoute(app, ctx);
 
   if (options.wireRemote !== false) {

@@ -98,7 +98,9 @@ export function registerRemoteAndAuditRoutes(app: FastifyInstance, ctx: CoreCont
     if (!requireAuth(request, reply)) return;
     const query = parseOrReject(DecisionsQuery, request.query, reply);
     if (!query) return;
-    return { decisions: ctx.repos.decisions.list({ purpose: query.purpose }) };
+    // What a decision saw stays on this computer: the list carries the decisions, not their requests.
+    const decisions = ctx.repos.decisions.list({ purpose: query.purpose });
+    return { decisions: decisions.map(({ request: _request, ...d }) => d) };
   });
 }
 

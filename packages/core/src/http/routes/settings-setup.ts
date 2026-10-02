@@ -1,9 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { Settings } from "@openbot/contracts";
+import type { z } from "zod";
+import type { DecisionSettings, Settings } from "@openbot/contracts";
 import type { CoreContext, SetupValidatorKind } from "../../context.js";
 import { requireAuth, requireOwner } from "../auth.js";
 import { parseOrReject } from "../validation.js";
-import { SetupValidateBody, UpdateSettingsBody } from "../schemas.js";
+import { SetupValidateBody, UpdateSettingsBody, type DecisionSettingsPatch } from "../schemas.js";
 
 const DEFAULT_CAPS: Settings["caps"] = {
   // Loose on purpose: the Chief delegates by default and creates the bots it needs (D-023).
@@ -32,6 +33,31 @@ function defaultSettings(ctx: CoreContext): Settings {
   };
 }
 
+/** Applies a Settings > Jev change: "" clears an address; local and hybrid need a local server. */
+type DecisionSettingsPatchInput = z.infer<typeof DecisionSettingsPatch>;
+
+function mergeDecisionSettings(
+  current: DecisionSettings | undefined,
+  patch: DecisionSettingsPatchInput | undefined,
+): { value?: DecisionSettings } | { error: string } {
+  if (!patch) return { value: current };
+  const next: DecisionSettings = {
+    keepRequests: patch.keepRequests ?? current?.keepRequests ?? true,
+    mode: patch.mode ?? current?.mode ?? "jev",
+  };
+  const localUrl = patch.localUrl === undefined ? current?.localUrl : patch.localUrl || undefined;
+  const visionUrl =
+    patch.visionUrl === undefined ? current?.visionUrl : patch.visionUrl || undefined;
+  const localBands = patch.localBands ?? current?.localBands;
+  if (localUrl) next.localUrl = localUrl;
+  if (visionUrl) next.visionUrl = visionUrl;
+  if (localBands) next.localBands = localBands;
+  if (next.mode !== "jev" && !next.localUrl) {
+    return { error: "add the local decision server's address before switching to it" };
+  }
+  return { value: next };
+}
+
 /** Settings (caps S1-S10/O7, budgets, quiet hours) and the setup wizard (plan §4.7). Owner-only writes. */
 export function registerSettingsAndSetupRoutes(app: FastifyInstance, ctx: CoreContext): void {
   app.get("/api/settings", async (request, reply) => {
@@ -46,15 +72,24 @@ export function registerSettingsAndSetupRoutes(app: FastifyInstance, ctx: CoreCo
     if (!body) return;
 
     const current: Settings = ctx.repos.settings.get() ?? defaultSettings(ctx);
+    const decisions = mergeDecisionSettings(current.decisions, body.decisions);
+    if ("error" in decisions) {
+      return reply.code(400).send({ error: "invalid_request", reason: decisions.error });
+    }
     const next: Settings = {
       ...current,
       caps: { ...current.caps, ...body.caps },
       budgets: { ...current.budgets, ...body.budgets },
       quietHours: body.quietHours ?? current.quietHours,
       botDefaults: body.botDefaults ?? current.botDefaults,
+      ...(decisions.value ? { decisions: decisions.value } : {}),
       updatedAt: ctx.clock.now().toISOString(),
     };
     ctx.repos.settings.upsert(next);
+    // Turning "keep what decisions saw" off forgets what is already kept, too.
+    if (body.decisions?.keepRequests === false) {
+      ctx.repos.decisions.clearRequestsBefore(new Date(8.64e15));
+    }
     await ctx.eventBus.publish({ type: "setup.changed", payload: { settings: next } });
     return { settings: next };
   };

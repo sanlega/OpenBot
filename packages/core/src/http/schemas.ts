@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   BotDefaults,
+  ProviderBands,
   ComputerAccess,
   EngineAuthOverride,
   EngineRouting,
@@ -92,11 +93,32 @@ export const PairDeviceBody = z.object({
 });
 export type PairDeviceBody = z.infer<typeof PairDeviceBody>;
 
+/** An http(s) address, or "" to clear it. */
+const ServerUrlOrClear = z.union([
+  z.literal(""),
+  z
+    .string()
+    .url()
+    .refine((u) => /^https?:\/\//i.test(u), "must start with http:// or https://"),
+]);
+
+/** D-037: a change to Settings > Jev's decision provider; omitted fields keep their value. */
+export const DecisionSettingsPatch = z.object({
+  keepRequests: z.boolean().optional(),
+  mode: z.enum(["jev", "local", "hybrid"]).optional(),
+  localUrl: ServerUrlOrClear.optional(),
+  visionUrl: ServerUrlOrClear.optional(),
+  localBands: ProviderBands.refine((b) => b.confirmMin < b.autoMin, {
+    message: "the confirm line must be below the auto line",
+  }).optional(),
+});
+
 export const UpdateSettingsBody = z.object({
   caps: z.record(z.string(), z.number()).optional(),
   budgets: z.record(z.string(), z.number()).optional(),
   quietHours: z.object({ enabled: z.boolean(), start: z.string(), end: z.string() }).optional(),
   botDefaults: BotDefaults.optional(),
+  decisions: DecisionSettingsPatch.optional(),
 });
 export type UpdateSettingsBody = z.infer<typeof UpdateSettingsBody>;
 

@@ -87,6 +87,10 @@ export async function bootstrapHarness(
   // Installs that finished setup before the CoS was seeded get one now.
   ensureChiefOfStaff(ctx);
   await closeOrphanedTurns(ctx);
+  // V1: what decisions saw is kept 30 days; checked now and once a day.
+  forgetOldDecisionRequests(ctx);
+  const decisionRetention = setInterval(() => forgetOldDecisionRequests(ctx), 24 * 3_600_000);
+  decisionRetention.unref?.();
   await reportPreviousCrash(ctx).catch(() => false);
   const caps = new CapCounterService(ctx.clock);
   // S2/S3 hold across restarts: replay the CoS's past spawns (a spawned Bot's
@@ -171,7 +175,12 @@ export async function bootstrapHarness(
     void postDigestIfDue(ctx, autonomyCaps).catch(() => undefined);
   }, 60_000);
   digestTimer.unref?.();
-  const digest = { stop: () => clearInterval(digestTimer) };
+  const digest = {
+    stop: () => {
+      clearInterval(digestTimer);
+      clearInterval(decisionRetention);
+    },
+  };
   return {
     runtime,
     orchestrator,
@@ -476,6 +485,19 @@ class RepoRuleStore implements RuleStore {
 export function toolLoopMode(value: string | undefined): "off" | "shadow" | "on" {
   const mode = value?.trim().toLowerCase();
   return mode === "off" || mode === "shadow" ? mode : "on";
+}
+
+/** How long a decision keeps what it saw (V1). */
+export const DECISION_REQUEST_DAYS = 30;
+
+/** Forgets what decisions older than {@link DECISION_REQUEST_DAYS} saw; the decisions stay. */
+export function forgetOldDecisionRequests(ctx: CoreContext): number {
+  const before = new Date(ctx.clock.now().getTime() - DECISION_REQUEST_DAYS * 86_400_000);
+  try {
+    return ctx.repos.decisions.clearRequestsBefore(before);
+  } catch {
+    return 0; // The database is closing (shutdown): nothing to do.
+  }
 }
 
 export async function closeOrphanedTurns(ctx: CoreContext): Promise<void> {

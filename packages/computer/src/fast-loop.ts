@@ -8,7 +8,8 @@ import type {
   ObservedElement,
   Screen,
 } from "@openbot/contracts";
-import { bandForAnswer, UNCONFIGURED_MODEL } from "@openbot/decisions";
+import { isModelProvider } from "@openbot/contracts";
+import { bandForAnswer, LOCAL_UNAVAILABLE_MODEL, UNCONFIGURED_MODEL } from "@openbot/decisions";
 import { buildComputerActionQuestions } from "@openbot/decisions";
 import { buildCandidates, hasPopup, type Candidate } from "./candidates.js";
 import { buildDecisionState } from "@openbot/decisions";
@@ -203,7 +204,7 @@ async function goalAlreadyMet(
       "goal check timed out",
     );
     const answer = decision.answers.goal_met;
-    if (decision.provider !== "jev") return undefined;
+    if (!isModelProvider(decision.provider)) return undefined;
     if (answer?.type !== "choice" || answer.choice !== "yes") return undefined;
     if ((answer.confidence ?? 0) < GOAL_CHECK_CONFIDENCE) return undefined;
     return { decisionId: decision.decisionId };
@@ -534,11 +535,13 @@ async function runSteps(options: FastLoopOptions): Promise<FastLoopResult> {
     const choiceId = parseChoice(actionAnswer, "");
     let chosen = candidates.find((c) => c.id === choiceId);
 
-    if (decision.provider !== "jev" && opBand === "human") {
+    if (!isModelProvider(decision.provider) && opBand === "human") {
       const reason =
         decision.model === UNCONFIGURED_MODEL
           ? "No Jev (TypeSafe) key is set, so I stopped instead of guessing. Add it in Settings → Jev."
-          : "Jev is unavailable, so I stopped instead of guessing.";
+          : decision.model === LOCAL_UNAVAILABLE_MODEL
+            ? "The local decision model isn't answering, so I stopped instead of guessing. Check it in Settings → Jev."
+            : "Jev is unavailable, so I stopped instead of guessing.";
       // A missing key won't fix itself; an outage might.
       if (decision.model !== UNCONFIGURED_MODEL && (await recover(observation, reason))) continue;
       return giveUp(observation, reason, { decisionId: decision.decisionId });

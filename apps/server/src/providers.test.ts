@@ -10,6 +10,7 @@ import {
   FakeDecisionService,
   FakeJevServer,
   KeyedDecisionService,
+  RoutedDecisionService,
   UNCONFIGURED_MODEL,
 } from "@openbot/decisions";
 import { FakeEngineDriver } from "@openbot/engines-fake";
@@ -162,8 +163,11 @@ describe("bootstrapProviders", () => {
     const result = await bootstrapProviders(ctx, mockDetection());
 
     expect(result.decisionService).not.toBeInstanceOf(FakeDecisionService);
-    expect(result.decisionService).toBeInstanceOf(KeyedDecisionService);
-    const keyed = result.decisionService as KeyedDecisionService;
+    // D-037: decisions go through the provider router; Jev (keyed) is behind it.
+    expect(result.decisionService).toBeInstanceOf(RoutedDecisionService);
+    const keyed = (result.decisionService as RoutedDecisionService)
+      .jevService as KeyedDecisionService;
+    expect(keyed).toBeInstanceOf(KeyedDecisionService);
     expect(await keyed.configured()).toBe(false);
     const decision = await keyed.decide({
       purpose: "trigger",

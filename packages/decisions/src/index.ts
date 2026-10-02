@@ -15,3 +15,5 @@ export * from "./evals/spawn-cases.js";
 export * from "./evals/notify-cases.js";
 export * from "./state-builders.js";
 export * from "./questions/index.js";
+export { redactSecrets, storableRequest, MAX_STORED_REQUEST_CHARS } from "./redact.js";
+export * from "./routed-decision-service.js";

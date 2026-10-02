@@ -38,14 +38,30 @@ export const PURPOSE_BUDGET: Record<Purpose, Budget> = {
 export const Band = z.enum(["auto", "confirm", "human"]);
 export type Band = z.infer<typeof Band>;
 
-export const DecisionProvider = z.enum(["jev", "llm", "heuristic"]);
+/** `jev` and `local` are models' answers (D-037); `llm` and `heuristic` are outage fallbacks. */
+export const DecisionProvider = z.enum(["jev", "local", "llm", "heuristic"]);
 export type DecisionProvider = z.infer<typeof DecisionProvider>;
+
+/** True when a model answered (TypeSafe Jev or a local Jev-compatible server), not a fallback. */
+export function isModelProvider(provider: DecisionProvider): boolean {
+  return provider === "jev" || provider === "local";
+}
+
+/** A picture sent with a decision (V4, image decision models such as ImaJev). */
+export const DecisionImage = z.object({
+  mime: z.enum(["image/jpeg", "image/png"]),
+  /** Base64, no data: prefix. */
+  data: z.string(),
+});
+export type DecisionImage = z.infer<typeof DecisionImage>;
 
 export const DecideRequest = z.object({
   purpose: Purpose,
   state: z.union([z.string(), z.record(z.string(), z.unknown())]),
   questions: z.record(z.string(), JevQuestion),
   timeoutMs: z.number().int().positive().optional(),
+  /** Only image decision servers read these (V4); Jev and Laya get the request without them. */
+  images: z.array(DecisionImage).max(2).optional(),
 });
 export type DecideRequest = z.infer<typeof DecideRequest>;
 

@@ -567,6 +567,30 @@ describe("DecisionsRepo", () => {
     repo.setFeedback(decision.id, "mute");
     expect(repo.getById(decision.id)?.feedback).toBe("mute");
   });
+
+  it("keeps what a decision saw, forgets it after the retention window, keeps the decision (V1)", () => {
+    const db = useDb();
+    const repo = new DecisionsRepo(db);
+    const base = {
+      purpose: "risk",
+      provider: "local" as const,
+      model: "laya",
+      stateHash: "h",
+      answers: { risky: { type: "noul", noul: 0.2 } },
+      band: "auto" as const,
+      outcome: "allow" as const,
+    };
+    const request = { state: { command: "ls" }, questions: { risky: { type: "noul" } } };
+    repo.create({ ...base, id: newId("decision"), request, createdAt: "2026-08-01T00:00:00.000Z" });
+    repo.create({ ...base, id: newId("decision"), request, createdAt: "2026-09-30T00:00:00.000Z" });
+    repo.create({ ...base, id: newId("decision"), createdAt: "2026-09-30T00:00:00.000Z" });
+
+    expect(repo.listWithRequests()).toHaveLength(2);
+    expect(repo.listWithRequests()[0]!.request).toEqual(request);
+    expect(repo.clearRequestsBefore(new Date("2026-09-01T00:00:00.000Z"))).toBe(1);
+    expect(repo.listWithRequests()).toHaveLength(1);
+    expect(repo.list()).toHaveLength(3);
+  });
 });
 
 describe("CapCountersRepo", () => {

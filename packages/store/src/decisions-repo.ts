@@ -1,5 +1,5 @@
 import type { Decision } from "@openbot/contracts";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
 import type { Db } from "./db.js";
 import { decisions } from "./schema.js";
 
@@ -28,6 +28,7 @@ export class DecisionsRepo {
         provider: decision.provider,
         model: decision.model,
         stateHash: decision.stateHash,
+        request: decision.request as DecisionRow["request"],
         answers: decision.answers,
         thresholds: decision.thresholds,
         band: decision.band,
@@ -61,6 +62,29 @@ export class DecisionsRepo {
     return rows.map(toDecision);
   }
 
+  /** V1 retention: forgets what decisions older than `before` saw; the decisions themselves stay. */
+  clearRequestsBefore(before: Date): number {
+    return this.db
+      .update(decisions)
+      .set({ request: null })
+      .where(and(isNotNull(decisions.request), lt(decisions.createdAt, before)))
+      .run().changes;
+  }
+
+  /** Decisions that kept what they saw, newest first (V2: compare providers). */
+  listWithRequests(filter: DecisionListFilter = {}): Decision[] {
+    const conditions = [isNotNull(decisions.request)];
+    if (filter.purpose) conditions.push(eq(decisions.purpose, filter.purpose));
+    return this.db
+      .select()
+      .from(decisions)
+      .where(and(...conditions))
+      .orderBy(desc(decisions.createdAt))
+      .limit(filter.limit ?? 200)
+      .all()
+      .map(toDecision);
+  }
+
   listByPurpose(purpose: string, limit = 100): Decision[] {
     return this.list({ purpose, limit });
   }
@@ -73,6 +97,7 @@ function toDecision(row: DecisionRow): Decision {
     provider: row.provider as Decision["provider"],
     model: row.model,
     stateHash: row.stateHash,
+    ...(row.request ? { request: row.request } : {}),
     answers: row.answers,
     thresholds: row.thresholds ?? undefined,
     band: row.band as Decision["band"],

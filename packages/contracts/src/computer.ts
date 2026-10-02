@@ -43,6 +43,11 @@ export interface Screen {
   act(a: Action): Promise<ActResult>;
   liveView(): Promise<{ url: string; token: string; expiresAt: string }>;
   takeover(on: boolean): Promise<void>;
+  /**
+   * V4: a picture of what the screen shows (JPEG, at most 400,000 pixels, base64), for image
+   * decision models. Providers that cannot take one leave it out.
+   */
+  screenshot?(): Promise<{ mime: "image/jpeg" | "image/png"; data: string }>;
 }
 
 /** What a command run inside the bots' machine printed and how it ended. */

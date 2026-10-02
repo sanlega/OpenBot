@@ -10,6 +10,7 @@ import {
 } from "@openbot/contracts";
 import { bandForAnswer, outcomeForPurpose } from "./fallbacks.js";
 import { hashState } from "./state-builders.js";
+import { storableRequest } from "./redact.js";
 
 const ulid = monotonicFactory();
 
@@ -18,6 +19,8 @@ export interface DecisionLogEntryInput {
   provider: DecideResult["provider"];
   model: string;
   state: DecideRequest["state"];
+  /** What was asked; kept with the state when the owner keeps decision requests (V1). */
+  questions?: DecideRequest["questions"];
   answers: DecideResult["answers"];
   requestId?: string;
   primaryAnswerId?: string;
@@ -41,8 +44,16 @@ export class InMemoryDecisionLog implements DecisionLogStore {
   }
 }
 
+export interface DecisionLogOptions {
+  /** V1: keep what each decision saw (read per decision, so the setting applies at once). */
+  keepRequests?: () => boolean;
+}
+
 export class DecisionLog {
-  constructor(private readonly store: DecisionLogStore = new InMemoryDecisionLog()) {}
+  constructor(
+    private readonly store: DecisionLogStore = new InMemoryDecisionLog(),
+    private readonly options: DecisionLogOptions = {},
+  ) {}
 
   record(input: DecisionLogEntryInput): string {
     const id = newId("decision");
@@ -58,6 +69,9 @@ export class DecisionLog {
       provider: input.provider,
       model: input.model,
       stateHash: hashState(input.state),
+      ...(input.questions && (this.options.keepRequests?.() ?? false)
+        ? { request: storableRequest(input.state, input.questions) }
+        : {}),
       answers: input.answers,
       band,
       outcome,
