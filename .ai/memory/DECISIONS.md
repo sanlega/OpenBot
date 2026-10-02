@@ -312,3 +312,46 @@ Formato: fecha, contexto, decisión, consecuencias.
 - **Decisión**: four layers. (1) `~/.openbot/local-owner.key` (64 hex, made on first start, owner-only file); a request is the local owner only if it is from loopback, addressed to a loopback host name (127.0.0.1, localhost, [::1]), carries no proxy header (`x-forwarded-*`, `tailscale-*`, `forwarded`, `via`, `x-real-ip`, `cf-*`), and presents the key (`X-OpenBot-Local-Key`, or `?key=` on the event stream, compared in constant time). The desktop app's main process reads the file and gives it only to its own window (`getLocalOwnerKey` via the preload) and its notification stream; `openbot serve` prints `…/app/#key=…` on a terminal (never to the log file), the page keeps it in localStorage and drops it from the address bar; `openbot pair`, the E2E helpers and `scripts/live` read the file. In-memory databases (unit tests) keep the old loopback-only rule. (2) A request from loopback that names another site in `Origin` is refused for every state change and for the event stream. (3) Engine routes are owner-only, the engine/model lists need a device, and a custom agent's command must be a program on this computer (no UNC or URL). (4) Built-in deny: a Bot's tool that opens connections (shell, fetch, connectors; not file reads/writes/searches nor VM tools) may not name the harness port on loopback.
 - **Alternativas descartadas**: serving the key in `/app` (any local program could fetch it); a cookie set by the harness (any local program could ask for one); loopback-only with a Host check (closes tunnels and rebinding, not other accounts or Bots).
 - **Consecuencias**: the browser UI over Tailscale serve or a tunnel needs a paired device, like the phone app. A host-shell Bot under Full still runs as the owner's OS user and can read the key file; the real boundary for untrusted work stays the VM (D-033). Existing installs get the key on their next start; the desktop app needs no action.
+
+## D-037 · Swappable decision providers: Jev by default, a local Jev-compatible server, or both
+
+- **Fecha**: 2026-10-02
+
+- **Contexto**: the owner asked whether Laya (an open, local decision model) could replace Jev,
+  and whether image decision models (ImaJev) could help the computer loop. The research note
+  (`.ai/resources/2026-10-02-imajev-laya-decision-models.md`) found:
+  - Laya is weak zero-shot.
+  - Laya degrades past about 20 options. 96% of OpenBot's decisions are the computer action
+    choice, with up to about 30 options.
+  - Laya's context is short.
+  - It is free, offline, multilingual and fast on a GPU.
+- **Decisión**: Jev stays the default; the provider becomes a setting (`settings.decisions`).
+  - **Local only:** every decision goes to a local Jev-compatible server (`POST /v1/systemone`),
+    with no TypeSafe account. If the server fails, the conservative fallback applies, and the
+    computer loop stops saying so.
+  - **Hybrid:** the local server gets questions that suit a small model (every question a
+    `noul`, a `score` or a `choice` of at most 8 options, a state of at most 3,000 characters,
+    and never the computer purpose). Jev gets the rest, and a local failure retries on Jev.
+  - **Bands:** a local model's confidence is mapped onto Jev's scale with that provider's own
+    bands (default auto ≥ 0.95, confirm ≥ 0.6), so every gate keeps its thresholds. Provider
+    `local` counts as a model answer.
+  - **Decision history:** each decision keeps what it saw (redacted, at most 32 KB, 30 days,
+    switchable, deleted when switched off). The audit list never returns it.
+  - **Comparison:** `openbot decisions compare --url` replays the kept decisions against another
+    server and reports agreement per purpose.
+  - **Visual checks:** an optional server (ImaJev) gets a screenshot (the daemon's
+    `/screenshot`: JPEG, at most 400k pixels, screen lease) when a computer task ends unsure. It
+    is asked whether the goal is on screen (done at ≥ 0.9) and whether a sign-in, CAPTCHA or bot
+    check is in the way (named in the result). Failures change nothing.
+- **Alternativas descartadas**:
+  - Replacing Jev with Laya: accuracy on our real question shapes.
+  - Per-gate threshold copies for each provider: a single scale mapping keeps one set of
+    thresholds.
+  - Sending screenshots on every computer step: latency, and ImaJev reads only 0 to 2 images
+    with a 4k-token limit.
+- **Consecuencias**:
+  - Decisions now hold page text and user messages locally for 30 days. Reset deletes them, and
+    switching the setting off deletes them.
+  - A local key lives in the vault (`decisions.localKey`). It is never sent to TypeSafe, and the
+    TypeSafe key is never sent to a local server.
+  - ImaJev reads English only.

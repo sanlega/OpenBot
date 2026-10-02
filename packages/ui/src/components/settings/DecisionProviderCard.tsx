@@ -264,6 +264,7 @@ export function DecisionProviderCard({
           <button
             type="button"
             className="btn btn-primary btn-sm"
+            aria-label="Save decision model"
             disabled={!dirty || busy || needsServer}
             onClick={() =>
               void save({ mode, localUrl: localUrl.trim(), visionUrl: visionUrl.trim() })

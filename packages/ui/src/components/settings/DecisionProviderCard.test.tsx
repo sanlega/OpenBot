@@ -53,7 +53,7 @@ describe("Settings > Jev > Decision model (D-037)", () => {
 
     await userEvent.click(screen.getByRole("radio", { name: "Hybrid" }));
     expect(screen.getByText(/Add your server's address to use Hybrid/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save decision model" })).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText("Your decision server"), "http://127.0.0.1:8000");
     await userEvent.click(screen.getAllByRole("button", { name: "Check connection" })[0]!);
@@ -66,7 +66,7 @@ describe("Settings > Jev > Decision model (D-037)", () => {
     ).toBeTruthy();
 
     await userEvent.type(screen.getByLabelText("Server key"), "k-1");
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save decision model" }));
     expect(put).toHaveBeenCalledWith("/api/decisions/local-key", { key: "k-1" });
     expect(patch).toHaveBeenCalledWith("/api/settings", {
       decisions: { mode: "hybrid", localUrl: "http://127.0.0.1:8000", visionUrl: "" },
