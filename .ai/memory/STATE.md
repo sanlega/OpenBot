@@ -3,6 +3,21 @@
 _Last updated: 2026-10-01 by Claude (v0.1.20 released and installed: spawn gate reads the user's messages)_
 
 ## In progress
+- **Swappable decision providers (2026-10-02, D-037, plan
+  `.ai/memory/plans/2026-10-02-decision-providers.md`, all items ticked), releasing as v0.1.21.**
+  The research behind it is in `.ai/resources/2026-10-02-imajev-laya-decision-models.md`.
+  - Jev stays the default. Settings > Jev > Decision model offers Jev, Hybrid (small questions to
+    a local Jev-compatible server such as Laya; computer and risk stay on Jev; a failure falls
+    back to Jev) and Local only (no TypeSafe key; a failure gives the safe answers).
+  - An optional visual checks server (ImaJev) lets the fast loop look at a screenshot from the
+    daemon's `/screenshot` when a task ends unsure. A question with pictures is never answered by Jev.
+  - Decisions keep their redacted request for 30 days (migration 0008), which feeds
+    `openbot decisions compare`.
+  - Verified: 1431 unit tests, 26 E2E, `decisions.mjs` 9/9, `vision.mjs` 7/7; functional and
+    design reviewers both 10/10.
+  - **Next**: install v0.1.21 and check the card on the installed app. To run the local servers
+    for testing: Laya `laya-serve` on :8000, ImaJev `scripts/playground/server.py` on :8765,
+    both on CUDA.
 - **v0.1.20 RELEASED and installed (2026-10-01)**: fixes an explicit "create a bot X" being
   refused. The spawn gate's `user_requested` question reads `recent_user_messages`, which
   `cos-service` always sent empty; it now sends the last 5 user messages from the Chief's chat.

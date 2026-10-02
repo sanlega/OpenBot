@@ -10,50 +10,50 @@ Jev stays the default. Everything here is opt-in, except recording what each dec
 ## Items (mark when implemented AND tested)
 
 **V1 · Decisions keep what they saw**
-- [ ] Migration 0008: `decisions.request` (JSON: `{ state, questions }`, redacted, capped at 32 KB).
-- [ ] The decision log records it for every provider (Jev, local, fallback). Secrets are redacted
+- [x] Migration 0008: `decisions.request` (JSON: `{ state, questions }`, redacted, capped at 32 KB).
+- [x] The decision log records it for every provider (Jev, local, fallback). Secrets are redacted
       with the same patterns as the chat error view, plus typed secrets the computer loop masks.
-- [ ] Retention: a request older than 30 days is cleared at start-up and daily; the row stays.
-- [ ] Settings > Jev has "Keep what each decision saw (30 days)", on by default. When it is off,
+- [x] Retention: a request older than 30 days is cleared at start-up and daily; the row stays.
+- [x] Settings > Jev has "Keep what each decision saw (30 days)", on by default. When it is off,
       nothing is stored.
 
 **V2 · Compare providers on recorded decisions**
-- [ ] `openbot decisions compare --url <jev-compatible URL> [--key K] [--purpose p] [--limit n]
+- [x] `openbot decisions compare --url <jev-compatible URL> [--key K] [--purpose p] [--limit n]
       [--json]` replays stored requests against another provider. It reports, per purpose:
   - agreement with the recorded answer (choice and noul ≥ 0.5);
   - mean confidence and latency;
   - questions the provider refused (too many options, too long).
-- [ ] It never writes to the database and never calls the TypeSafe API.
+- [x] It never writes to the database and never calls the TypeSafe API.
 
 **V3 · Choose the decision provider (Settings > Jev)**
-- [ ] Settings value `decisionProvider`:
+- [x] Settings value `decisionProvider`:
   - `mode`: `jev` (default), `local` or `hybrid`;
   - `localUrl` and optional `localKey` (stored in the vault);
   - `visionUrl`, optional;
   - per-provider bands: `local.autoMin` and `local.confirmMin`.
-- [ ] `local`: every decision goes to the local server and no TypeSafe key is needed (offline
+- [x] `local`: every decision goes to the local server and no TypeSafe key is needed (offline
       mode). If the server is down, the conservative fallback applies.
-- [ ] `hybrid`: local only for questions that suit a small model:
+- [x] `hybrid`: local only for questions that suit a small model:
   - every question is a `noul`, a `score` or a `choice` with ≤ 8 options;
   - the state is ≤ 3,000 characters;
   - the purpose is not `computer`.
 
   Everything else goes to Jev. A local error or timeout retries on Jev.
-- [ ] Provider label `local` (contracts). The computer loop and the gates treat `jev` and `local`
+- [x] Provider label `local` (contracts). The computer loop and the gates treat `jev` and `local`
       alike as real model answers, using that provider's bands.
-- [ ] A "Check connection" button runs a probe decision and shows the model name and latency.
-- [ ] Audit shows each decision's provider.
+- [x] A "Check connection" button runs a probe decision and shows the model name and latency.
+- [x] Audit shows each decision's provider.
 
 **V4 · Visual check (ImaJev-compatible)**
-- [ ] The daemon gets `GET /screenshot?botId&display`: a JPEG of the bot's page, scaled to at most
+- [x] The daemon gets `GET /screenshot?botId&display`: a JPEG of the bot's page, scaled to at most
       400,000 pixels. It needs the screen lease (B4).
-- [ ] `Screen.screenshot?()` (contracts); the docker screen implements it.
-- [ ] Goal check: when `visionUrl` is set and the text check didn't confirm the goal, the fast loop
+- [x] `Screen.screenshot?()` (contracts); the docker screen implements it.
+- [x] Goal check: when `visionUrl` is set and the text check didn't confirm the goal, the fast loop
       sends the screenshot with `goal_met` and with `wall` ("does the screen show a sign-in page,
       CAPTCHA or bot check?").
   - A visual `goal_met` yes at ≥ 0.9 ends the task as done.
   - A visual wall at ≥ 0.9 pauses the task as `needs_user` (existing path).
-- [ ] Vision failures never stop a task: the loop carries on as today.
+- [x] Vision failures never stop a task: the loop carries on as today.
 
 ## Verification
 - **Unit tests:**
@@ -84,3 +84,16 @@ Jev stays the default. Everything here is opt-in, except recording what each dec
 - Confidence differs between models, so local providers get their own bands. The defaults are
   stricter (auto ≥ 0.95, confirm ≥ 0.6) until the compare tool says otherwise.
 - ImaJev reads English only. The goal is sent as written, and the note says so.
+
+## Outcome (2026-10-02)
+All items done on `main-2`. Departures from the plan:
+- The setting is `settings.decisions` ({keepRequests, mode, localUrl, localBands, visionUrl}),
+  not a flat `decisionProvider`.
+- Vision is never answered by Jev: a question with pictures and no reachable image server gets
+  the safe answers (`vision-unavailable`). `VISION_BANDS` {0.85, 0.5} were measured on ImaJev 4B.
+- "Check connection" asks two questions (yes/no and pick-one) because Laya fails yes/no probes;
+  the card says which kind failed. Local only can still be saved after a warning if the server
+  answers but gets a test wrong.
+Verified: 1431 unit, 26 E2E, lint/format/typecheck/mh check; live `scripts/live/decisions.mjs`
+9/9 (real Jev, Laya, Chief, engines) and `scripts/live/vision.mjs` 7/7 (real ImaJev).
+Functional and design reviewers: 10/10.

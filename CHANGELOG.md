@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.21 — 2026-10-02
+
+- **Choose who makes the quick decisions** (Settings > Jev > Decision model). TypeSafe Jev stays
+  the default. **Hybrid** sends small yes/no and pick-one questions to your own Jev-compatible
+  server (for example Laya running on your computer) and keeps the computer and the risk checks
+  on Jev. **Local only** works with no TypeSafe key at all. "Check decision server" asks it two
+  test questions and tells you how it did.
+- **Visual checks.** With an image model server set (for example ImaJev), a computer task that
+  isn't sure it finished looks at the screen. It confirms the goal is done, or spots a sign-in or
+  CAPTCHA wall. Without one, nothing changes.
+- **Decisions keep what they saw** for 30 days, with secrets removed, so
+  `openbot decisions compare --url <server>` can replay your real decisions against another
+  model and show where they agree. Turn it off in Settings > Jev; turning it off deletes them.
+- Fixed: on a phone, some Settings rows (theme, hours) squeezed their controls into one line.
+
 ## 0.1.20 — 2026-10-01
 
 - Fixed: asking the Chief of Staff to create a bot ("Create a bot called Researcher…") was
