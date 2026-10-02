@@ -978,9 +978,12 @@ a.pair-url:hover {
 
 .set-check {
   margin: 0;
-  min-height: 1.4em;
   font-size: var(--text-sm);
   color: var(--text-2);
+}
+
+.set-input-block {
+  max-width: 560px;
 }
 
 .set-check-ok {

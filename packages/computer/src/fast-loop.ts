@@ -175,8 +175,10 @@ export async function runFastLoop(options: FastLoopOptions): Promise<FastLoopRes
 }
 
 const GOAL_CHECK_CONFIDENCE = 0.85;
-/** A picture is only believed when the image model is sure (V4). */
+/** A picture is only believed when the image model is sure (V4), on Jev's scale. */
 const VISUAL_CHECK_CONFIDENCE = 0.9;
+/** A wall only names why the task stopped (it never completes one): a little less sure is enough. */
+const VISUAL_WALL_CONFIDENCE = 0.85;
 
 /**
  * V4: when the page's text didn't show the goal done and an image decision model is set up
@@ -212,7 +214,7 @@ async function lookAtScreen(
           wall: {
             type: "noul",
             instructions:
-              "The screenshot shows a sign-in page, a CAPTCHA or a bot check that blocks the page.",
+              "The screen asks the user to sign in (an email or password form), solve a CAPTCHA, or prove they are human before going on.",
           },
         },
         images: [picture],
@@ -231,7 +233,7 @@ async function lookAtScreen(
       return { decisionId: decision.decisionId };
     }
     const wall = decision.answers.wall;
-    if (wall?.type === "noul" && wall.noul >= VISUAL_CHECK_CONFIDENCE) return { wall: true };
+    if (wall?.type === "noul" && wall.noul >= VISUAL_WALL_CONFIDENCE) return { wall: true };
     return undefined;
   } catch {
     return undefined;

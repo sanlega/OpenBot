@@ -37,6 +37,13 @@ const HYBRID_TIMEOUT_MS = 5_000;
 /** Model label when pictures couldn't be read: the question is never answered without them. */
 export const VISION_UNAVAILABLE_MODEL = "vision-unavailable";
 
+/**
+ * An image model's bands (V4). Measured on real pages with ImaJev 4B (2026-10-02): an order
+ * confirmation answered "goal done" at 0.89, a sign-in form and a CAPTCHA "wall" at 0.87 and 0.85,
+ * ordinary pages 0.02 to 0.2; its card reports 97.5% right when it is at least 90% sure.
+ */
+export const VISION_BANDS: ProviderBands = { autoMin: 0.85, confirmMin: 0.5 };
+
 /** Purposes kept on Jev in hybrid mode: the computer, and the risk gate that can skip a card. */
 const JEV_ONLY_PURPOSES = new Set(["computer", "risk"]);
 

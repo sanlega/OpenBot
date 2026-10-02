@@ -17,7 +17,10 @@ test.describe("Settings > Jev > Decision model (D-037)", () => {
         res.end(
           JSON.stringify({
             model: "laya-multilingual",
-            answers: { sky: { type: "noul", noul: 0.98 } },
+            answers: {
+              sky: { type: "noul", noul: 0.98 },
+              grass: { type: "choice", choice: "green", confidence: 0.9, probabilities: {} },
+            },
           }),
         );
       });
@@ -38,7 +41,7 @@ test.describe("Settings > Jev > Decision model (D-037)", () => {
       await page.getByLabel("Server key").fill("k-e2e");
       await page.getByRole("button", { name: "Check decision server" }).click();
       await expect(
-        page.getByText(/laya-multilingual answered in \d+ ms, and got the test/),
+        page.getByText(/laya-multilingual answered in \d+ ms, and got both test questions right/),
       ).toBeVisible();
       // The key typed in the form is what the check used.
       expect(seen[0]!.auth).toBe("Bearer k-e2e");

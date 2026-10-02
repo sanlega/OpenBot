@@ -72,7 +72,7 @@ describe("Settings > Jev > Decision model (D-037)", () => {
       kind: "text",
     });
     expect(
-      await screen.findByText(/laya answered in 40 ms, and got the test question right/),
+      await screen.findByText(/laya answered in 40 ms, and got both test questions right/),
     ).toBeTruthy();
     await userEvent.type(address, "1");
     expect(screen.queryByText(/laya answered/)).toBeNull();
@@ -129,9 +129,30 @@ describe("Settings > Jev > Decision model (D-037)", () => {
     expect(screen.getByRole("radio", { name: "Hybrid" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("calls a model that gets the probe wrong unfit", () => {
-    expect(checkSummary({ ok: true, model: "x", latencyMs: 2000, correct: false })).toBe(
-      "x answered in 2.0 s, but got a simple test question wrong. It isn't fit to decide yet.",
+  it("says which kind of test question a model got wrong", () => {
+    expect(
+      checkSummary({ ok: true, model: "x", latencyMs: 2000, correct: false, wrong: ["yes/no"] }),
+    ).toMatch(/x answered in 2.0 s, but got the yes\/no test question wrong: its yes\/no checks/);
+    expect(checkSummary({ ok: true, correct: false, wrong: ["yes/no", "pick-one"] })).toMatch(
+      /isn't fit to decide yet/,
     );
+  });
+
+  it("lets the owner use, after a warning, a server that answers but fails a test question", async () => {
+    const { patch, post } = fakeTransport();
+    post.mockImplementation(
+      async () =>
+        ({ ok: true, model: "laya", latencyMs: 30, correct: false, wrong: ["yes/no"] }) as never,
+    );
+    render(<DecisionProviderCard settings={settings} onSaved={vi.fn()} />);
+    await userEvent.click(screen.getByRole("radio", { name: "Local only" }));
+    await userEvent.type(screen.getByLabelText("Your decision server"), "http://127.0.0.1:8000");
+    await userEvent.click(saveButton());
+    expect(await screen.findByRole("alertdialog", { name: /failed a test question/ })).toBeTruthy();
+    expect(patch).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Use it anyway" }));
+    expect(patch).toHaveBeenCalledWith("/api/settings", {
+      decisions: { mode: "local", localUrl: "http://127.0.0.1:8000", visionUrl: "" },
+    });
   });
 });

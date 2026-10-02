@@ -114,7 +114,8 @@ const decisionsSince = (since) =>
     .filter(Boolean)
     .map((l) => {
       const [purpose, provider, model, kept] = l.split("|");
-      return { purpose, provider, model, kept: kept === "1" };
+      // sqlite3 on Windows ends lines with \r.
+      return { purpose, provider, model, kept: kept?.trim() === "1" };
     });
 
 // A. Jev, keeping what decisions saw.
@@ -130,7 +131,9 @@ check(
   "A: decisions were made on Jev",
   a.some((d) => d.provider === "jev"),
 );
-check("A: every decision kept what it saw", a.length > 0 && a.every((d) => d.kept));
+// The loop detector's records ask no question, so they keep nothing.
+const asked = a.filter((d) => d.provider !== "heuristic");
+check("A: every decision kept what it saw", asked.length > 0 && asked.every((d) => d.kept));
 
 // B. Hybrid with the local server.
 const probe = (await api("/api/decisions/check", { url: LOCAL_URL })).body;
@@ -141,6 +144,12 @@ const set = await api(
   "PATCH",
 );
 check("B: hybrid mode saved", set.body.settings?.decisions?.mode === "hybrid");
+// S3: the Chief creates at most one bot every 2 minutes; if A created one, wait it out so B
+// reaches the spawn gate.
+if (a.some((d) => d.purpose === "spawn")) {
+  log("B: waiting out the 2-minute spawn cooldown");
+  await new Promise((r) => setTimeout(r, 125_000));
+}
 const tB = Date.now();
 log(
   "B: chief turn",
@@ -151,8 +160,8 @@ log(
 const b = decisionsSince(tB);
 log("B decisions:", b.map((d) => `${d.purpose}/${d.provider}/${d.model}`).join(", "));
 check(
-  "B: small gates went to the local server",
-  b.some((d) => d.provider === "local"),
+  "B: the spawn gate went to the local server",
+  b.some((d) => d.purpose === "spawn" && d.provider === "local"),
 );
 check(
   "B: nothing wide went local (route stays on Jev)",

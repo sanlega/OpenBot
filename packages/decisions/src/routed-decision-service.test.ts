@@ -9,6 +9,7 @@ import {
   onJevScale,
   RoutedDecisionService,
   suitsLocal,
+  VISION_BANDS,
   VISION_UNAVAILABLE_MODEL,
 } from "./routed-decision-service.js";
 
@@ -206,5 +207,23 @@ describe("RoutedDecisionService (D-037)", () => {
       { autoMin: 0.95, confirmMin: 0.6 },
     );
     expect((scaled.q as { noul: number }).noul).toBe(0.5);
+  });
+});
+
+describe("vision bands, on answers measured live with ImaJev 4B", () => {
+  it("lets the real confirmation and walls through, and nothing ordinary", () => {
+    const scaled = onJevScale(
+      {
+        goal: { type: "choice", choice: "yes", confidence: 0.89, probabilities: {} },
+        login: { type: "noul", noul: 0.87 },
+        captcha: { type: "noul", noul: 0.85 },
+        ordinary: { type: "noul", noul: 0.2 },
+      },
+      VISION_BANDS,
+    );
+    expect((scaled.goal as { confidence: number }).confidence).toBeGreaterThanOrEqual(0.9);
+    expect((scaled.login as { noul: number }).noul).toBeGreaterThanOrEqual(0.85);
+    expect((scaled.captcha as { noul: number }).noul).toBeGreaterThanOrEqual(0.85);
+    expect((scaled.ordinary as { noul: number }).noul).toBeLessThan(0.5);
   });
 });

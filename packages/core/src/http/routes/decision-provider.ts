@@ -54,8 +54,17 @@ export function registerDecisionProviderRoutes(app: FastifyInstance, ctx: CoreCo
         headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
         body: JSON.stringify({
           state: { note: "The sky is blue and the grass is green." },
+          // Both shapes OpenBot asks: a yes/no (most gates) and a pick-one (routing, the computer).
           questions: {
-            sky: { type: "noul", instructions: "Does `note` say the sky is blue?" },
+            sky: { type: "noul", instructions: "Does the note say the sky is blue?" },
+            grass: {
+              type: "choice",
+              instructions: "What colour is the grass according to the note?",
+              criteria: {
+                green: "The note says the grass is green",
+                red: "The note says the grass is red",
+              },
+            },
           },
           ...(body.kind === "vision" ? { images: [`data:image/jpeg;base64,${PROBE_JPEG}`] } : {}),
         }),
@@ -77,9 +86,17 @@ export function registerDecisionProviderRoutes(app: FastifyInstance, ctx: CoreCo
         };
       }
       const data = (await res.json().catch(() => undefined)) as
-        { model?: unknown; answers?: { sky?: { type?: string; noul?: unknown } } } | undefined;
+        | {
+            model?: unknown;
+            answers?: {
+              sky?: { type?: string; noul?: unknown };
+              grass?: { type?: string; choice?: unknown };
+            };
+          }
+        | undefined;
       const noul = data?.answers?.sky?.noul;
-      if (typeof noul !== "number") {
+      const choice = data?.answers?.grass?.choice;
+      if (typeof noul !== "number" || typeof choice !== "string") {
         return {
           ok: false,
           reason: "It answered, but not like a Jev-compatible decision server.",
@@ -90,8 +107,10 @@ export function registerDecisionProviderRoutes(app: FastifyInstance, ctx: CoreCo
         ok: true,
         model: typeof data?.model === "string" ? data.model : undefined,
         latencyMs,
-        // The probe's right answer is "yes": a server that gets it wrong isn't fit to decide.
-        correct: noul >= 0.5,
+        // The right answers are "yes" and "green". Which kind it got wrong matters: a model weak at
+        // yes/no questions makes the gates (new bots, notifications) unreliable.
+        correct: noul >= 0.5 && choice === "green",
+        wrong: [...(noul >= 0.5 ? [] : ["yes/no"]), ...(choice === "green" ? [] : ["pick-one"])],
       };
     } catch (error) {
       return {

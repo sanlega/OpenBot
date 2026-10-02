@@ -33,6 +33,8 @@ interface CheckResult {
   model?: string;
   latencyMs?: number;
   correct?: boolean;
+  /** Which kinds of test question it got wrong: "yes/no", "pick-one". */
+  wrong?: string[];
   reason?: string;
 }
 
@@ -43,9 +45,15 @@ export function checkSummary(result: CheckResult): string {
   const ms = result.latencyMs;
   const speed =
     ms === undefined ? "" : ms < 1000 ? ` in ${ms} ms` : ` in ${(ms / 1000).toFixed(1)} s`;
-  return result.correct === false
-    ? `${who}${speed}, but got a simple test question wrong. It isn't fit to decide yet.`
-    : `${who}${speed}, and got the test question right.`;
+  if (result.correct !== false) return `${who}${speed}, and got both test questions right.`;
+  const wrong = result.wrong ?? [];
+  if (wrong.length === 1 && wrong[0] === "yes/no") {
+    return `${who}${speed}, but got the yes/no test question wrong: its yes/no checks (new bots, notifications) would be unreliable.`;
+  }
+  if (wrong.length === 1 && wrong[0] === "pick-one") {
+    return `${who}${speed}, but got the pick-one test question wrong: it would choose badly between options.`;
+  }
+  return `${who}${speed}, but got the test questions wrong. It isn't fit to decide yet.`;
 }
 
 const passed = (r: CheckResult | undefined) => Boolean(r?.ok && r.correct !== false);
@@ -102,6 +110,7 @@ export function DecisionProviderCard({
     null,
   );
   const [confirmForget, setConfirmForget] = useState(false);
+  const [confirmUnsure, setConfirmUnsure] = useState(false);
   const [checks, setChecks] = useState<Record<CheckKind, CheckResult | "checking" | undefined>>({
     text: undefined,
     vision: undefined,
@@ -136,7 +145,10 @@ export function DecisionProviderCard({
     key.trim() !== "";
   const needsServer = usesServer && !localUrl.trim();
 
-  const forget = (kind: CheckKind) => setChecks((c) => ({ ...c, [kind]: undefined }));
+  const forget = (kind: CheckKind) => {
+    setChecks((c) => ({ ...c, [kind]: undefined }));
+    setModelMessage(null);
+  };
 
   const runCheck = async (kind: CheckKind): Promise<CheckResult | undefined> => {
     const url = (kind === "text" ? localUrl : visionUrl).trim();
@@ -156,17 +168,22 @@ export function DecisionProviderCard({
     return result;
   };
 
-  const saveModel = async () => {
+  const saveModel = async (confirmed = false) => {
     setModelMessage(null);
-    // Local only has no other model to fall back on: the server must answer, and answer right.
-    if (mode === "local") {
-      const result = checks.text === "checking" ? undefined : checks.text;
-      const check = passed(result) ? result : await runCheck("text");
-      if (!passed(check)) {
+    // Local only has no other model to fall back on: the server must answer. One that answers
+    // but gets a test question wrong is the owner's call, after a clear warning.
+    if (mode === "local" && !confirmed) {
+      const known = checks.text === "checking" ? undefined : checks.text;
+      const check = known?.ok ? known : await runCheck("text");
+      if (!check?.ok) {
         setModelMessage({
           tone: "bad",
-          text: "Local only wasn't saved: your decision server has to pass the check first, or bots would stop deciding.",
+          text: "Local only wasn't saved: your decision server didn't answer, and bots would stop deciding.",
         });
+        return;
+      }
+      if (!passed(check)) {
+        setConfirmUnsure(true);
         return;
       }
     }
@@ -290,7 +307,7 @@ export function DecisionProviderCard({
               </div>
               {checkLine("text")}
             </BlockRow>
-            <SettingRow
+            <BlockRow
               label="Server key"
               help={
                 keySaved
@@ -301,7 +318,7 @@ export function DecisionProviderCard({
             >
               <input
                 id="decision-local-key"
-                className="set-input"
+                className="set-input set-input-block"
                 type="password"
                 autoComplete="off"
                 placeholder={keySaved ? "•••••••• (saved)" : "Optional"}
@@ -312,7 +329,7 @@ export function DecisionProviderCard({
                   forget("vision");
                 }}
               />
-            </SettingRow>
+            </BlockRow>
           </>
         ) : null}
         <BlockRow
@@ -424,6 +441,20 @@ export function DecisionProviderCard({
           ) : null}
         </div>
       </SettingsGroup>
+      {confirmUnsure ? (
+        <ConfirmDialog
+          title="Use a server that failed a test question?"
+          confirmLabel="Use it anyway"
+          onConfirm={() => saveModel(true)}
+          onClose={() => setConfirmUnsure(false)}
+        >
+          <p>
+            {checks.text && checks.text !== "checking" ? checkSummary(checks.text) : ""} With Local
+            only, every decision goes to it and Jev is never asked. Hybrid keeps Jev for anything
+            your server can&apos;t handle.
+          </p>
+        </ConfirmDialog>
+      ) : null}
       {confirmForget ? (
         <ConfirmDialog
           title="Stop keeping what decisions saw?"

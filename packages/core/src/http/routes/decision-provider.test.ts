@@ -90,7 +90,10 @@ describe("Settings > Jev: the decision provider (D-037)", () => {
     app = await buildServer(t.ctx);
     const server = await fakeDecisionServer(() => ({
       model: "laya-multilingual",
-      answers: { sky: { type: "noul", noul: 0.97 } },
+      answers: {
+        sky: { type: "noul", noul: 0.97 },
+        grass: { type: "choice", choice: "green", confidence: 0.9, probabilities: {} },
+      },
     }));
     await app.inject({ method: "PUT", url: "/api/decisions/local-key", payload: { key: "k-123" } });
     expect(await t.ctx.vault.get(LOCAL_DECISIONS_KEY)).toBe("k-123");
