@@ -1,10 +1,10 @@
 # Project state
 
-_Last updated: 2026-10-01 by Claude (v0.1.20 released and installed: spawn gate reads the user's messages)_
+_Last updated: 2026-10-02 by Claude (v0.1.21 released and installed: swappable decision providers, visual checks)_
 
 ## In progress
 - **Swappable decision providers (2026-10-02, D-037, plan
-  `.ai/memory/plans/2026-10-02-decision-providers.md`, all items ticked), releasing as v0.1.21.**
+  `.ai/memory/plans/2026-10-02-decision-providers.md`, all items ticked), RELEASED as v0.1.21 and installed (2026-10-02).**
   The research behind it is in `.ai/resources/2026-10-02-imajev-laya-decision-models.md`.
   - Jev stays the default. Settings > Jev > Decision model offers Jev, Hybrid (small questions to
     a local Jev-compatible server such as Laya; computer and risk stay on Jev; a failure falls
@@ -15,7 +15,8 @@ _Last updated: 2026-10-01 by Claude (v0.1.20 released and installed: spawn gate 
     `openbot decisions compare`.
   - Verified: 1431 unit tests, 26 E2E, `decisions.mjs` 9/9, `vision.mjs` 7/7; functional and
     design reviewers both 10/10.
-  - **Next**: install v0.1.21 and check the card on the installed app. To run the local servers
+  - Installed: the app reports 0.1.21, migration 0008 is applied, the VM runs `:v0.1.21` (its daemon has `/screenshot`) and the self-check passes 10/10. On the installed API, Check against real Laya and ImaJev works (Laya `laya-rl-agent` fails the yes/no test, ImaJev passes both) and no key gives 401. The owner settings were not changed (still Jev).
+  - **Next**: the owner tries Settings > Jev > Decision model in the window (not clicked through by an agent: that would need the real owner key in a browser URL). To run the local servers
     for testing: Laya `laya-serve` on :8000, ImaJev `scripts/playground/server.py` on :8765,
     both on CUDA.
 - **v0.1.20 RELEASED and installed (2026-10-01)**: fixes an explicit "create a bot X" being
