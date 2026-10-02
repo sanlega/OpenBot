@@ -59,7 +59,7 @@ export class DecisionsRepo {
       .orderBy(desc(decisions.createdAt))
       .limit(filter.limit ?? 100)
       .all();
-    return rows.map(toDecision);
+    return rows.map((row) => toDecision(row));
   }
 
   /** V1 retention: forgets what decisions older than `before` saw; the decisions themselves stay. */
@@ -82,7 +82,7 @@ export class DecisionsRepo {
       .orderBy(desc(decisions.createdAt))
       .limit(filter.limit ?? 200)
       .all()
-      .map(toDecision);
+      .map((row) => toDecision(row, true));
   }
 
   listByPurpose(purpose: string, limit = 100): Decision[] {
@@ -90,14 +90,18 @@ export class DecisionsRepo {
   }
 }
 
-function toDecision(row: DecisionRow): Decision {
+/**
+ * A decision as the app shows it. What it saw (`request`: page text, the user's messages) is
+ * only read back for comparing providers (`listWithRequests`), never by the other reads (D-037).
+ */
+function toDecision(row: DecisionRow, withRequest = false): Decision {
   return {
     id: row.id,
     purpose: row.purpose,
     provider: row.provider as Decision["provider"],
     model: row.model,
     stateHash: row.stateHash,
-    ...(row.request ? { request: row.request } : {}),
+    ...(withRequest && row.request ? { request: row.request } : {}),
     answers: row.answers,
     thresholds: row.thresholds ?? undefined,
     band: row.band as Decision["band"],

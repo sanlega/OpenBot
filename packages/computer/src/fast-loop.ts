@@ -146,9 +146,8 @@ export async function runFastLoop(options: FastLoopOptions): Promise<FastLoopRes
   });
   if (result.status !== "escalated" && result.status !== "failed") return result;
   if (!result.lastObservation || options.shouldStop?.()) return result;
-  const met =
-    (await goalAlreadyMet(options, result.lastObservation, history.slice(-6))) ??
-    (await lookAtScreen(options, result.lastObservation));
+  const byText = await goalAlreadyMet(options, result.lastObservation, history.slice(-6));
+  const met = byText ?? (await lookAtScreen(options, result.lastObservation));
   if (met && "wall" in met) {
     // V4: the picture shows why it stopped; say so (the engine reads the summary).
     return {
@@ -163,13 +162,15 @@ export async function runFastLoop(options: FastLoopOptions): Promise<FastLoopRes
     action: { op: "done" },
     decisionId: met.decisionId,
     outcome: "done",
-    reason: "Jev checked the page: the goal is already done.",
+    reason: byText
+      ? "Jev checked the page: the goal is already done."
+      : "The visual check saw the goal done on the screen.",
   });
   return {
     status: "completed",
     steps: result.steps + 1,
     lastObservation: result.lastObservation,
-    summary: "goal satisfied (checked by Jev)",
+    summary: byText ? "goal satisfied (checked by Jev)" : "goal satisfied (seen on the screen)",
   };
 }
 
@@ -219,7 +220,8 @@ async function lookAtScreen(
       options.timeouts?.decide ?? 20_000,
       "visual check timed out",
     );
-    if (!isModelProvider(decision.provider)) return undefined;
+    // Only an answer from a model that read the picture counts (never a guess from the text).
+    if (decision.sawImages !== true) return undefined;
     const goal = decision.answers.goal_met;
     if (
       goal?.type === "choice" &&

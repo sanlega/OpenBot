@@ -438,10 +438,12 @@ export const BotDefaults = z.object({
 export type BotDefaults = z.infer<typeof BotDefaults>;
 
 /** Confidence bands of one decision provider: `auto` at or above `autoMin`, `confirm` from `confirmMin`. */
-export const ProviderBands = z.object({
-  autoMin: z.number().min(0).max(1),
-  confirmMin: z.number().min(0).max(1),
-});
+export const ProviderBands = z
+  .object({
+    autoMin: z.number().gt(0).max(1),
+    confirmMin: z.number().gt(0).max(1),
+  })
+  .refine((b) => b.confirmMin < b.autoMin, { message: "confirmMin must be below autoMin" });
 export type ProviderBands = z.infer<typeof ProviderBands>;
 
 /** Stricter until a comparison on the owner's own decisions says otherwise (D-037). */

@@ -137,6 +137,7 @@ export class McpComputerServiceAdapter implements McpComputerService {
     return new ApprovalComputerBroker(
       this.runtime,
       (botId) => this.ctx.repos.bots.getById(botId)?.permissionPreset ?? "workspace_write",
+      (text) => this.manager?.isTypedSecret(text) ?? false,
     );
   }
 
@@ -199,6 +200,7 @@ export class McpComputerServiceAdapter implements McpComputerService {
         broker: new ApprovalComputerBroker(
           this.runtime,
           (botId) => this.ctx.repos.bots.getById(botId)?.permissionPreset ?? "workspace_write",
+          (text) => this.manager?.isTypedSecret(text) ?? false,
         ),
         // Typed from the vault at the moment of typing; the engine never holds the value.
         secrets: {
@@ -278,6 +280,8 @@ class ApprovalComputerBroker implements ComputerActionBroker {
     private readonly runtime?: Runtime,
     private readonly presetFor: (botId: string) => "read_only" | "workspace_write" | "full" = () =>
       "workspace_write",
+    /** True for text a computer task typed from the vault (a saved login, a `secret:` ref). */
+    private readonly isTypedSecret: (text: string) => boolean = () => false,
   ) {}
 
   async checkAction(
@@ -320,7 +324,13 @@ class ApprovalComputerBroker implements ComputerActionBroker {
         // A typed password (or any secret) must never be printed on an approval card.
         ...(input.action.op === "type"
           ? {
-              text: isSecretField(target ?? "", targetRole(input)) ? "(hidden)" : input.action.text,
+              // Also text that came from the vault, whatever the field is called (it would
+              // otherwise be kept with the risk decision for 30 days, D-037).
+              text:
+                isSecretField(target ?? "", targetRole(input)) ||
+                this.isTypedSecret(input.action.text ?? "")
+                  ? "(hidden)"
+                  : input.action.text,
             }
           : {}),
       }),

@@ -108,9 +108,7 @@ export const DecisionSettingsPatch = z.object({
   mode: z.enum(["jev", "local", "hybrid"]).optional(),
   localUrl: ServerUrlOrClear.optional(),
   visionUrl: ServerUrlOrClear.optional(),
-  localBands: ProviderBands.refine((b) => b.confirmMin < b.autoMin, {
-    message: "the confirm line must be below the auto line",
-  }).optional(),
+  localBands: ProviderBands.optional(),
 });
 
 export const UpdateSettingsBody = z.object({

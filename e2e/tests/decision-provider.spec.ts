@@ -36,7 +36,7 @@ test.describe("Settings > Jev > Decision model (D-037)", () => {
       await expect(page.getByRole("button", { name: "Save decision model" })).toBeDisabled();
       await page.getByLabel("Your decision server").fill(localUrl);
       await page.getByLabel("Server key").fill("k-e2e");
-      await page.getByRole("button", { name: "Check connection" }).first().click();
+      await page.getByRole("button", { name: "Check decision server" }).click();
       await expect(
         page.getByText(/laya-multilingual answered in \d+ ms, and got the test/),
       ).toBeVisible();

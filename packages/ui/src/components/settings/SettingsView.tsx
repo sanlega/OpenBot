@@ -9,6 +9,7 @@ import { ComputerHealthCard } from "./ComputerHealthCard.js";
 import { ComputerImageCard } from "./ComputerImageCard.js";
 import { DataSettings } from "./DataSettings.js";
 import { DecisionProviderCard } from "./DecisionProviderCard.js";
+import { onRadioArrows } from "../common/radio-keys.js";
 import { EnginesSettings } from "./EnginesSettings.js";
 import { SavedLogins } from "./SavedLogins.js";
 import { SpeedCard } from "./SpeedCard.js";
@@ -597,11 +598,23 @@ function ThemePicker() {
           type="button"
           role="radio"
           aria-checked={theme === t.value}
+          tabIndex={theme === t.value ? 0 : -1}
           className="segmented-option set-theme-option"
           onClick={() => {
             setTheme(t.value);
             setThemeState(t.value);
           }}
+          onKeyDown={(e) =>
+            onRadioArrows(
+              e,
+              THEMES.map((x) => x.value),
+              theme,
+              (v) => {
+                setTheme(v);
+                setThemeState(v);
+              },
+            )
+          }
         >
           {t.icon}
           {t.label}

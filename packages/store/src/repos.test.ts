@@ -587,6 +587,9 @@ describe("DecisionsRepo", () => {
 
     expect(repo.listWithRequests()).toHaveLength(2);
     expect(repo.listWithRequests()[0]!.request).toEqual(request);
+    // Every other read leaves what a decision saw out (M2: the bot "why" route, the audit list).
+    expect(repo.list().every((d) => d.request === undefined)).toBe(true);
+    expect(repo.getById(repo.listWithRequests()[0]!.id)?.request).toBeUndefined();
     expect(repo.clearRequestsBefore(new Date("2026-09-01T00:00:00.000Z"))).toBe(1);
     expect(repo.listWithRequests()).toHaveLength(1);
     expect(repo.list()).toHaveLength(3);

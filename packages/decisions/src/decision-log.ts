@@ -69,9 +69,11 @@ export class DecisionLog {
       provider: input.provider,
       model: input.model,
       stateHash: hashState(input.state),
-      ...(input.questions && (this.options.keepRequests?.() ?? false)
-        ? { request: storableRequest(input.state, input.questions) }
-        : {}),
+      ...(() => {
+        if (!input.questions || !(this.options.keepRequests?.() ?? false)) return {};
+        const request = storableRequest(input.state, input.questions);
+        return request ? { request } : {};
+      })(),
       answers: input.answers,
       band,
       outcome,

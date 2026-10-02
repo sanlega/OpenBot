@@ -11,6 +11,8 @@ function isWorking(ctx: CoreContext, botId: string): boolean {
 async function clearThread(ctx: CoreContext, threadId: string, botId: string): Promise<number> {
   const removed = ctx.repos.messages.deleteForThread(threadId);
   ctx.repos.engineSessions.deleteForBot(botId);
+  // What decisions kept (D-037) can quote this chat: it goes with it.
+  ctx.repos.decisions.clearRequestsBefore(new Date(8.64e15));
   // Forms still waiting in the cleared chat have nowhere to show any more.
   for (const input of ctx.repos.inputRequests.list({ status: "pending", botId })) {
     ctx.repos.inputRequests.resolve(input.id, "cancelled", ctx.clock.now());

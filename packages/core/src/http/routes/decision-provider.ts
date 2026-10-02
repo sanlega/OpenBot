@@ -36,7 +36,15 @@ export function registerDecisionProviderRoutes(app: FastifyInstance, ctx: CoreCo
     if (!requireOwner(request, reply)) return;
     const body = parseOrReject(CheckBody, request.body, reply);
     if (!body) return;
-    const key = body.key?.trim() || (await ctx.vault.get(LOCAL_DECISIONS_KEY)) || "local";
+    // The saved key only goes to the servers it was saved for, never to an address typed here.
+    const saved = ctx.repos.settings.get()?.decisions;
+    const sameServer = (u?: string) =>
+      Boolean(u) && u!.replace(/\/$/, "") === body.url.replace(/\/$/, "");
+    const savedKey =
+      sameServer(saved?.localUrl) || sameServer(saved?.visionUrl)
+        ? await ctx.vault.get(LOCAL_DECISIONS_KEY)
+        : undefined;
+    const key = body.key?.trim() || savedKey || "local";
     const started = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
@@ -52,6 +60,8 @@ export function registerDecisionProviderRoutes(app: FastifyInstance, ctx: CoreCo
           ...(body.kind === "vision" ? { images: [`data:image/jpeg;base64,${PROBE_JPEG}`] } : {}),
         }),
         signal: controller.signal,
+        // A decision server answers itself; following a redirect would send the key elsewhere.
+        redirect: "manual",
       });
       const latencyMs = Date.now() - started;
       if (!res.ok) {
@@ -60,7 +70,9 @@ export function registerDecisionProviderRoutes(app: FastifyInstance, ctx: CoreCo
           reason:
             res.status === 401 || res.status === 403
               ? "The server wants a key. Add it below and check again."
-              : `The server answered with an error (HTTP ${res.status}).`,
+              : res.status >= 300 && res.status < 400
+                ? "That address redirects somewhere else. Use the server's own address."
+                : `The server answered with an error (HTTP ${res.status}).`,
           latencyMs,
         };
       }

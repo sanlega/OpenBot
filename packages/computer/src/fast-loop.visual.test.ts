@@ -52,6 +52,7 @@ function decisions(options: {
           },
           provider: "local",
           model: "imajev-4b",
+          sawImages: true,
           latencyMs: 1,
           decisionId: "dec_visual",
         };
@@ -167,5 +168,56 @@ describe("visual check at the end of a computer task (V4)", () => {
       }),
     });
     expect(["failed", "escalated"]).toContain(result.status);
+  });
+});
+
+describe("a visual answer that didn't read the picture (M1)", () => {
+  it("never completes the task, even when a model says yes from the text", async () => {
+    const service = {
+      canSeeImages: () => true,
+      decide: async (req: DecideRequest) => {
+        if (req.images?.length) {
+          // Like Jev answering from the URL alone after the image server failed.
+          return {
+            answers: {
+              goal_met: { type: "choice", choice: "yes", confidence: 0.99, probabilities: {} },
+              wall: { type: "noul", noul: 0 },
+            },
+            provider: "jev",
+            model: "jev",
+            latencyMs: 1,
+            decisionId: "dec_guess",
+          };
+        }
+        if (req.questions.goal_met) {
+          return {
+            answers: {
+              goal_met: { type: "choice", choice: "no", confidence: 0.95, probabilities: {} },
+            },
+            provider: "jev",
+            model: "jev",
+            latencyMs: 1,
+            decisionId: "dec_text",
+          };
+        }
+        return {
+          answers: {
+            action: {
+              type: "choice",
+              choice: "wait",
+              confidence: 0.95,
+              probabilities: { wait: 0.95 },
+            },
+            is_destructive: { type: "noul", noul: 0.01 },
+          },
+          provider: "jev",
+          model: "jev",
+          latencyMs: 1,
+          decisionId: "dec_step",
+        };
+      },
+    } as unknown as DecisionService;
+    const result = await runFastLoop({ ...base, screen: screen(true), decisionService: service });
+    expect(result.status).not.toBe("completed");
   });
 });

@@ -66,6 +66,8 @@ export const DecideRequest = z.object({
 export type DecideRequest = z.infer<typeof DecideRequest>;
 
 export const DecideResult = z.object({
+  /** V4: true only when an image model read the request's pictures. */
+  sawImages: z.boolean().optional(),
   answers: z.record(z.string(), JevAnswer),
   provider: DecisionProvider,
   model: z.string(),

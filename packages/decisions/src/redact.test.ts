@@ -30,7 +30,7 @@ describe("what decisions keep of their requests (V1)", () => {
 
   it("caps a huge state but always keeps the questions", () => {
     const questions = { done: { type: "noul", instructions: "Is it done?" } };
-    const kept = storableRequest({ page: "x".repeat(200_000) }, questions);
+    const kept = storableRequest({ page: "x".repeat(200_000) }, questions)!;
     expect(JSON.stringify(kept).length).toBeLessThanOrEqual(MAX_STORED_REQUEST_CHARS);
     expect(kept.questions).toEqual(questions);
     expect(kept.state).toMatchObject({ truncated: true });
@@ -56,5 +56,35 @@ describe("what decisions keep of their requests (V1)", () => {
       questions: input.questions,
     });
     expect(store.entries[1]!.request).toBeUndefined();
+  });
+});
+
+describe("secret-named fields (review round 1)", () => {
+  it("catches whole words and camelCase, without hiding ordinary words", () => {
+    const out = redactSecrets({
+      accessToken: "a1",
+      user_password: "a2",
+      "x-api-key": "a3",
+      pin: "1234",
+      footprint: "keep",
+      tokens: 42,
+      passed: true,
+      spinner: "keep",
+    }) as Record<string, unknown>;
+    expect(out).toMatchObject({
+      accessToken: "[redacted]",
+      user_password: "[redacted]",
+      "x-api-key": "[redacted]",
+      pin: "[redacted]",
+      footprint: "keep",
+      tokens: 42,
+      passed: true,
+      spinner: "keep",
+    });
+  });
+
+  it("keeps nothing rather than go over the cap when the questions alone are too long", () => {
+    const huge = { action: { type: "choice", criteria: { a: "x".repeat(40_000) } } };
+    expect(storableRequest({ page: "p" }, huge)).toBeUndefined();
   });
 });

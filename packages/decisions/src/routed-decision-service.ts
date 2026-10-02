@@ -11,6 +11,7 @@ import {
   type DecisionService,
   type DecisionSettings,
   type JevAnswer,
+  type JevQuestion,
   type ProviderBands,
   type Purpose,
   type RouteContext,
@@ -30,6 +31,14 @@ export const HYBRID_MAX_STATE_CHARS = 3000;
 
 /** A local Jev-compatible server's answer time limit: longer than Jev's (a CPU is slow). */
 const LOCAL_TIMEOUT_MS = 15_000;
+/** In hybrid mode Jev is waiting behind it: a slow local server hands over sooner. */
+const HYBRID_TIMEOUT_MS = 5_000;
+
+/** Model label when pictures couldn't be read: the question is never answered without them. */
+export const VISION_UNAVAILABLE_MODEL = "vision-unavailable";
+
+/** Purposes kept on Jev in hybrid mode: the computer, and the risk gate that can skip a card. */
+const JEV_ONLY_PURPOSES = new Set(["computer", "risk"]);
 
 /** Model label when a local decision failed and no other provider could answer. */
 export const LOCAL_UNAVAILABLE_MODEL = "local-unavailable-conservative";
@@ -76,12 +85,20 @@ export class RoutedDecisionService implements DecisionService {
     const settings = this.options.settings();
     const { images, ...textOnly } = req;
 
-    if (images?.length && settings?.visionUrl) {
-      try {
-        return await this.decideLocal(req, settings.visionUrl, settings.localBands);
-      } catch {
-        // A picture that couldn't be read: decide on the text, like every other provider.
+    // A question about a picture is only ever answered by a model that read the picture: when
+    // none can, it gets the safe answers (never Jev guessing from the text alone).
+    if (images?.length) {
+      if (settings?.visionUrl) {
+        try {
+          const seen = await this.decideLocal(req, settings.visionUrl, DEFAULT_LOCAL_BANDS, {
+            model: "vision",
+          });
+          return { ...seen, sawImages: true };
+        } catch {
+          // falls through to the safe answers
+        }
       }
+      return this.unavailable(textOnly, VISION_UNAVAILABLE_MODEL);
     }
 
     const mode = settings?.mode ?? "jev";
@@ -90,7 +107,9 @@ export class RoutedDecisionService implements DecisionService {
 
     if (mode === "local" || suitsLocal(textOnly)) {
       try {
-        return await this.decideLocal(textOnly, localUrl, settings.localBands);
+        return await this.decideLocal(textOnly, localUrl, settings.localBands, {
+          timeoutMs: mode === "hybrid" ? HYBRID_TIMEOUT_MS : undefined,
+        });
       } catch {
         if (mode === "hybrid") return this.options.jev.decide(textOnly);
         return this.unavailable(textOnly);
@@ -103,21 +122,25 @@ export class RoutedDecisionService implements DecisionService {
     req: DecideRequest,
     baseUrl: string,
     bands: ProviderBands | undefined,
+    extra: { timeoutMs?: number; model?: string } = {},
   ): Promise<DecideResult> {
     const key = (await this.options.localKey?.())?.trim() || "local";
     const result = await this.client(baseUrl, key).systemOne({
       state: req.state,
       questions: req.questions,
-      timeoutMs: req.timeoutMs ?? Math.max(jevTimeoutMs(req.purpose), LOCAL_TIMEOUT_MS),
+      timeoutMs:
+        extra.timeoutMs ?? req.timeoutMs ?? Math.max(jevTimeoutMs(req.purpose), LOCAL_TIMEOUT_MS),
       ...(req.images?.length
         ? { images: req.images.map((i) => `data:${i.mime};base64,${i.data}`) }
         : {}),
     });
-    const answers = onJevScale(result.response.answers, bands ?? DEFAULT_LOCAL_BANDS);
-    for (const id of Object.keys(req.questions)) {
-      if (!answers[id]) throw new Error(`the local model didn't answer "${id}"`);
+    const raw = result.response.answers ?? {};
+    for (const [id, question] of Object.entries(req.questions)) {
+      const problem = answerProblem(question, raw[id]);
+      if (problem) throw new Error(`the local model's answer to "${id}" ${problem}`);
     }
-    const model = result.response.model || "local";
+    const answers = onJevScale(raw, bands ?? DEFAULT_LOCAL_BANDS);
+    const model = String(result.response.model || extra.model || "local").slice(0, 80);
     const decisionId = this.log.record({
       purpose: req.purpose,
       provider: "local",
@@ -125,11 +148,12 @@ export class RoutedDecisionService implements DecisionService {
       state: req.state,
       questions: req.questions,
       answers,
+      primaryAnswerId: primaryAnswerIdForPurpose(req.purpose, req.questions),
     });
     return { answers, provider: "local", model, latencyMs: result.latencyMs, decisionId };
   }
 
-  private unavailable(req: DecideRequest): DecideResult {
+  private unavailable(req: DecideRequest, label = LOCAL_UNAVAILABLE_MODEL): DecideResult {
     const answers = conservativeFallbackAnswers({
       purpose: req.purpose,
       state: req.state,
@@ -138,7 +162,7 @@ export class RoutedDecisionService implements DecisionService {
     const decisionId = this.log.record({
       purpose: req.purpose,
       provider: "heuristic",
-      model: LOCAL_UNAVAILABLE_MODEL,
+      model: label,
       state: req.state,
       questions: req.questions,
       answers,
@@ -147,7 +171,7 @@ export class RoutedDecisionService implements DecisionService {
     return {
       answers,
       provider: "heuristic",
-      model: LOCAL_UNAVAILABLE_MODEL,
+      model: label,
       latencyMs: 0,
       decisionId: decisionId || `dec_${ulid()}`,
     };
@@ -170,9 +194,35 @@ export class RoutedDecisionService implements DecisionService {
   }
 }
 
-/** Hybrid mode: small yes/no, scale and few-option questions on a short state, never the computer loop. */
+/** Why a local model's answer can't be used, or undefined when it can (types, options, ranges). */
+export function answerProblem(
+  question: JevQuestion,
+  answer: JevAnswer | undefined,
+): string | undefined {
+  if (!answer) return "is missing";
+  if (answer.type !== question.type) return `is a ${answer.type}, not a ${question.type}`;
+  const unit = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
+  if (answer.type === "noul") return unit(answer.noul) ? undefined : "is not a probability";
+  if (answer.type === "choice" && question.type === "choice") {
+    if (!(answer.choice in question.criteria)) return "is not one of the options";
+    return unit(answer.confidence) ? undefined : "has no usable confidence";
+  }
+  if (answer.type === "score" && question.type === "score") {
+    const top = question.criteria.length - 1;
+    if (!(typeof answer.score === "number" && answer.score >= 0 && answer.score <= top)) {
+      return "is off the scale";
+    }
+    return unit(answer.confidence) ? undefined : "has no usable confidence";
+  }
+  return undefined;
+}
+
+/**
+ * Hybrid mode: small yes/no, scale and few-option questions on a short state. Never the computer
+ * loop, nor the risk gate (an "allow" there skips the user's card).
+ */
 export function suitsLocal(req: DecideRequest): boolean {
-  if (req.purpose === "computer") return false;
+  if (JEV_ONLY_PURPOSES.has(req.purpose)) return false;
   const state = typeof req.state === "string" ? req.state : JSON.stringify(req.state);
   if (state.length > HYBRID_MAX_STATE_CHARS) return false;
   return Object.values(req.questions).every((q) => {
@@ -186,7 +236,9 @@ export function suitsLocal(req: DecideRequest): boolean {
  * `confirmMin` 0.5 (Jev's band edges), linearly in between, so the gates' thresholds still hold.
  */
 export function onJevConfidence(confidence: number, bands: ProviderBands): number {
+  if (!Number.isFinite(confidence)) return 0;
   const c = Math.min(1, Math.max(0, confidence));
+  if (c === 0) return 0;
   const { autoMin, confirmMin } = bands;
   if (c >= autoMin) return autoMin >= 1 ? 1 : 0.9 + ((c - autoMin) / (1 - autoMin)) * 0.1;
   if (c >= confirmMin) return 0.5 + ((c - confirmMin) / (autoMin - confirmMin)) * 0.4;

@@ -3,11 +3,13 @@ import type { DecideRequest, DecisionService, DecisionSettings } from "@openbot/
 import { DecisionLog, InMemoryDecisionLog } from "./decision-log.js";
 import { FakeDecisionService } from "./fake-decision-service.js";
 import {
+  answerProblem,
   LOCAL_UNAVAILABLE_MODEL,
   onJevConfidence,
   onJevScale,
   RoutedDecisionService,
   suitsLocal,
+  VISION_UNAVAILABLE_MODEL,
 } from "./routed-decision-service.js";
 
 const gate: DecideRequest = {
@@ -73,7 +75,7 @@ describe("RoutedDecisionService (D-037)", () => {
       { keepRequests: true, mode: "hybrid", localUrl: "http://127.0.0.1:8000" },
       localYes,
     );
-    const result = await service.decide(gate);
+    const result = await service.decide({ ...gate, purpose: "notify" });
     expect(result.provider).toBe("local");
     expect(result.model).toBe("laya-multilingual");
     expect(store.entries[0]).toMatchObject({ provider: "local", model: "laya-multilingual" });
@@ -90,7 +92,7 @@ describe("RoutedDecisionService (D-037)", () => {
         throw new Error("connection refused");
       },
     );
-    const result = await service.decide(gate);
+    const result = await service.decide({ ...gate, purpose: "notify" });
     expect(jevDecide).toHaveBeenCalledOnce();
     expect(result.provider).not.toBe("local");
   });
@@ -112,7 +114,7 @@ describe("RoutedDecisionService (D-037)", () => {
       { keepRequests: true, mode: "hybrid", localUrl: "http://127.0.0.1:8000" },
       async () => ({ response: { model: "x", answers: {} }, latencyMs: 1 }),
     );
-    await service.decide(gate);
+    await service.decide({ ...gate, purpose: "notify" });
     expect(jevDecide).toHaveBeenCalledOnce();
   });
 
@@ -138,20 +140,71 @@ describe("RoutedDecisionService (D-037)", () => {
     expect((scaled.pick as { confidence: number }).confidence).toBeCloseTo(0.5);
   });
 
-  it("sends screenshots to the vision server only, and decides without them otherwise", async () => {
+  it("sends screenshots to the vision server only, and marks what it read", async () => {
     const shot = { mime: "image/jpeg" as const, data: "AAAA" };
     const withVision = setup(
       { keepRequests: true, mode: "jev", visionUrl: "http://127.0.0.1:8765" },
       localYes,
     );
-    await withVision.service.decide({ ...gate, images: [shot] });
+    const seen = await withVision.service.decide({ ...gate, purpose: "trigger", images: [shot] });
     expect(withVision.calls[0]).toMatchObject({ images: ["data:image/jpeg;base64,AAAA"] });
+    expect(seen.sawImages).toBe(true);
     expect(withVision.service.canSeeImages()).toBe(true);
+  });
 
+  it("never answers a question about a picture without it (M1)", async () => {
+    const shot = { mime: "image/jpeg" as const, data: "AAAA" };
+    // No vision server: the safe answers, Jev isn't asked to guess from the text.
     const noVision = setup({ keepRequests: true, mode: "jev" }, localYes);
-    await noVision.service.decide({ ...gate, images: [shot] });
-    expect(noVision.calls).toHaveLength(0);
-    expect(noVision.jevDecide.mock.calls[0]![0]).not.toHaveProperty("images");
-    expect(noVision.service.canSeeImages()).toBe(false);
+    const a = await noVision.service.decide({ ...gate, images: [shot] });
+    expect(noVision.jevDecide).not.toHaveBeenCalled();
+    expect(a).toMatchObject({ provider: "heuristic", model: VISION_UNAVAILABLE_MODEL });
+    expect(a.sawImages).not.toBe(true);
+    // A vision server that fails: the same.
+    const down = setup(
+      { keepRequests: true, mode: "jev", visionUrl: "http://127.0.0.1:8765" },
+      async () => {
+        throw new Error("down");
+      },
+    );
+    const b = await down.service.decide({ ...gate, images: [shot] });
+    expect(down.jevDecide).not.toHaveBeenCalled();
+    expect(b.model).toBe(VISION_UNAVAILABLE_MODEL);
+  });
+
+  it("keeps the risk gate on Jev in hybrid mode (an allow there skips the card)", () => {
+    expect(suitsLocal(gate)).toBe(false);
+    expect(suitsLocal({ ...gate, purpose: "notify" })).toBe(true);
+  });
+
+  it("refuses a local answer of the wrong type, off the options or off the scale", async () => {
+    const bad = [
+      { external_side_effect: { type: "choice", choice: "x", confidence: 1, probabilities: {} } },
+      { external_side_effect: { type: "noul", noul: 5 } },
+      { external_side_effect: { type: "noul" } },
+    ];
+    for (const answers of bad) {
+      const { service, jevDecide } = setup(
+        { keepRequests: true, mode: "hybrid", localUrl: "http://127.0.0.1:8000" },
+        async () => ({ response: { model: "x", answers }, latencyMs: 1 }),
+      );
+      await service.decide({ ...gate, purpose: "notify" });
+      expect(jevDecide, JSON.stringify(answers)).toHaveBeenCalledOnce();
+    }
+    const choiceQ = { type: "choice" as const, instructions: "?", criteria: { a: "A", b: "B" } };
+    expect(
+      answerProblem(choiceQ, { type: "choice", choice: "c", confidence: 0.9, probabilities: {} }),
+    ).toMatch(/not one of the options/);
+    expect(
+      answerProblem(choiceQ, { type: "choice", choice: "a", confidence: 0.9, probabilities: {} }),
+    ).toBeUndefined();
+  });
+
+  it("a coin flip stays a coin flip on Jev's scale", () => {
+    const scaled = onJevScale(
+      { q: { type: "noul", noul: 0.5 } },
+      { autoMin: 0.95, confirmMin: 0.6 },
+    );
+    expect((scaled.q as { noul: number }).noul).toBe(0.5);
   });
 });

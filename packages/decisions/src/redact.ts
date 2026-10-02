@@ -2,7 +2,11 @@
 export const MAX_STORED_REQUEST_CHARS = 32 * 1024;
 
 /** Fields whose values are secrets whatever they hold. */
-const SECRET_KEY_RE = /pass(word|wd|phrase)?|secret|token|api[-_]?key|authorization|cookie|otp/i;
+const SECRET_KEY_RE =
+  /^(?:.*[-_])?(?:pass(?:word|wd|phrase)?|secret|token|api[-_]?key|authorization|cookie|otp|pin|cvv|cvc)(?:[-_].*)?$/i;
+
+const SECRET_CAMEL_RE =
+  /[a-z](?:Pass(?:word|wd|phrase)?|Secret|Token|ApiKey|Cookie|Otp|Pin)(?:[A-Z_-]|$)/;
 
 /** Credential shapes inside free text: bearer tokens, provider keys, JWTs, long hex keys. */
 const SECRET_TEXT_PATTERNS: Array<[RegExp, string]> = [
@@ -14,6 +18,11 @@ const SECRET_TEXT_PATTERNS: Array<[RegExp, string]> = [
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, "[redacted token]"],
   [/\b[0-9a-f]{40,}\b/gi, "[redacted hex]"],
 ];
+
+/** Secret-named fields: whole words (`password`, `api_key`) or camelCase parts (`accessToken`). */
+function isSecretKey(key: string): boolean {
+  return SECRET_KEY_RE.test(key) || SECRET_CAMEL_RE.test(key);
+}
 
 function redactText(text: string): string {
   let out = text;
@@ -30,7 +39,7 @@ export function redactSecrets(value: unknown, depth = 0): unknown {
     const out: Record<string, unknown> = {};
     for (const [key, v] of Object.entries(value)) {
       out[key] =
-        SECRET_KEY_RE.test(key) && (typeof v === "string" || typeof v === "number")
+        isSecretKey(key) && (typeof v === "string" || typeof v === "number")
           ? "[redacted]"
           : redactSecrets(v, depth + 1);
     }
@@ -46,8 +55,10 @@ export function redactSecrets(value: unknown, depth = 0): unknown {
 export function storableRequest(
   state: unknown,
   questions: Record<string, unknown>,
-): { state: unknown; questions: Record<string, unknown> } {
+): { state: unknown; questions: Record<string, unknown> } | undefined {
   const safeQuestions = redactSecrets(questions) as Record<string, unknown>;
+  // Questions too long to keep within the cap: keep nothing rather than go over it.
+  if (JSON.stringify(safeQuestions).length > MAX_STORED_REQUEST_CHARS - 300) return undefined;
   const safeState = redactSecrets(state);
   const whole = JSON.stringify({ state: safeState, questions: safeQuestions });
   if (whole.length <= MAX_STORED_REQUEST_CHARS)

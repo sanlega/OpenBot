@@ -95,6 +95,16 @@ describe("Settings > Jev: the decision provider (D-037)", () => {
     await app.inject({ method: "PUT", url: "/api/decisions/local-key", payload: { key: "k-123" } });
     expect(await t.ctx.vault.get(LOCAL_DECISIONS_KEY)).toBe("k-123");
 
+    // Not the saved server yet: the saved key stays home (L3).
+    await app.inject({ method: "POST", url: "/api/decisions/check", payload: { url: server.url } });
+    expect(server.seen[0]!.auth).toBe("Bearer local");
+    await app.inject({
+      method: "PATCH",
+      url: "/api/settings",
+      payload: { decisions: { mode: "hybrid", localUrl: server.url } },
+    });
+    server.seen.length = 0;
+
     const res = (
       await app.inject({
         method: "POST",

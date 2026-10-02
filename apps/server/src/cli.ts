@@ -115,6 +115,11 @@ async function decisionsCommand(args: string[]): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  if (/typesafe.ai/i.test(new URL(url).hostname)) {
+    console.error("Compare against your own server; TypeSafe's Jev already made these decisions.");
+    process.exitCode = 1;
+    return;
+  }
   const ctx = await createCoreContext();
   try {
     const decisions = ctx.repos.decisions.listWithRequests({

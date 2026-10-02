@@ -126,6 +126,10 @@ describe("ComputerTaskManager", () => {
       const subject = (await screen.observe()).elements.find((e) => e.label === "Subject");
       expect(subject?.value).toBe("Vault value 42");
       expect(JSON.stringify(snapshot)).not.toContain("Vault value 42");
+      // M3: the risk gate (and so a decision record) can tell it came from the vault.
+      expect(tasks.isTypedSecret("Vault value 42")).toBe(true);
+      expect(tasks.isTypedSecret("Re: Vault value 42 please")).toBe(true);
+      expect(tasks.isTypedSecret("an ordinary subject")).toBe(false);
     });
 
     it("types the saved login for the page when the field asks for it, without pausing", async () => {

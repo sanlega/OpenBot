@@ -188,6 +188,20 @@ export class ComputerTaskManager {
   }
 
   /** The bot's task that is still driving its screen (running, or paused for input or a person). */
+  /**
+   * True when `text` is (or contains) a secret one of the running tasks typed: a saved login,
+   * a `secret:` reference. Such text never goes into an approval card or a decision record.
+   */
+  isTypedSecret(text: string): boolean {
+    if (!text) return false;
+    for (const runtime of this.tasks.values()) {
+      for (const secret of runtime.typedSecrets) {
+        if (secret && (text === secret || text.includes(secret))) return true;
+      }
+    }
+    return false;
+  }
+
   activeFor(botId: string): ComputerTaskSnapshot | undefined {
     for (const runtime of this.tasks.values()) {
       if (runtime.snapshot.botId === botId && !TERMINAL.has(runtime.snapshot.status)) {
